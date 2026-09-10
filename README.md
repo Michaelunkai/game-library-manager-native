@@ -30,17 +30,23 @@ when the primary display is explicitly wanted.
 
 ## Verification receipt
 
-`evidence\self-test-default-profile.json` records 64 passing diagnostic
-checks with zero failures, and the fresh external WPF UI proof records 31
-passing checks. The final source executable was copied into
-`dist\GameLibrary.exe` and retains its SHA-256 identity:
+`evidence\self-test-final-20260910.json` records 69 passing diagnostic
+checks with zero failures. The fresh external WPF UI proof records 31
+passing checks, and the WPF pause proof records 29 passing checks including
+an actual AHK-format pause/resume fixture. The final source executable was
+copied into `dist\GameLibrary.exe` and retains its SHA-256 identity:
 
-`D6050254383E927CEB251F1237786151611C08C5478262AD5096ACACF07A06E9`
+`4DAF00CF10CBABA8EB572E15EE43534C5DC091E14D3393847794C42F50DAD992`
 
-The final executable is 460,116,840 bytes and embeds the complete 2,343-file
-catalog payload. The live verification located its window on the non-primary
-display and confirmed the expected 1,260-game catalog.
+The final executable is 460,153,704 bytes and embeds the complete catalog
+payload: 1,179 games and 2,028 cached covers. The pause proof recorded
+`activeBeforePause=1.41`, `pausedDelta=0.00`, and `resumedDelta=1.64` seconds
+against `F:\study\Platforms\windows\autohotkey\mymainahk\frozen-processes.ini`.
+The live verification located its window on the non-primary display. Install
+requests are exact game/destination reservations with cross-process lock files,
+so repeated requests do not write the same game folder concurrently while
+independent destinations remain parallel.
 
-The previous live bundle was preserved because it was running during
-organization; this project contains a verified copy rather than deleting or
-moving the live source bundle.
+The root bundle and the build-output bundle were synchronized by checksum
+after the final tests. The app was then launched from the root bundle and
+verified responding on the non-primary display.

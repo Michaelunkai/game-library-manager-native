@@ -98,3 +98,48 @@ The native Wand proof now includes the exact Wizard with a Gun executable, a vis
 The durable source fixes are in `DockerScripts.cs`, `JobWindow.cs`, and `SelfTests.cs`: POSIX completion markers expand the destination variable safely; PowerShell 5 avoids quoted Go-template marshalling by parsing JSON labels; generated containers carry exact native-owner and game-ID labels; generated and direct cancellation paths inspect those labels and refuse mismatches; and 56 self-tests cover the new behavior. The recent BAT/PowerShell quoting repair remains intact.
 
 Within the native EXE scope, all previously actionable acceptance gates are complete. The historical website/browser items below remain a separate, intentionally unperformed scope and must not be used to downgrade this native result.
+
+## Native pause, install, and visual revalidation - 2026-09-10
+
+This is the latest native-only acceptance amendment. It supersedes older native
+hashes and counts while preserving the historical records above. It does not
+claim website deployment, browser parity, or live website synchronization.
+
+The rebuilt executable under `native\dist\GameLibrary.exe` is 460,153,704
+bytes with SHA-256
+`4DAF00CF10CBABA8EB572E15EE43534C5DC091E14D3393847794C42F50DAD992`.
+The final user-facing copy is the same executable under the repository root
+`dist\GameLibrary.exe`.
+
+Fresh gates for this exact source build passed:
+
+- 69/69 diagnostic self-tests, including counted AHK identity parsing,
+  malformed/missing state handling, monotonic pause timing, exact
+  game/destination reservations, and concurrent reservation stress.
+- 31/31 external native WPF UI checks, including startup, controls, filters,
+  settings, tray behavior, and process lifecycle.
+- 29/29 packaged WPF checks with the AHK pause proof. A disposable
+  `powershell.exe` fixture produced `activeBeforePause=1.41`,
+  `pausedDelta=0.00`, and `resumedDelta=1.64` seconds. The fixture was killed
+  and its unique F-drive evidence directory was cleaned by the proof.
+
+The native timer reads
+`F:\study\Platforms\windows\autohotkey\mymainahk\frozen-processes.ini` by
+default and requires both the tracked PID and the AHK creation stamp. An
+uncounted stale section is ignored. Only `State=paused` stops the timer;
+`restoring` and `restore_pending` are running resume-transition states, so
+resumed playtime is not suppressed while AHK finishes window recovery.
+
+Install requests now reserve the exact canonical destination/game pair in the
+app and use the same key in the generated cross-process lock files. Repeated
+same-pair requests are deduplicated, independent games and destinations can
+run concurrently, and generated operations retain owner/game/operation
+markers with bounded retry and ownership-safe cleanup. This proves the native
+concurrency and recovery contract; actual success still depends on the named
+Docker image, Docker VMM availability, storage, and network being valid for
+the requested game.
+
+The rendered minimum-size window was inspected from
+`..\evidence\pause-final-20260910-153346.png`; the dark theme, filters, cards,
+buttons, status line, and full Theme control are visible and readable. The
+separate startup gate leaves the final application on the secondary monitor.

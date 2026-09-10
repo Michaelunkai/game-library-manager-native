@@ -1,0 +1,154 @@
+{
+  "at": "2026-09-10T12:34:01.1472537Z",
+  "passed": true,
+  "executable": "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
+  "catalog": 1179,
+  "checks": [
+    {
+      "name": "Packaged WPF window visible with taskbar identity",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.370548Z"
+    },
+    {
+      "name": "Tray icon and useful menu created",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3705823Z"
+    },
+    {
+      "name": "Search filters native list",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.376569Z"
+    },
+    {
+      "name": "Select all operates on filtered items",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.376738Z"
+    },
+    {
+      "name": "Clear selection works",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3768462Z"
+    },
+    {
+      "name": "Empty view is recoverable",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3774983Z"
+    },
+    {
+      "name": "Reset restores results",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3780471Z"
+    },
+    {
+      "name": "Search crosses categories without changing catalog privacy",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3833422Z"
+    },
+    {
+      "name": "Global search never exposes protected categories",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3835763Z"
+    },
+    {
+      "name": "Docker URL is searchable",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3837517Z"
+    },
+    {
+      "name": "Catalog statistics stay constant while filtering",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3837521Z"
+    },
+    {
+      "name": "Installed launcher path is searchable",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3840474Z"
+    },
+    {
+      "name": "Installed view remains limited during global search",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3842636Z"
+    },
+    {
+      "name": "Installed-only control composes with global search",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.384729Z"
+    },
+    {
+      "name": "Without-installed control excludes installed games",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3850075Z"
+    },
+    {
+      "name": "Reset clears installed filters",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3852424Z"
+    },
+    {
+      "name": "Lowest rating sort uses ascending scores with unrated games last",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.3903469Z"
+    },
+    {
+      "name": "Theme switches",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.4432074Z"
+    },
+    {
+      "name": "Minimize / hide retains tray",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.4591175Z"
+    },
+    {
+      "name": "Restore returns window",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.4784765Z"
+    },
+    {
+      "name": "Progress window captures real process output and nonzero exit",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.9361075Z"
+    },
+    {
+      "name": "Failed process completion fires once after stopping without marking installation successful",
+      "passed": true,
+      "at": "2026-09-10T12:33:51.936109Z"
+    },
+    {
+      "name": "Install marker updates are delivered before the batch process exits",
+      "passed": true,
+      "at": "2026-09-10T12:33:52.3078793Z"
+    },
+    {
+      "name": "Offline native category creation queues shared tabs",
+      "passed": true,
+      "at": "2026-09-10T12:33:55.5667538Z"
+    },
+    {
+      "name": "Offline native rename and visibility controls preserve queued edits",
+      "passed": true,
+      "at": "2026-09-10T12:33:55.7609097Z"
+    },
+    {
+      "name": "Category edits survive a state reload",
+      "passed": true,
+      "at": "2026-09-10T12:33:55.7625689Z"
+    },
+    {
+      "name": "Offline admin actions and refresh never reach the rejecting network fixture",
+      "passed": true,
+      "at": "2026-09-10T12:33:55.7628583Z"
+    },
+    {
+      "name": "AHK Ctrl\u002BH pause/resume timing",
+      "passed": true,
+      "detail": "configured=F:\\study\\Platforms\\windows\\autohotkey\\mymainahk\\frozen-processes.ini; fixturePid=43568; activeBeforePause=1.41; pausedDelta=0.00; resumedDelta=1.64",
+      "at": "2026-09-10T12:34:01.0745482Z"
+    },
+    {
+      "name": "Search, combined filter and statistics fit the minimum native window",
+      "passed": true,
+      "at": "2026-09-10T12:34:01.0986807Z"
+    }
+  ]
+}

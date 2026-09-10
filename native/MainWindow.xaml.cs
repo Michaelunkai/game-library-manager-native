@@ -17,6 +17,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
@@ -49,7 +50,23 @@ public partial class MainWindow : Window
     {
         [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr handle);
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr handle, int command);
+        [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left; public int Top; public int Right; public int Bottom; }
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool GetWindowRect(IntPtr handle, out Rect rect);
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+        private const uint SwpNoZOrder = 0x0004;
+        private const uint SwpNoActivate = 0x0010;
+        private const uint SwpShowWindow = 0x0040;
+        private const uint SwpNoOwnerZOrder = 0x0200;
         public static void Activate(IntPtr handle) { ShowWindow(handle, 9); SetForegroundWindow(handle); }
+        public static bool PlaceOnWorkingArea(IntPtr handle, System.Drawing.Rectangle area)
+        {
+            if (handle == IntPtr.Zero || !GetWindowRect(handle, out var current)) return false;
+            int width = Math.Min(Math.Max(1, current.Right - current.Left), area.Width);
+            int height = Math.Min(Math.Max(1, current.Bottom - current.Top), area.Height);
+            int x = area.Left + Math.Max(0, (area.Width - width) / 2);
+            int y = area.Top + Math.Max(0, (area.Height - height) / 2);
+            return SetWindowPos(handle, IntPtr.Zero, x, y, width, height, SwpNoZOrder | SwpNoActivate | SwpShowWindow | SwpNoOwnerZOrder);
+        }
     }
     internal readonly LibraryStore Store;
     internal UserState State = new();
@@ -75,6 +92,7 @@ public partial class MainWindow : Window
     private readonly List<JobWindow> jobs = new();
     private readonly Dictionary<string, PlaySession> activePlays = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SemaphoreSlim> installGates = new(StringComparer.Ordinal);
+    private readonly InstallReservationBook installReservations = new();
     // Direct Play and Play with Wand share one launch gate. This prevents a
     // direct launch from appearing between Wand's PID snapshot and its URI
     // handoff, where it could otherwise be mistaken for a Wand-owned process.
@@ -143,9 +161,13 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Error(ex); }
     }
-    private bool PlaceOnSecondaryMonitor()
+    private static Forms.Screen? GetSecondaryScreen() => Forms.Screen.AllScreens
+        .Where(candidate => !candidate.Primary)
+        .OrderBy(candidate => candidate.Bounds.Left)
+        .FirstOrDefault();
+    private bool PlaceOnSecondaryMonitor() => PlaceOnSecondaryMonitor(GetSecondaryScreen());
+    private bool PlaceOnSecondaryMonitor(Forms.Screen? screen)
     {
-        var screen = Forms.Screen.AllScreens.Where(candidate => !candidate.Primary).OrderBy(candidate => candidate.Bounds.Left).FirstOrDefault();
         if (screen == null) return false;
         WindowStartupLocation = WindowStartupLocation.Manual;
         var area = screen.WorkingArea;
@@ -167,8 +189,11 @@ public partial class MainWindow : Window
                 if (closing) return;
                 WindowStartupLocation = WindowStartupLocation.Manual;
                 WindowState = WindowState.Normal;
-                var placed = PlaceOnSecondaryMonitor();
+                var screen = GetSecondaryScreen();
+                var placed = PlaceOnSecondaryMonitor(screen);
                 if (!IsVisible) Show();
+                if (placed && screen != null)
+                    placed = NativeWindow.PlaceOnWorkingArea(new WindowInteropHelper(this).Handle, screen.WorkingArea);
                 if (ready && placed)
                 {
                     startupPlacementDone = true;
@@ -230,6 +255,14 @@ public partial class MainWindow : Window
         var config = Sync.Effective(State);
         Games = Store.LoadGames(State, config);
         foreach (var game in Games) game.Selected = selected.Contains(game.Id);
+        foreach (var active in activePlays)
+        {
+            var game = Games.FirstOrDefault(candidate => candidate.Id == active.Key);
+            if (game == null) continue;
+            game.PlayedHours = Math.Max(0, active.Value.Timing.TotalSeconds) / 3600d;
+            game.IsPlaying = true;
+            game.IsPlayPaused = active.Value.Timing.IsPaused;
+        }
         var categories = Store.LoadCategories(config);
         var hidden = Hidden(config);
         var choices = new List<Category> { new("all", "◈  All games"), new("wishlist", "♡  Wishlist"), new("installed", "▣  Installed") };
@@ -353,6 +386,20 @@ public partial class MainWindow : Window
         SelectedSize.ToolTip = $"{selected.Length} selected; {selected.Count(g => g.SizeGb <= 0)} sizes unknown";
     }
     internal void Save() { try { Store.Save(State); } catch (Exception ex) { Error(ex); } }
+    private string FrozenProcessesPath => string.IsNullOrWhiteSpace(State.Settings.FrozenProcessesPath)
+        ? Preferences.DefaultFrozenProcessesPath
+        : State.Settings.FrozenProcessesPath.Trim();
+    private static string InstallWorkKey(string destination, string gameId) => DockerScripts.InstallWorkKey(destination, gameId);
+    private Game[] ReserveInstallGames(IEnumerable<Game> games, string destination)
+    {
+        var candidates = games.Select(game => (game, key: InstallWorkKey(destination, game.Id))).ToArray();
+        var accepted = installReservations.Reserve(candidates.Select(candidate => candidate.key)).ToHashSet(StringComparer.Ordinal);
+        return candidates.Where(candidate => accepted.Contains(candidate.key)).Select(candidate => candidate.game).ToArray();
+    }
+    private void ReleaseInstallGames(IEnumerable<Game> games, string destination)
+    {
+        installReservations.Release(games.Select(game => InstallWorkKey(destination, game.Id)));
+    }
     private async Task<IDisposable> AcquireInstallScopeAsync(IEnumerable<string> gameIds, string destination, CancellationToken cancellation)
     {
         var ids = gameIds
@@ -368,14 +415,15 @@ public partial class MainWindow : Window
                 SemaphoreSlim gate;
                 lock (installGates)
                 {
-                    if (installGates.TryGetValue(id, out var existingGate) && existingGate != null)
+                    string workKey = InstallWorkKey(destination, id);
+                    if (installGates.TryGetValue(workKey, out var existingGate) && existingGate != null)
                     {
                         gate = existingGate;
                     }
                     else
                     {
                         gate = new SemaphoreSlim(1, 1);
-                        installGates.Add(id, gate);
+                        installGates.Add(workKey, gate);
                     }
                 }
                 await gate.WaitAsync(cancellation);
@@ -547,12 +595,13 @@ public partial class MainWindow : Window
     {
         public required Process Process { get; set; }
         public required string ExecutablePath { get; init; }
-        public required double StartingSeconds { get; init; }
-        public required Stopwatch Clock { get; init; }
+        public required ActivePlaytime Timing { get; init; }
         public bool UsesWand { get; init; }
         public DateTime GraceUntilUtc { get; set; }
         public DateTime LastSavedUtc { get; set; }
         public HashSet<int> ObservedProcessIds { get; } = new();
+        public Dictionary<int, string> ProcessCreationStamps { get; } = new();
+        public bool PauseStateUnavailable { get; set; }
     }
     private void StartPlaySession(Game game, Func<Process> start)
     {
@@ -602,8 +651,13 @@ public partial class MainWindow : Window
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { executable = State.LaunchPaths.GetValueOrDefault(game.Id, ""); }
             int processId = process.Id;
             var now = DateTime.UtcNow;
-            var session = new PlaySession { Process = process, ExecutablePath = executable, StartingSeconds = State.PlayTimeSeconds.GetValueOrDefault(game.Id), Clock = Stopwatch.StartNew(), UsesWand = usesWand, GraceUntilUtc = now.AddSeconds(20), LastSavedUtc = now };
-            session.ObservedProcessIds.Add(processId); activePlays[game.Id] = session;
+            var session = new PlaySession { Process = process, ExecutablePath = executable, Timing = new ActivePlaytime(State.PlayTimeSeconds.GetValueOrDefault(game.Id), Stopwatch.GetTimestamp()), UsesWand = usesWand, GraceUntilUtc = now.AddSeconds(20), LastSavedUtc = now };
+            session.ObservedProcessIds.Add(processId);
+            if (FrozenProcessState.TryGetCreationStamp(process, out var creationStamp)) session.ProcessCreationStamps[processId] = creationStamp;
+            activePlays[game.Id] = session;
+            SetGamePlayState(game.Id, playing: true, paused: false);
+            try { SamplePlaySession(game.Id, session, announceTransition: false); }
+            catch (Exception ex) { Store.Log("Initial AHK pause-state sample failed for " + game.Id + "; playtime will continue from the next poll: " + ex.Message); }
             Store.Log("Launched game " + game.Id + "; tracking play time from PID " + processId);
             StatusText.Text = "Playing " + game.Name + " · tracking time";
         }
@@ -661,13 +715,17 @@ public partial class MainWindow : Window
                 session.Process.Refresh();
                 if (session.Process.HasExited && DateTime.UtcNow <= session.GraceUntilUtc)
                     replacement = FindReplacementProcess(session.ExecutablePath, session.ObservedProcessIds);
-                if (replacement != null) { session.Process.Dispose(); session.Process = replacement; session.ObservedProcessIds.Add(replacement.Id); }
+                if (replacement != null)
+                {
+                    session.Process.Dispose(); session.Process = replacement; session.ObservedProcessIds.Add(replacement.Id);
+                    if (FrozenProcessState.TryGetCreationStamp(replacement, out var replacementStamp)) session.ProcessCreationStamps[replacement.Id] = replacementStamp;
+                }
                 if (!session.Process.HasExited)
                 {
                     stateKnown = true;
-                    State.PlayTimeSeconds[id] = session.StartingSeconds + session.Clock.Elapsed.TotalSeconds;
+                    if (FrozenProcessState.TryGetCreationStamp(session.Process, out var creationStamp)) session.ProcessCreationStamps[session.Process.Id] = creationStamp;
+                    SamplePlaySession(id, session, announceTransition: true);
                     if ((DateTime.UtcNow - session.LastSavedUtc).TotalSeconds >= 10) { session.LastSavedUtc = DateTime.UtcNow; save = true; }
-                    UpdatePlayedLabel(id, State.PlayTimeSeconds[id]);
                     continue;
                 }
                 stateKnown = true;
@@ -682,10 +740,40 @@ public partial class MainWindow : Window
         }
         if (save) Save();
     }
+    private void SamplePlaySession(string id, PlaySession session, bool announceTransition)
+    {
+        var identities = session.ProcessCreationStamps.Select(entry => new FrozenProcessIdentity(entry.Key, entry.Value));
+        var pauseRead = FrozenProcessState.Read(FrozenProcessesPath, identities);
+        bool paused = pauseRead.IsAvailable ? pauseRead.IsPaused : session.Timing.IsPaused;
+        if (!pauseRead.IsAvailable && !session.PauseStateUnavailable)
+        {
+            session.PauseStateUnavailable = true;
+            Store.Log("AHK pause state was temporarily unavailable for " + id + "; playtime is held at the last known state.");
+        }
+        else if (pauseRead.IsAvailable && session.PauseStateUnavailable)
+        {
+            session.PauseStateUnavailable = false;
+            Store.Log("AHK pause state is available again for " + id + ".");
+        }
+        bool wasPaused = session.Timing.IsPaused;
+        session.Timing.Sample(Stopwatch.GetTimestamp(), paused);
+        State.PlayTimeSeconds[id] = session.Timing.TotalSeconds;
+        SetGamePlayState(id, playing: true, paused: paused);
+        UpdatePlayedLabel(id, State.PlayTimeSeconds[id]);
+        if (announceTransition && pauseRead.IsAvailable && wasPaused != paused)
+        {
+            var game = Games.FirstOrDefault(candidate => candidate.Id == id);
+            if (game != null) StatusText.Text = paused
+                ? game.Name + " paused · play time held"
+                : game.Name + " resumed · play time continues";
+        }
+    }
     private void CommitPlaySession(string id, PlaySession session)
     {
-        State.PlayTimeSeconds[id] = Math.Max(State.PlayTimeSeconds.GetValueOrDefault(id), session.StartingSeconds + session.Clock.Elapsed.TotalSeconds);
-        activePlays.Remove(id); session.Process.Dispose(); UpdatePlayedLabel(id, State.PlayTimeSeconds[id]);
+        try { SamplePlaySession(id, session, announceTransition: false); }
+        catch (Exception ex) { Store.Log("Final AHK pause-state sample failed for " + id + "; preserving the last tracked playtime: " + ex.Message); }
+        State.PlayTimeSeconds[id] = Math.Max(State.PlayTimeSeconds.GetValueOrDefault(id), session.Timing.TotalSeconds);
+        activePlays.Remove(id); session.Process.Dispose(); SetGamePlayState(id, playing: false, paused: false); UpdatePlayedLabel(id, State.PlayTimeSeconds[id]);
         Store.Log("Play session ended for " + id + "; seconds=" + State.PlayTimeSeconds[id].ToString("0"));
     }
     private void FlushPlaySessions()
@@ -697,6 +785,12 @@ public partial class MainWindow : Window
     {
         var game = Games.FirstOrDefault(g => g.Id == id); if (game == null) return;
         game.PlayedHours = Math.Max(0, seconds) / 3600d; game.Notify(nameof(Game.PlayedHours)); game.Notify(nameof(Game.PlayedMeta)); game.Notify(nameof(Game.Meta));
+    }
+    private void SetGamePlayState(string id, bool playing, bool paused)
+    {
+        var game = Games.FirstOrDefault(candidate => candidate.Id == id); if (game == null) return;
+        game.IsPlaying = playing; game.IsPlayPaused = playing && paused;
+        game.Notify(nameof(Game.IsPlaying)); game.Notify(nameof(Game.IsPlayPaused)); game.Notify(nameof(Game.PlayedMeta));
     }
     private void AdminSignIn(object sender, RoutedEventArgs e)
     {
@@ -787,20 +881,48 @@ public partial class MainWindow : Window
             games = DockerScripts.DistinctGames(games);
             if (games.Length == 0) { StatusText.Text = "Select games to install first."; return; }
             string destination = State.Settings.MountPath;
-            var gameIds = games.Select(g => g.Id).ToArray();
             var review = new EditorWindow(this, "Install selected games", $"{games.Length} game(s) → {State.Settings.MountPath}\nDownload size: {games.Sum(g => g.SizeGb):0.#} GB; {games.Count(g => g.SizeGb <= 0)} unknown. Existing files in each game's folder may be updated.\nChoose the Windows BAT route for your default terminal, or WSL2 Ubuntu for a native Bash .SH install.");
             var names = review.Paragraph(string.Join("\n", games.Select(g => g.Name))); names.MaxHeight = 220;
             var format = review.Choice("Install format", new[] { "Windows default terminal (.BAT)", "WSL2 Ubuntu (.SH)" }, State.Settings.ShellTarget == "wsl2" ? 1 : 0, "InstallFormat");
             review.Action("Start download", () =>
             {
+                var launchGames = ReserveInstallGames(games, destination);
+                if (launchGames.Length == 0)
+                {
+                    StatusText.Text = "Those games are already being installed. The existing operation is still in control of their files.";
+                    review.Close();
+                    return;
+                }
+                if (launchGames.Length != games.Length)
+                    StatusText.Text = $"Skipped {games.Length - launchGames.Length} game(s) already being installed; starting the remaining {launchGames.Length}.";
+                var launchIds = launchGames.Select(g => g.Id).ToArray();
+                bool released = false;
+                void ReleaseReservations()
+                {
+                    if (released) return;
+                    released = true;
+                    ReleaseInstallGames(launchGames, destination);
+                }
                 bool wsl2 = format.SelectedIndex == 1;
                 string extension = wsl2 ? "sh" : "bat";
-                string script = DockerScripts.Generate(games, State.Settings, extension, shellTarget: wsl2 ? "wsl2" : "native-linux");
-                var byId = games.ToDictionary(g => g.Id, StringComparer.Ordinal);
-                var job = new JobWindow(Store, script, games.Select(g => DockerScripts.ContainerNameForDestination(g.Id, destination)).ToArray(), openInDefaultTerminal: !wsl2, scriptExtension: extension, completionDestination: destination, completionGameIds: gameIds, acquireInstallation: cancellation => AcquireInstallScopeAsync(gameIds, destination, cancellation));
-                job.GameCompleted += id => byId.TryGetValue(id, out var game) ? ScanCompletedGame(game, destination, job.CompletionStartedAtUtc, job.OperationId) : Task.CompletedTask;
-                job.CompletedAsync += success => ScanCompletedDownloads(games, destination, success, job.CompletionStartedAtUtc, job.OperationId);
-                jobs.Add(job); job.Closed += (_, _) => jobs.Remove(job); job.Show(); review.Close();
+                try
+                {
+                    string script = DockerScripts.Generate(launchGames, State.Settings, extension, shellTarget: wsl2 ? "wsl2" : "native-linux");
+                    var byId = launchGames.ToDictionary(g => g.Id, StringComparer.Ordinal);
+                    var job = new JobWindow(Store, script, launchGames.Select(g => DockerScripts.ContainerNameForDestination(g.Id, destination)).ToArray(), openInDefaultTerminal: !wsl2, scriptExtension: extension, completionDestination: destination, completionGameIds: launchIds, acquireInstallation: cancellation => AcquireInstallScopeAsync(launchIds, destination, cancellation));
+                    job.GameCompleted += id => byId.TryGetValue(id, out var game) ? ScanCompletedGame(game, destination, job.CompletionStartedAtUtc, job.OperationId) : Task.CompletedTask;
+                    job.CompletedAsync += async success =>
+                    {
+                        try { await ScanCompletedDownloads(launchGames, destination, success, job.CompletionStartedAtUtc, job.OperationId); }
+                        finally { ReleaseReservations(); }
+                    };
+                    jobs.Add(job); job.Closed += (_, _) => { jobs.Remove(job); ReleaseReservations(); }; job.Show(); review.Close();
+                }
+                catch
+                {
+                    ReleaseReservations();
+                    throw;
+                }
             });
             review.ShowDialog();
         }

@@ -1,4 +1,4 @@
-param([switch]$DesktopShortcut, [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'Programs\GameLibraryManager'), [switch]$NoShortcuts)
+param([switch]$DesktopShortcut, [string]$InstallRoot = (Join-Path (Split-Path $PSScriptRoot -Parent) 'installed'), [switch]$NoShortcuts)
 $ErrorActionPreference = 'Stop'
 $sourceExe = Join-Path $PSScriptRoot 'dist\GameLibrary.exe'
 if (-not (Test-Path -LiteralPath $sourceExe -PathType Leaf)) { throw 'Build the EXE with build.ps1 first.' }

@@ -4,13 +4,13 @@ A native WPF application with a self-contained Windows x64 executable. It uses t
 
 ## Run
 
-Installed executable:
+Verified executable:
 
-`C:\Users\micha\AppData\Local\Programs\GameLibraryManager\GameLibrary.exe`
+`F:\study\repos\game-library-manager-native\dist\GameLibrary.exe`
 
-Packaged executable:
-
-`F:\study\repos\fullstack\game-library-manager-web\native\dist\GameLibrary.exe`
+The native bundle and its runtime data stay on F:. The direct executable
+launches with the adjacent `data` profile and uses the secondary monitor when
+one is available; it does not create an app profile under C:.
 
 Keep the adjacent `dist\tools` directory with the executable. It includes the
 bundled Node.js runtime and the native Wand LevelDB bridge, so Play with Wand
@@ -27,6 +27,8 @@ The Start menu entry is **Game Library**. Close exits; minimize hides to the sys
 - Missing artwork and time are also filled automatically for visible games and newly discovered Docker tags. Matching first-party curated aliases are accepted; generic mismatched titles are rejected. Retry times and unavailable reasons survive restart. Unknown completion time remains unknown until usable metadata arrives.
 - Select visible games with Select all or Ctrl+A. Clear or Esc resets selection. Selection is separate from the currently highlighted row.
 - Install selected shows a review of games, destination, and known/unknown sizes before starting a native progress window. Errors and exit codes are recorded under `jobs` in the app's data folder.
+- Install requests are idempotent for each exact game and canonical destination: repeated same-game clicks are reported as already in progress, while different games or destinations can run in parallel. A second app instance uses the same destination lock files, and every generated operation carries an exact game identity, owner label, operation marker, and bounded retry/cleanup path.
+- Playtime reads `F:\study\Platforms\windows\autohotkey\mymainahk\frozen-processes.ini` by default. A counted record pauses only when its PID and AHK creation stamp match the tracked game process; `Count=0` ignores stale sections. Timing uses a monotonic active-time ledger, so a `Ctrl+H` pause does not add frozen seconds and `Alt+H` resume continues the same session. The path can be changed in Settings & backups.
 - Export script supports PowerShell 5, BAT, and shell. BAT uses a fixed-size loader, so a large selection does not exceed Windows' command-line limit.
 - Export script also offers separate PowerShell/BAT **Kill All** exports without selecting games. Saving only writes a file. Running it lists every container in the active Docker target, including unrelated containers, and requires `DELETE ALL` before force-stopping and removing those containers and their writable layers. Images, volumes, and downloaded game folders are preserved. The existing stop-selected script remains available.
 - Download folders include a stable tag hash so `AeternaNoctis` and `aeternanoctis` cannot collide on case-insensitive Windows filesystems. Existing folders with the original game name are still recognized by Scan folder.
@@ -43,7 +45,7 @@ Shared categories, hidden tabs, and category definitions synchronize with that e
 
 The native app polls shared configuration every 15 seconds without rebuilding an unchanged list, and checks the catalog once a minute. Refresh catalog downloads current data files and the first-party Docker tag feed. If that feed is degraded, the native app paginates Docker Hub directly. A complete snapshot less than 15 minutes old can be reused only after a fresh first-page identity/size/date and total-count comparison for the same repository. Existing Docker Desktop sign-in can supply the authentication required beyond anonymous pagination limits; credentials are used only in memory for the relevant Docker hosts. Completeness checks reject partial snapshots, and an older fallback cannot replace a complete snapshot. The recorded live check retrieved 1,260 tags across 13 pages.
 
-User data is stored in `%LOCALAPPDATA%\GameLibraryManager`. Writes use a flushed temporary file and atomic replacement with a previous-version backup. Corrupt user state is preserved before recovery. Bundled assets have a content-addressed revision; upgrading the EXE does not reuse an outdated bundled catalog.
+User data is stored in the executable's adjacent F-drive `data` folder. Writes use a flushed temporary file and atomic replacement with a previous-version backup. Corrupt user state is preserved before recovery. Bundled assets have a content-addressed revision; upgrading the EXE does not reuse an outdated bundled catalog.
 
 Backup imports wait for active synchronization before replacing state, then recheck queued edits. Closing the import dialog while it waits cancels the import. The prior library is backed up before a successful import.
 
@@ -64,6 +66,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify-native.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify-native.ps1 -KillScriptProof
 .\dist\GameLibrary.exe --data-dir .\evidence\offline-ui --offline --ui-test .\evidence\offline-ui.json
 .\dist\GameLibrary.exe --data-dir .\evidence\online-ui --ui-test .\evidence\online-ui.json
+.\dist\GameLibrary.exe --data-dir .\evidence\pause-proof-data --offline --ui-test .\evidence\pause-native.json --pause-proof
 .\install.ps1
 ```
 
@@ -78,6 +81,13 @@ distribution.
 
 `--self-test` uses temporary fixture data and simulated HTTP failures; it does not mutate production. `--ui-test` runs the packaged WPF UI against an explicitly selected data directory and exits. The external PowerShell verifier exercises actual Windows UI Automation controls and process lifecycle.
 
+The current native revalidation is recorded in `..\evidence\self-test-final-20260910.json`
+(69/69), `evidence\external-ui.json` (31/31), and
+`..\evidence\pause-final-20260910-153346.json` (29/29). The pause proof uses the
+configured AHK state-file path, matches PID plus creation stamp, excludes the
+frozen interval, and resumes monotonic timing as soon as the AHK record leaves
+`State=paused`.
+
 The optional `-MetadataProof` verifier exercises live cover/time refresh. `-DockerProof -DockerTag peppergrinder` performs a real download into an isolated evidence folder using the existing Docker VMM engine and checks automatic installed/launcher persistence before manual scanning. `-PlayProof` uses its receipt, clears the fixture launcher before scanning, chooses the actual EXE through the Windows dialog, and launches it. `-LocalGameProof` copies that fixture into an unknown folder and exercises local discovery, launch and restart. The recorded game reached a responding title-menu window; this does not establish gameplay or all-game compatibility.
 
 `-AdminProof`, `-TrayProof`, and `-ScriptProof` cover category removal confirmation, the actual tray menu through its registered callback, and all script-format Save dialogs. These use isolated app data; admin and tray shared refresh are guarded offline.
@@ -86,7 +96,7 @@ The optional `-MetadataProof` verifier exercises live cover/time refresh. `-Dock
 
 ## Remove or roll back
 
-Run `%LOCALAPPDATA%\Programs\GameLibraryManager\uninstall.ps1`. It validates the install receipt and executable checksum, removes only its managed EXE and matching shortcuts, and leaves all user data, game files, backups, and unrelated files intact. There is no recursive deletion.
+When an explicit F-drive installation is created with `install.ps1`, run its adjacent `uninstall.ps1`. It validates the install receipt and executable checksum, removes only its managed EXE and matching shortcuts, and leaves all user data, game files, backups, and unrelated files intact. There is no recursive deletion.
 
 Reinstalling backs up an existing managed executable with a timestamp. For rollback, close the app and restore the desired backup EXE; keep the current executable as another backup. The uninstaller intentionally refuses to delete an EXE whose checksum no longer matches its receipt.
 

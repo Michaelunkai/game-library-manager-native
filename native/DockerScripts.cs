@@ -37,6 +37,11 @@ public static class DockerScripts
     }
     public static string InstallFolder(string id) => id + "-" + ContainerName(id)[4..12];
     internal static string InstallLockPath(string destination, string gameId) => Path.Combine(Path.GetFullPath(destination), ".gamelibrarymanager-locks", ContainerNameForDestination(gameId, destination) + ".lock");
+    internal static string InstallWorkKey(string destination, string gameId)
+    {
+        string canonicalDestination = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination.Trim())).ToUpperInvariant();
+        return canonicalDestination + "\0" + gameId;
+    }
     internal static string OwnershipMetadata(string gameId) => "native|" + gameId;
     internal static bool OwnershipMatches(string metadata, string gameId) => string.Equals(metadata.Trim(), OwnershipMetadata(gameId), StringComparison.Ordinal);
     internal static string OwnershipFromLabelsJson(string json)

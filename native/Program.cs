@@ -13,6 +13,7 @@ namespace GameLibrary.Native;
 public static class Program
 {
     public static string? TestReport;
+    public static bool PauseProof;
     [STAThread]
     public static int Main(string[] args)
     {
@@ -45,6 +46,7 @@ public static class Program
             else if (args[i] == "--second-monitor") secondMonitor = true;
             else if (args[i] == "--main-monitor") secondMonitor = false;
             else if (args[i] == "--ui-test" && i + 1 < args.Length) TestReport = Path.GetFullPath(args[++i]);
+            else if (args[i] == "--pause-proof") PauseProof = true;
         }
         var store = new LibraryStore(data);
         string instance = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(store.Root.ToUpperInvariant())))[..24];

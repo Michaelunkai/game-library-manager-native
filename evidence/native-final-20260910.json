@@ -1,0 +1,37 @@
+{
+  "scope": "native Windows WPF executable",
+  "sourceExecutable": "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
+  "userExecutable": "F:\\study\\repos\\game-library-manager-native\\dist\\GameLibrary.exe",
+  "sha256": "4DAF00CF10CBABA8EB572E15EE43534C5DC091E14D3393847794C42F50DAD992",
+  "sizeBytes": 460153704,
+  "packageFiles": 70,
+  "catalog": {
+    "games": 1179,
+    "cachedCovers": 2028
+  },
+  "checks": {
+    "diagnosticSelfTests": "69/69",
+    "externalNativeUi": "31/31",
+    "pauseRuntimeUi": "29/29",
+    "pauseFixture": {
+      "configuredStateFile": "F:\\study\\Platforms\\windows\\autohotkey\\mymainahk\\frozen-processes.ini",
+      "activeBeforePauseSeconds": 1.41,
+      "pausedDeltaSeconds": 0.0,
+      "resumedDeltaSeconds": 1.64
+    }
+  },
+  "window": {
+    "processId": 30476,
+    "title": "Game Library",
+    "responding": true,
+    "display": "\\\\.\\DISPLAY5",
+    "primary": false,
+    "windowRectPixels": "3120,246,4560,1146",
+    "displayBoundsPixels": "{X=2560,Y=0,Width=2560,Height=1440}"
+  },
+  "storage": {
+    "runtimeData": "F:\\study\\repos\\game-library-manager-native\\data",
+    "knownCProfileAbsent": true,
+    "knownCTempExtractionAbsent": true
+  }
+}

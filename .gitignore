@@ -11,3 +11,13 @@
 /evidence/*.log
 /evidence/test-data-*/
 /evidence/ui-fixture-*/
+/evidence/external-ui-*/
+/evidence/pause-proof-*/
+/evidence/pause-*-data/
+/evidence/pause-*-data-*/
+/evidence/pause-resume-final*
+/evidence/pause-final-20260910.json
+/evidence/pause-final-20260910.png
+/evidence/self-test-pause-install*.json
+/evidence/self-test-resume-final.json
+/evidence/self-test-visual-final.json

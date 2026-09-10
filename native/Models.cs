@@ -28,7 +28,11 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public string CategoryName { get; set; } = "";
     [JsonIgnore] public string TagsLabel { get; set; } = "";
     [JsonIgnore] public double PlayedHours { get; set; }
-    [JsonIgnore] public string PlayedMeta => PlayedHours > 0 ? $"Played {PlayedHours:0.0} h" : "Not played";
+    [JsonIgnore] public bool IsPlaying { get; set; }
+    [JsonIgnore] public bool IsPlayPaused { get; set; }
+    [JsonIgnore] public string PlayedMeta => IsPlaying
+        ? (IsPlayPaused ? $"Paused · {PlayedHours:0.0} h · timing held" : $"Playing · {PlayedHours:0.0} h")
+        : PlayedHours > 0 ? $"Played {PlayedHours:0.0} h" : "Not played";
     [JsonIgnore] public bool ShowTime { get; set; } = true;
     [JsonIgnore] public bool ShowCategory { get; set; } = true;
     [JsonIgnore] public double CoverHeight { get; set; } = 98;
@@ -56,6 +60,7 @@ public sealed class Preferences
 {
     public const string DefaultMountPath = @"E:\games";
     public const string LegacyDefaultMountPath = @"F:\Games";
+    public const string DefaultFrozenProcessesPath = @"F:\study\Platforms\windows\autohotkey\mymainahk\frozen-processes.ini";
     public const string DefaultScriptFormat = "bat";
     public const string DefaultShellTarget = "native-linux";
     public string Theme { get; set; } = "dark";
@@ -66,6 +71,7 @@ public sealed class Preferences
     public string RepoName { get; set; } = "backup";
     public string MountPath { get; set; } = DefaultMountPath;
     public bool MinimizeToTray { get; set; } = true;
+    public string FrozenProcessesPath { get; set; } = DefaultFrozenProcessesPath;
     public string SortBy { get; set; } = "Recently Added";
     public string ScriptFormat { get; set; } = DefaultScriptFormat;
     public string ShellTarget { get; set; } = DefaultShellTarget;

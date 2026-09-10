@@ -18,7 +18,7 @@
     <Grid Grid.Column="1" Margin="28,24,28,16">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <DockPanel Margin="0,0,0,20">
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="↻  Refresh catalog" Click="RefreshCatalog" AutomationProperties.AutomationId="RefreshCatalog"/><Button Content="☀ / ☾" Click="ToggleTheme" ToolTip="Toggle light or dark theme" AutomationProperties.AutomationId="ToggleTheme" Margin="0"/></StackPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="↻  Refresh catalog" Click="RefreshCatalog" AutomationProperties.AutomationId="RefreshCatalog"/><Button Content="Theme" Width="86" Click="ToggleTheme" ToolTip="Toggle light or dark theme" AutomationProperties.AutomationId="ToggleTheme" Margin="0"/></StackPanel>
         <StackPanel><TextBlock x:Name="PageTitle" Text="All games" FontSize="30" FontWeight="SemiBold"/><TextBlock x:Name="CatalogCaption" Text="Loading your collection…" Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,0"/></StackPanel>
       </DockPanel>
       <Border Grid.Row="1" Background="{DynamicResource PanelBrush}" CornerRadius="10" Padding="20,15" Margin="0,0,0,18">

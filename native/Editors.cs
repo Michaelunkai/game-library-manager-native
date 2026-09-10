@@ -350,6 +350,13 @@ public partial class MainWindow
         var scriptFormat = dialog.Choice("Default export format", new[] { "bat", "ps1", "sh" }, State.Settings.ScriptFormat == "ps1" ? 1 : State.Settings.ScriptFormat == "sh" ? 2 : 0, "ScriptFormat");
         var shellTarget = dialog.Choice("Bash target", new[] { "native-linux", "wsl2" }, State.Settings.ShellTarget == "wsl2" ? 1 : 0, "ShellTarget");
         var wand = dialog.Text("Wand executable (optional)", ResolveWandPath(), "WandPath");
+        var frozenProcesses = dialog.Text("AHK frozen-process state file", State.Settings.FrozenProcessesPath, "FrozenProcessesPath");
+        dialog.Paragraph("Playtime automatically pauses when Ctrl+H records this game's exact PID and creation stamp as paused in the file. A missing file means the game is running normally; an unreadable file holds the last known timing state.");
+        dialog.Action("Browse AHK state file...", () =>
+        {
+            var picker = new Microsoft.Win32.OpenFileDialog { Title = "Choose frozen-processes.ini", Filter = "AHK state file|frozen-processes.ini;*.ini|All files|*.*", CheckFileExists = false };
+            if (picker.ShowDialog(dialog) == true) frozenProcesses.Text = picker.FileName;
+        }, "BrowseFrozenProcesses");
         dialog.Action("Detect installed Wand", () => { wand.Text = DetectWandPath() ?? ""; dialog.Notice.Text = wand.Text.Length > 0 ? "Wand executable found." : "Wand was not found; browse to Wand.exe or leave it blank."; }, "DetectWand");
         dialog.Action("Browse Wand executable…", () =>
         {
@@ -372,6 +379,7 @@ public partial class MainWindow
             next.ShellTarget = shellTarget.SelectedItem as string ?? Preferences.DefaultShellTarget;
             next.WandPath = wand.Text.Trim();
             if (next.WandPath.Length > 0 && (!Path.IsPathFullyQualified(next.WandPath) || !File.Exists(next.WandPath) || !Path.GetFileName(next.WandPath).Equals("Wand.exe", StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("Choose an existing Wand.exe, or leave the Wand path blank to use automatic detection.");
+            next.FrozenProcessesPath = string.IsNullOrWhiteSpace(frozenProcesses.Text) ? Preferences.DefaultFrozenProcessesPath : Path.GetFullPath(frozenProcesses.Text.Trim());
             State.Settings = next; Save(); ApplyTheme(); Reload(); dialog.Notice.Text = "Settings saved.";
         }, "SaveSettings");
         dialog.Action("Export complete backup…", () =>

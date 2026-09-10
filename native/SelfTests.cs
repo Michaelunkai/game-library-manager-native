@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -268,6 +269,68 @@ public static class SelfTests
             var loaded = store.LoadState();
             var game = store.LoadGames(loaded, store.ReadConfig()).FirstOrDefault(g => g.Id == id);
             Require(loaded.PlayTimeSeconds[id] == 7380 && game != null && game.Installed && Math.Abs(game.PlayedHours - 2.05) < 0.001, "Play time was not persisted or displayed.");
+        });
+        Check("AHK frozen-process state requires counted exact identities", () =>
+        {
+            string pausedState = "[FrozenProcesses]\r\nCount=1\r\n[FrozenProcess1]\r\nPid=42\r\nCreated=ABC123\r\nMode=game_suspend\r\nState=paused\r\n";
+            var paused = FrozenProcessState.Parse(pausedState);
+            Require(paused.IsPausedFor(new[] { new FrozenProcessIdentity(42, "abc123") }), "A counted paused process with the exact creation stamp was not recognized.");
+            Require(!paused.IsPausedFor(new[] { new FrozenProcessIdentity(42, "different") }) && !paused.IsPausedFor(new[] { new FrozenProcessIdentity(43, "abc123") }), "A mismatched PID or creation stamp was accepted.");
+            string staleState = "[FrozenProcesses]\r\nCount=0\r\n[FrozenProcess1]\r\nPid=42\r\nCreated=ABC123\r\nState=paused\r\n";
+            Require(!FrozenProcessState.Parse(staleState).IsPausedFor(new[] { new FrozenProcessIdentity(42, "ABC123") }), "An uncounted stale paused record was accepted.");
+            string restoringState = pausedState.Replace("State=paused", "State=restoring", StringComparison.Ordinal);
+            string pendingState = pausedState.Replace("State=paused", "State=restore_pending", StringComparison.Ordinal);
+            Require(!FrozenProcessState.Parse(restoringState).IsPausedFor(new[] { new FrozenProcessIdentity(42, "ABC123") })
+                && !FrozenProcessState.Parse(pendingState).IsPausedFor(new[] { new FrozenProcessIdentity(42, "ABC123") }),
+                "A running AHK resume transition was incorrectly treated as paused.");
+        });
+        Check("AHK pause reads fail closed and missing files mean running", () =>
+        {
+            string stateFile = Path.Combine(root, "frozen-processes.ini");
+            File.WriteAllText(stateFile, "[FrozenProcesses]\r\nCount=1\r\n[FrozenProcess1]\r\nPid=77\r\nCreated=STAMP\r\nState=paused\r\n");
+            var paused = FrozenProcessState.Read(stateFile, new[] { new FrozenProcessIdentity(77, "STAMP") });
+            Require(paused.IsAvailable && paused.IsPaused, "A valid AHK state file was not read.");
+            File.WriteAllText(stateFile, "not an ini snapshot");
+            var malformed = FrozenProcessState.Read(stateFile, new[] { new FrozenProcessIdentity(77, "STAMP") });
+            Require(!malformed.IsAvailable && !malformed.IsPaused, "Malformed AHK state was treated as active play.");
+            File.Delete(stateFile);
+            var missing = FrozenProcessState.Read(stateFile, new[] { new FrozenProcessIdentity(77, "STAMP") });
+            Require(missing.IsAvailable && !missing.IsPaused, "A missing optional AHK state file did not mean normal timing.");
+        });
+        Check("Active playtime excludes a frozen interval and resumes", () =>
+        {
+            var timing = new ActivePlaytime(100, 0, 1_000_000);
+            timing.Sample(10_000_000, paused: false);
+            timing.Sample(20_000_000, paused: true);
+            timing.Sample(120_000_000, paused: true);
+            timing.Sample(130_000_000, paused: false);
+            timing.Sample(140_000_000, paused: false);
+            Require(Math.Abs(timing.TotalSeconds - 130) < 0.0001 && !timing.IsPaused, "Paused seconds were counted or resumed timing did not continue.");
+        });
+        Check("Repeated installs deduplicate by exact game and destination", () =>
+        {
+            string first = DockerScripts.InstallWorkKey(@"E:\\games", "same-game");
+            string same = DockerScripts.InstallWorkKey(@"e:\\games\\", "same-game");
+            string otherDestination = DockerScripts.InstallWorkKey(@"E:\\other", "same-game");
+            string otherGame = DockerScripts.InstallWorkKey(@"E:\\games", "other-game");
+            Require(first == same && first != otherDestination && first != otherGame, "Install reservations were not stable and destination/game scoped.");
+        });
+        Check("Concurrent install reservations allow one same-game writer and independent writers", () =>
+        {
+            var book = new InstallReservationBook();
+            using var start = new ManualResetEventSlim(false);
+            var tasks = Enumerable.Range(0, 24).Select(_ => Task.Run(() =>
+            {
+                start.Wait();
+                return book.Reserve(new[] { @"E:\GAMES|same-game" }).Length;
+            })).ToArray();
+            start.Set();
+            Task.WaitAll(tasks);
+            Require(tasks.Count(task => task.Result == 1) == 1 && tasks.All(task => task.Result is 0 or 1), "Same-game reservations overlapped.");
+            var independent = book.Reserve(new[] { @"E:\GAMES|other-game", @"E:\OTHER|same-game" });
+            Require(independent.Length == 2, "Independent game or destination reservations were incorrectly blocked.");
+            book.Release(new[] { @"E:\GAMES|same-game" });
+            Require(book.Reserve(new[] { @"E:\GAMES|same-game" }).Length == 1, "A released install reservation was not reusable.");
         });
         Check("Native sort modes match all website sort categories and keep unknown values last", () =>
         {
@@ -658,6 +721,12 @@ public partial class MainWindow
                 Check("Offline admin actions and refresh never reach the rejecting network fixture", offlineNetwork is { Attempts: 0 } && !Sync.Online && Sync.LastSync == null && Store.LoadState().Pending.Count >= 2);
                 adminToken = null;
             }
+            if (Program.PauseProof)
+            {
+                var pauseProof = await RunPauseProof();
+                checks.Add(new { name = "AHK Ctrl+H pause/resume timing", passed = pauseProof.Passed, detail = pauseProof.Detail, at = DateTime.UtcNow });
+                if (!pauseProof.Passed) throw new InvalidOperationException("AHK pause proof failed: " + pauseProof.Detail);
+            }
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Width = MinWidth; Height = Math.Max(MinHeight, 800);
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -674,5 +743,99 @@ public partial class MainWindow
         }
         catch (Exception ex) { LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = false, error = ex.ToString(), checks })); }
         finally { Close(); }
+    }
+
+    private async Task<(bool Passed, string Detail)> RunPauseProof()
+    {
+        string originalPath = State.Settings.FrozenProcessesPath;
+        string proofRoot = Path.Combine(Store.Root, "pause-proof-" + Guid.NewGuid().ToString("N"));
+        string proofState = Path.Combine(proofRoot, "frozen-processes.ini");
+        string id = "local:ahk-pause-proof-" + Guid.NewGuid().ToString("N");
+        var game = new Game { Id = id, Name = "AHK pause proof" };
+        Process? owned = null;
+        try
+        {
+            Directory.CreateDirectory(proofRoot);
+            State.Settings.FrozenProcessesPath = proofState;
+            Games.Add(game);
+            State.PlayTimeSeconds[id] = 0;
+            string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+            var start = new ProcessStartInfo(powershell)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            start.ArgumentList.Add("-NoLogo"); start.ArgumentList.Add("-NoProfile"); start.ArgumentList.Add("-Command"); start.ArgumentList.Add("Start-Sleep -Seconds 20");
+            owned = Process.Start(start) ?? throw new InvalidOperationException("The pause-proof fixture process did not start.");
+            TrackPlayProcess(game, owned, ownsProcess: true);
+            owned = null;
+            var session = activePlays[id];
+            if (session.ProcessCreationStamps.Count == 0) throw new InvalidOperationException("The fixture process creation stamp could not be captured.");
+            int pid = session.Process.Id;
+            string created = session.ProcessCreationStamps[pid].PadLeft(16, '0');
+            async Task<bool> WaitFor(Func<bool> condition)
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(6);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (condition()) return true;
+                    await Task.Delay(100);
+                }
+                return condition();
+            }
+            void WriteState(int count, string state)
+            {
+                string stale = "[FrozenProcess1]\r\nPid=" + pid + "\r\nCreated=" + created + "\r\nMode=game_suspend\r\nState=" + state + "\r\n";
+                File.WriteAllText(proofState, "[FrozenProcesses]\r\nCount=" + count + "\r\n" + stale);
+            }
+
+            await Task.Delay(1400);
+            UpdatePlaySessions();
+            double beforePause = State.PlayTimeSeconds[id];
+            WriteState(1, "paused");
+            bool pausedSeen = await WaitFor(() => game.IsPlayPaused);
+            double pauseStart = State.PlayTimeSeconds[id];
+            await Task.Delay(1600);
+            UpdatePlaySessions();
+            double pauseEnd = State.PlayTimeSeconds[id];
+            WriteState(0, "paused");
+            bool resumedSeen = await WaitFor(() => !game.IsPlayPaused);
+            double resumeStart = State.PlayTimeSeconds[id];
+            await Task.Delay(1600);
+            UpdatePlaySessions();
+            double resumeEnd = State.PlayTimeSeconds[id];
+            double pausedDelta = pauseEnd - pauseStart;
+            double resumedDelta = resumeEnd - resumeStart;
+            bool passed = beforePause > 0.5 && pausedSeen && resumedSeen && pausedDelta < 0.5 && resumedDelta > 0.8;
+            return (passed, $"configured={Preferences.DefaultFrozenProcessesPath}; fixturePid={pid}; activeBeforePause={beforePause:0.00}; pausedDelta={pausedDelta:0.00}; resumedDelta={resumedDelta:0.00}");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+        finally
+        {
+            try
+            {
+                if (activePlays.TryGetValue(id, out var active))
+                {
+                    try { if (!active.Process.HasExited) active.Process.Kill(entireProcessTree: true); } catch { }
+                    try { await active.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+                    try { CommitPlaySession(id, active); } catch { }
+                }
+                else if (owned != null)
+                {
+                    try { if (!owned.HasExited) owned.Kill(entireProcessTree: true); } catch { }
+                    try { await owned.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+                    owned.Dispose();
+                }
+            }
+            catch { }
+            Games.RemoveAll(candidate => ReferenceEquals(candidate, game));
+            State.PlayTimeSeconds.Remove(id);
+            State.Settings.FrozenProcessesPath = originalPath;
+            try { if (File.Exists(proofState)) File.Delete(proofState); } catch { }
+            try { if (Directory.Exists(proofRoot)) Directory.Delete(proofRoot, recursive: true); } catch { }
+        }
     }
 }
