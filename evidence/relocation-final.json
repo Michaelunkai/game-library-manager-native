@@ -1,8 +1,8 @@
 {
-  "verifiedAtUtc": "2026-09-10T09:46:55.2690330Z",
+  "verifiedAtUtc": "2026-09-10T10:45:29.7289629Z",
   "projectPath": "F:\\study\\repos\\game-library-manager-native",
   "executable": "F:\\study\\repos\\game-library-manager-native\\dist\\GameLibrary.exe",
-  "sha256": "8D152C92E07276233F5BA3DF7B5B3A38576B2FE0470A5830928BD8770F7FC14A",
+  "sha256": "85DA28CA15C0CF6C5850153FE391B0AEC79CB71D72582CA86575F24AC43E2111",
   "sizeBytes": 460116840,
   "catalog": {
     "liveGameCount": 1260,
@@ -22,6 +22,7 @@
     "window": {
       "title": "Game Library",
       "secondary": true,
+      "startupPlacementNormalized": true,
       "monitorFlags": 0,
       "monitorBounds": [2560, 0, 5120, 1440]
     },

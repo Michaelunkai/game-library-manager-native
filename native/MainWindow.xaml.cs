@@ -67,6 +67,7 @@ public partial class MainWindow : Window
     private readonly bool offline;
     private readonly bool secondMonitor;
     private readonly OfflineNetworkGuard? offlineNetwork;
+    private bool startupPlacementQueued;
     private string tab = "all";
     private string? adminToken;
     private readonly List<JobWindow> jobs = new();
@@ -90,6 +91,7 @@ public partial class MainWindow : Window
         if (secondMonitor) PlaceOnSecondaryMonitor();
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
         Loaded += OnLoaded;
+        ContentRendered += (_, _) => QueueSecondaryPlacement();
         Closing += OnClosing;
         StateChanged += (_, _) => ObserveUiAction("Window state change", () => { if (ready && WindowState == WindowState.Minimized && State.Settings.MinimizeToTray) HideToTray(); });
         PreviewKeyDown += Keyboard;
@@ -119,6 +121,7 @@ public partial class MainWindow : Window
             RatingBox.ItemsSource = new[] { "Any rating", "1+ stars", "2+ stars", "3+ stars", "4+ stars", "5 stars" }; RatingBox.SelectedIndex = 0;
             lifetime.Token.ThrowIfCancellationRequested();
             InitializeTray(); ApplyTheme(); ready = true; Reload();
+            QueueSecondaryPlacement();
             // A fast automation client or a user can type while the bundled
             // catalog is still loading. Reapply that text after readiness so
             // the first search is never dropped by the ready guard.
@@ -128,6 +131,7 @@ public partial class MainWindow : Window
             Store.Log("Window ready; catalog=" + Games.Count);
             if (Program.TestReport != null) { if (!offline) await Refresh(true); await RunUiProof(Program.TestReport); return; }
             if (!offline) { poll.Start(); await Refresh(true); }
+            QueueSecondaryPlacement();
         }
         catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Error(ex); }
@@ -142,6 +146,24 @@ public partial class MainWindow : Window
         var height = Math.Min(Height, (double)area.Height);
         Left = area.Left + Math.Max(0, (area.Width - width) / 2);
         Top = area.Top + Math.Max(0, (area.Height - height) / 2);
+    }
+    private void QueueSecondaryPlacement()
+    {
+        if (!secondMonitor || closing || startupPlacementQueued || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        startupPlacementQueued = true;
+        try
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                startupPlacementQueued = false;
+                if (closing) return;
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                WindowState = WindowState.Normal;
+                PlaceOnSecondaryMonitor();
+                if (!IsVisible) Show();
+            }));
+        }
+        catch (InvalidOperationException) { startupPlacementQueued = false; }
     }
     private void InitializeTray()
     {
