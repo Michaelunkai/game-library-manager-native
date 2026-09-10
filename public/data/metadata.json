@@ -1,0 +1,662 @@
+{
+  "freedom-planet-2": {
+    "name": "Freedom Planet 2",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/84a489e8bc9dd79c0af5f4d1ffb7625e038920b382c8f9ea96a2a71ad9568751.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "595500",
+    "fetchedAt": "2026-09-09T23:48:59.475Z"
+  },
+  "saviorless": {
+    "name": "Saviorless",
+    "category": "new",
+    "time": 1,
+    "cover": "covers/d5e1f388714611999dc8d872b95f45a97426361396057ada4a551428ec590715.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1438480",
+    "fetchedAt": "2026-09-09T23:48:59.516Z"
+  },
+  "dusk-diver-2": {
+    "name": "Dusk Diver 2",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/43f3900cebe1096598ba65308bf1520b9502b635f87e60306c0c7a705fc2dcff.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "1792600",
+    "fetchedAt": "2026-09-09T23:48:59.539Z"
+  },
+  "spark-the-electric-jester-3": {
+    "name": "Spark the Electric Jester 3",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/6a01252c498d0759005fa479ad9e920f26c28a25b38f5e196617e6520b88f017.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1629530",
+    "fetchedAt": "2026-09-09T23:48:59.557Z"
+  },
+  "monster-hunter-stories-2---wings-of-ruin": {
+    "name": "Monster Hunter Stories 2: Wings of Ruin",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/347c1ba3210ec7f87d5848841a7f7f23b7a202b91cb2b82573f8fd05af696154.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1277400",
+    "fetchedAt": "2026-09-09T23:48:59.647Z"
+  },
+  "asterix-obelix-slap-them-all-2": {
+    "name": "Asterix & Obelix Slap Them All! 2",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/7264bed3a7a4c26d4a1f2d0a3b9b6df845ab7b71627e3858b7b2de397bf256b4.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "2360250",
+    "fetchedAt": "2026-09-09T23:48:59.773Z"
+  },
+  "sonic-colors---ultimate": {
+    "name": "Sonic Colors: Ultimate",
+    "category": "new",
+    "time": 4,
+    "cover": "covers/89ddd7b15d2cc392a650c5f82456e9188923295c291b550f15de94114b36942c.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2055290",
+    "fetchedAt": "2026-09-09T23:48:59.780Z"
+  },
+  "koa-and-the-five-pirates-of-mara": {
+    "name": "Koa and the Five Pirates of Mara",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/dbbba57b3a036a8804e9610ed5b05c68fbb6a52da37d19fec6dd519f47c390e6.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1819450",
+    "fetchedAt": "2026-09-09T23:49:00.324Z"
+  },
+  "tails-of-iron-2": {
+    "name": "Tails of Iron 2: Whiskers of Winter",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/4e8df44b0219cdf401ae5bbf9d095377edd7282265d5798f916e7ed71aa7e7b1.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "2473480",
+    "fetchedAt": "2026-09-09T23:49:01.199Z"
+  },
+  "gunbrella": {
+    "name": "Gunbrella",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/e689e2892b2c2a79553755122ff28c551f2005efd3e8b0cbb90666775853aa9b.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1580180",
+    "fetchedAt": "2026-09-09T23:49:01.215Z"
+  },
+  "mika-and-the-witchs-mountain": {
+    "name": "Mika and The Witch's Mountain",
+    "category": "new",
+    "time": 1,
+    "cover": "covers/b14fe7c1df9efbee34bda15716680af9423d896b2301b4b0295984103dc93e8d.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1819460",
+    "fetchedAt": "2026-09-09T23:49:01.246Z"
+  },
+  "south-of-the-circle": {
+    "name": "South of the Circle",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/a3ba50649343287db1a863c9f3f7bacdb0c8c10d2cd3ac7b0ecced00153edc95.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1811040",
+    "fetchedAt": "2026-09-09T23:49:01.374Z"
+  },
+  "yasha---legends-of-the-demon-blade": {
+    "name": "Yasha: Legends of the Demon Blade",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/4424c36516a88280ecd35c7a2a3a727f63b34afb6d63aa66ac6e0b5f32657ece.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "2169950",
+    "fetchedAt": "2026-09-09T23:49:01.605Z"
+  },
+  "hellboy---web-of-wyrd": {
+    "name": "Hellboy Web of Wyrd",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/606cdbcf36b5db29ba4021257847c9ec47b200a75889b9b8b50077ba6cce5bae.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2160480",
+    "fetchedAt": "2026-09-09T23:49:01.611Z"
+  },
+  "el-hijo---a-wild-west-tale": {
+    "name": "El Hijo - A Wild West Tale",
+    "category": "new",
+    "time": 1,
+    "cover": "covers/971474cca9f0b4aa5a09d1f8163e783b23562362cdd92ac421e2501e2b3681ca.img",
+    "source": {
+      "image": "rawg",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "",
+    "fetchedAt": "2026-09-09T23:49:01.714Z"
+  },
+  "el-hijo-a-wild-west-tale": {
+    "name": "El Hijo - A Wild West Tale",
+    "category": "new",
+    "time": 1,
+    "cover": "covers/6eedea49c6178a840d40042c0cb7fb379206e2e2f39ffc1a45c107b1d324e57e.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "853050",
+    "fetchedAt": "2026-09-09T23:49:01.725Z"
+  },
+  "biomorph": {
+    "name": "BIOMORPH",
+    "category": "new",
+    "time": 1,
+    "cover": "covers/76a019790d2f5e6670389b977a0b81c51e9de03e49103a36988401d6fd4d99d6.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1430220",
+    "fetchedAt": "2026-09-09T23:49:01.857Z"
+  },
+  "wavetale": {
+    "name": "Wavetale",
+    "category": "new",
+    "time": 4,
+    "cover": "covers/5b883994410aacd9b430e8e7f9051ae2e416151a6c7aa7f8d5eca25297c193fd.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1823930",
+    "fetchedAt": "2026-09-09T23:49:01.970Z"
+  },
+  "song-of-nunu": {
+    "name": "Song of Nunu: A League of Legends Story",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/88aeb8cd9319d7edf452f5c8c12b788f6f48088cbddd646e7cf61ffd67bbf1e9.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1333200",
+    "fetchedAt": "2026-09-09T23:49:02.356Z"
+  },
+  "killer-frequency": {
+    "name": "Killer Frequency",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/740e9c9cfeb33f510d46d75dcced639bb0f2406bb24633aa221f3ab9ee4856ae.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1903620",
+    "fetchedAt": "2026-09-09T23:49:02.419Z"
+  },
+  "mouthwashing": {
+    "name": "Mouthwashing",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/bff466634598f70d80940b4801cc3a4ea8e64a2f7e46e4d38e665be48e929539.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2475490",
+    "fetchedAt": "2026-09-09T23:49:02.442Z"
+  },
+  "sands-of-aura": {
+    "name": "Sands of Aura",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/3bccec7c888104bc4cab4b63a75b9ac2062c8c823a9b40ccec0c73de1734ba06.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1119840",
+    "fetchedAt": "2026-09-09T23:49:02.445Z"
+  },
+  "dying-light-2": {
+    "name": "Dying Light 2 Stay Human: Reloaded Edition",
+    "category": "new",
+    "time": 23,
+    "cover": "covers/5e7652c20b1858c767896bb3249c24408213b4174b08e218b84f2c055f539ad2.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "534380",
+    "fetchedAt": "2026-09-09T23:49:02.788Z"
+  },
+  "spirit-of-the-north-2": {
+    "name": "Spirit of the North 2",
+    "category": "new",
+    "time": 6,
+    "cover": "covers/916c92674a4cf4973ae63f401c3e81cc87d6873856a6abeea38313f27d0649e9.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1778840",
+    "fetchedAt": "2026-09-09T23:49:02.903Z"
+  },
+  "outcast-a-new-beginning": {
+    "name": "Outcast - A New Beginning",
+    "category": "new",
+    "time": 8,
+    "cover": "covers/818a10c228ffae71ccbee50e7576a0e40ba77159055cee0ea111b20660be42d5.img",
+    "source": {
+      "image": "rawg",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "",
+    "fetchedAt": "2026-09-09T23:49:02.980Z"
+  },
+  "beyond-good-and-evil-20th-ae": {
+    "name": "Beyond Good & Evil - 20th Anniversary Edition",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/f2aebd5dc5a9ec7646063b772eb40b9b8aebe22ce8d964e92accff93d3af3357.img",
+    "source": {
+      "image": "rawg",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "",
+    "fetchedAt": "2026-09-09T23:49:03.144Z"
+  },
+  "steel-seed": {
+    "name": "Steel Seed",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/50651ad2de3f30e96e961c71c05f2eccde98b5a41e259a2cc4dd674fe7b929a0.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "458430",
+    "fetchedAt": "2026-09-09T23:49:03.327Z"
+  },
+  "star-wars-outlaws": {
+    "name": "Star Wars Outlaws",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/becf15fa5d5710b07737e7dbc61f2b35ed901eea5f210721cd87f63f483b308a.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2842040",
+    "fetchedAt": "2026-09-09T23:49:03.384Z"
+  },
+  "the-last-oricru": {
+    "name": "The Last Oricru - Final Cut",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/470b883cca27f0dae04df44878f17179ebbcd892e65bcd3a767c4c0b68d9fa4d.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "1663640",
+    "fetchedAt": "2026-09-09T23:49:03.460Z"
+  },
+  "postal-brain-damaged": {
+    "name": "POSTAL: Brain Damaged",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/12ffa15e98c8364c3a79bf778205d6aba48ec34d3d0c265eb4ac82602eca914a.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1359980",
+    "fetchedAt": "2026-09-09T23:49:03.733Z"
+  },
+  "gori-cuddly-carnage": {
+    "name": "Gori: Cuddly Carnage",
+    "category": "new",
+    "time": 5,
+    "cover": "covers/8011022e4ec7b1c78d489a829d3db928f53bda6c3c1e49ed775f1d157aaeb2f3.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1299690",
+    "fetchedAt": "2026-09-09T23:49:04.426Z"
+  },
+  "of-ash-and-steel": {
+    "name": "Of Ash and Steel",
+    "category": "new",
+    "time": 13,
+    "cover": "covers/5a2d11694b06b198991bcdaec908821c8845af77e6813d96681e9efb8c9fc223.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2893820",
+    "fetchedAt": "2026-09-09T23:49:04.651Z"
+  },
+  "gothic-1-remake": {
+    "name": "Gothic 1 Remake",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/39a0dab9dc1a6c2ac03e305681a59a24f77fd7815d664771eb7c2b5ff06d5774.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "1297900",
+    "fetchedAt": "2026-09-09T23:49:04.681Z"
+  },
+  "dragon-quest-i-ii-hd-2d-remake": {
+    "name": "DRAGON QUEST III HD-2D Remake",
+    "category": "new",
+    "time": 14,
+    "cover": "covers/1b52eee1dee4f3f9a7d9dbd908d7369ff356bb34eb822279fa71238e557f6a9f.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2701660",
+    "fetchedAt": "2026-09-09T23:49:04.726Z"
+  },
+  "pascals-wager-definitive-edition": {
+    "name": "Pascal's Wager: Definitive Edition",
+    "category": "new",
+    "time": 4,
+    "cover": "covers/4c594b9973c2a8d7dbd125ec629aa8f2e0ae85cdd43ec15963af9f8a8a5277dc.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1456650",
+    "fetchedAt": "2026-09-09T23:49:04.835Z"
+  },
+  "turbo-overkill": {
+    "name": "Turbo Overkill",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/7cf0a89c91e19e414c4933de2ed9acafa3857777f36baf7f1409a95de3823b9b.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1328350",
+    "fetchedAt": "2026-09-09T23:49:04.876Z"
+  },
+  "luna-abyss": {
+    "name": "Luna Abyss",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/a5f14301ca3e667455f6608731b551527a821abaebdb5c2696e5a1542ebe89ca.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "1933000",
+    "fetchedAt": "2026-09-09T23:49:04.986Z"
+  },
+  "like-a-dragon-infinite-wealth": {
+    "name": "Like a Dragon: Infinite Wealth",
+    "category": "new",
+    "time": 51,
+    "cover": "covers/d80b3ffb9ccdcfdac371343732bc61b5f3550c9b6dada4eec22010dac72c1bcb.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2072450",
+    "fetchedAt": "2026-09-09T23:49:05.249Z"
+  },
+  "death-stranding-2": {
+    "name": "DEATH STRANDING 2: ON THE BEACH",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/67e58d180d41a99c1d8916dcae8037c40fb135e35b7e7b59e2a5ce9c1c74d128.img",
+    "source": {
+      "image": "steam-store-header",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "3280350",
+    "fetchedAt": "2026-09-09T23:49:05.326Z"
+  },
+  "whirlight-no-time-to-trip": {
+    "name": "Whirlight - No Time To Trip",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/cbc2298c64b27bb5ddb4574d488f0e5abdff07b9e6996019e0355a4483f01120.img",
+    "source": {
+      "image": "rawg",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "",
+    "fetchedAt": "2026-09-09T23:49:06.657Z"
+  },
+  "the-last-hero-of-nostalgaia": {
+    "name": "The Last Hero of Nostalgaia",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/3ebcaeea5a691a3c72fc55391fc3acecba915bc8f4d00a657fcb851c99e10020.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1766100",
+    "fetchedAt": "2026-09-09T23:49:07.192Z"
+  },
+  "maseylia-echoes-of-the-past": {
+    "name": "Maseylia: Echoes of the past",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/bf165f637f2a0908c32827d30408b82511f5f58039b55e22cfb4f03764d8d9a4.img",
+    "source": {
+      "image": "rawg",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "",
+    "fetchedAt": "2026-09-09T23:49:07.232Z"
+  },
+  "doraemon-story-of-seasons": {
+    "name": "DORAEMON  STORY OF SEASONS",
+    "category": "new",
+    "time": 12,
+    "cover": "covers/87f72f0fa794de4ecdf7d6bbfed97623297344afd625e94a36555023a1a4ff9f.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "965230",
+    "fetchedAt": "2026-09-09T23:49:07.515Z"
+  },
+  "fashion-police-squad": {
+    "name": "Fashion Police Squad",
+    "category": "new",
+    "time": 2,
+    "cover": "covers/f7028837b6e7768352adac82a7878c489124346b652eddefae3d055677aa8240.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1319460",
+    "fetchedAt": "2026-09-09T23:49:07.611Z"
+  },
+  "lumentale-memories-of-trey": {
+    "name": "LumenTale: Memories of Trey",
+    "category": "new",
+    "time": 3,
+    "cover": "covers/f6b9b00cc909b6fbbc785bd6217a88124ac140f762cdd7470f61311633dd3dd0.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "2261430",
+    "fetchedAt": "2026-09-09T23:49:07.619Z"
+  },
+  "xuan-yuan-sword-vii": {
+    "name": "Xuan-Yuan Sword VII",
+    "category": "new",
+    "time": 6,
+    "cover": "covers/0b486d1264ad4b761b5988e560ab6851c2e6f9d08556a0be4df1a9eb626ea39d.img",
+    "source": {
+      "image": "steam",
+      "time": "rawg-playtime"
+    },
+    "steamAppId": "1249800",
+    "fetchedAt": "2026-09-09T23:49:07.625Z"
+  },
+  "grime-ii": {
+    "name": "GRIME II",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/0f56fb7b9e79bf5e1eec2e49bf393809cc3c6358f59c557048a8ff8853224a28.img",
+    "source": {
+      "image": "steam",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "2529790",
+    "fetchedAt": "2026-09-09T23:49:08.359Z"
+  },
+  "the-first-berserker-khazan": {
+    "name": "The First Berserker Khazan",
+    "category": "soulslike",
+    "time": 35,
+    "cover": "covers/63ad7980b6e8df89e19e10983b200b50549d96feb92db3610ee8c42b99b10e50.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "2680010",
+    "fetchedAt": "2026-09-09T23:49:08.669Z"
+  },
+  "007-first-light": {
+    "name": "007 First Light",
+    "category": "adventure",
+    "time": 15,
+    "cover": "covers/bfd3500a92c83d2de7e9c83bebe580882696b8eeeb65e3a67e3ab3742a814070.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "3768760",
+    "fetchedAt": "2026-09-09T23:49:08.715Z"
+  },
+  "dragonquest1n2hd2dremake": {
+    "name": "Dragon Quest I & II HD-2D Remake",
+    "category": "rpg",
+    "time": 75,
+    "cover": "covers/ed3a68645b26429f667177e4a907fac3e09d65cb0fdf0fb277eab818ae087656.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "2893570",
+    "fetchedAt": "2026-09-09T23:49:08.721Z"
+  },
+  "avatarfrontiersofpandora": {
+    "name": "Avatar Frontiers of Pandora",
+    "category": "openworld",
+    "time": 22,
+    "cover": "covers/9bfcb47ea9f8a910e3b02d66e5ace3a0c7324dc4ce3e249e0225bb5367c545eb.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "2840770",
+    "fetchedAt": "2026-09-09T23:49:09.238Z"
+  },
+  "Oceanhorn2": {
+    "name": "Oceanhorn 2: Knights of the Lost Realm",
+    "category": "adventure",
+    "time": 20,
+    "cover": "covers/ec3f55c4001d3b8059212314a170b34686e895555806276b489b7f000c0fc74e.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "1622710",
+    "fetchedAt": "2026-09-09T23:49:09.362Z"
+  },
+  "ofashnsteel": {
+    "name": "Of Ash and Steel",
+    "category": "action",
+    "time": 35,
+    "cover": "covers/5a2d11694b06b198991bcdaec908821c8845af77e6813d96681e9efb8c9fc223.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "2893820",
+    "fetchedAt": "2026-09-09T23:49:09.363Z"
+  },
+  "planet-of-lana-ii": {
+    "name": "Planet of Lana II",
+    "category": "new",
+    "time": 10,
+    "cover": "covers/2796713942cf8028f69df4a42d97f4dba23ed6909fc8b1a1c99ce9fee4317f54.img",
+    "source": {
+      "image": "steam-store-header",
+      "time": "genre-estimate"
+    },
+    "steamAppId": "2997230",
+    "fetchedAt": "2026-09-09T23:49:09.885Z"
+  },
+  "mafiatheoldcountry": {
+    "name": "Mafia The Old Country",
+    "category": "storydriven",
+    "time": 12,
+    "cover": "covers/3b47f319d6033c6b7329d2dcf3ba076a2f228417b8a2fe9812a4e04ebb00dd51.img",
+    "source": {
+      "image": "steam-known",
+      "time": "known-override"
+    },
+    "steamAppId": "1941540",
+    "fetchedAt": "2026-09-09T23:49:14.238Z"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "at": "2026-09-10T08:59:26.2361383Z",
+  "passed": true,
+  "executable": "F:\\study\\repos\\game-library-manager-native\\dist\\GameLibrary.exe",
+  "catalog": 1179,
+  "checks": [
+    {
+      "name": "Packaged WPF window visible with taskbar identity",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2239723Z"
+    },
+    {
+      "name": "Tray icon and useful menu created",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.224003Z"
+    },
+    {
+      "name": "Search filters native list",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.228906Z"
+    },
+    {
+      "name": "Select all operates on filtered items",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2290452Z"
+    },
+    {
+      "name": "Clear selection works",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2291402Z"
+    },
+    {
+      "name": "Empty view is recoverable",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2296984Z"
+    },
+    {
+      "name": "Reset restores results",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2301466Z"
+    },
+    {
+      "name": "Search crosses categories without changing catalog privacy",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2342833Z"
+    },
+    {
+      "name": "Global search never exposes protected categories",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2344676Z"
+    },
+    {
+      "name": "Docker URL is searchable",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2346369Z"
+    },
+    {
+      "name": "Catalog statistics stay constant while filtering",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2346374Z"
+    },
+    {
+      "name": "Installed launcher path is searchable",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2348924Z"
+    },
+    {
+      "name": "Installed view remains limited during global search",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2350705Z"
+    },
+    {
+      "name": "Installed-only control composes with global search",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2354604Z"
+    },
+    {
+      "name": "Without-installed control excludes installed games",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2356365Z"
+    },
+    {
+      "name": "Reset clears installed filters",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2358259Z"
+    },
+    {
+      "name": "Lowest rating sort uses ascending scores with unrated games last",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2396027Z"
+    },
+    {
+      "name": "Theme switches",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.267924Z"
+    },
+    {
+      "name": "Minimize / hide retains tray",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.275302Z"
+    },
+    {
+      "name": "Restore returns window",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.2815651Z"
+    },
+    {
+      "name": "Progress window captures real process output and nonzero exit",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.5712087Z"
+    },
+    {
+      "name": "Failed process completion fires once after stopping without marking installation successful",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.5712094Z"
+    },
+    {
+      "name": "Install marker updates are delivered before the batch process exits",
+      "passed": true,
+      "at": "2026-09-10T08:59:22.9118202Z"
+    },
+    {
+      "name": "Offline native category creation queues shared tabs",
+      "passed": true,
+      "at": "2026-09-10T08:59:25.9983892Z"
+    },
+    {
+      "name": "Offline native rename and visibility controls preserve queued edits",
+      "passed": true,
+      "at": "2026-09-10T08:59:26.1505999Z"
+    },
+    {
+      "name": "Category edits survive a state reload",
+      "passed": true,
+      "at": "2026-09-10T08:59:26.1519197Z"
+    },
+    {
+      "name": "Offline admin actions and refresh never reach the rejecting network fixture",
+      "passed": true,
+      "at": "2026-09-10T08:59:26.1521318Z"
+    },
+    {
+      "name": "Search, combined filter and statistics fit the minimum native window",
+      "passed": true,
+      "at": "2026-09-10T08:59:26.2134332Z"
+    }
+  ]
+}

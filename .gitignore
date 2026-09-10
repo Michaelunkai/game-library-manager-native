@@ -1,0 +1,12 @@
+# Generated/native build output
+/dist/
+/data/
+/native/dist/
+/native/bin/
+/native/obj/
+/native/Assets/catalog.zip
+
+# Local verification output can be regenerated; keep committed small receipts
+/evidence/*.log
+/evidence/test-data-*/
+/evidence/ui-fixture-*/

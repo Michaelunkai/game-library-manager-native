@@ -1,0 +1,127 @@
+{
+  "at": "2026-09-10T08:58:41.8559569Z",
+  "passed": false,
+  "error": "System.InvalidOperationException: Sequence contains more than one matching element\r\n   at System.Linq.ThrowHelper.ThrowMoreThanOneMatchException()\r\n   at System.Linq.Enumerable.TryGetSingle[TSource](IEnumerable\u00601 source, Func\u00602 predicate, Boolean\u0026 found)\r\n   at System.Linq.Enumerable.Single[TSource](IEnumerable\u00601 source, Func\u00602 predicate)\r\n   at GameLibrary.Native.MainWindow.\u003C\u003Ec__DisplayClass133_0.\u003C\u003CRunUiProof\u003Eg__CategoriesDialog|12\u003Ed.MoveNext() in F:\\study\\repos\\game-library-manager-native\\native\\SelfTests.cs:line 635\r\n--- End of stack trace from previous location ---\r\n   at GameLibrary.Native.MainWindow.RunUiProof(String report) in F:\\study\\repos\\game-library-manager-native\\native\\SelfTests.cs:line 642",
+  "checks": [
+    {
+      "name": "Packaged WPF window visible with taskbar identity",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8876035Z"
+    },
+    {
+      "name": "Tray icon and useful menu created",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8876443Z"
+    },
+    {
+      "name": "Search filters native list",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.889517Z"
+    },
+    {
+      "name": "Select all operates on filtered items",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8896893Z"
+    },
+    {
+      "name": "Clear selection works",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8898434Z"
+    },
+    {
+      "name": "Empty view is recoverable",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8905118Z"
+    },
+    {
+      "name": "Reset restores results",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8909862Z"
+    },
+    {
+      "name": "Search crosses categories without changing catalog privacy",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8914624Z"
+    },
+    {
+      "name": "Global search never exposes protected categories",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8916674Z"
+    },
+    {
+      "name": "Docker URL is searchable",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8918286Z"
+    },
+    {
+      "name": "Catalog statistics stay constant while filtering",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8918291Z"
+    },
+    {
+      "name": "Installed launcher path is searchable",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8919245Z"
+    },
+    {
+      "name": "Installed view remains limited during global search",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8920721Z"
+    },
+    {
+      "name": "Installed-only control composes with global search",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8925249Z"
+    },
+    {
+      "name": "Without-installed control excludes installed games",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8927559Z"
+    },
+    {
+      "name": "Reset clears installed filters",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8929723Z"
+    },
+    {
+      "name": "Lowest rating sort uses ascending scores with unrated games last",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.8970155Z"
+    },
+    {
+      "name": "Theme switches",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.9407063Z"
+    },
+    {
+      "name": "Minimize / hide retains tray",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.9518651Z"
+    },
+    {
+      "name": "Restore returns window",
+      "passed": true,
+      "at": "2026-09-10T08:58:37.9627635Z"
+    },
+    {
+      "name": "Progress window captures real process output and nonzero exit",
+      "passed": true,
+      "at": "2026-09-10T08:58:38.2732819Z"
+    },
+    {
+      "name": "Failed process completion fires once after stopping without marking installation successful",
+      "passed": true,
+      "at": "2026-09-10T08:58:38.2732832Z"
+    },
+    {
+      "name": "Install marker updates are delivered before the batch process exits",
+      "passed": true,
+      "at": "2026-09-10T08:58:38.6335461Z"
+    },
+    {
+      "name": "Offline native category creation queues shared tabs",
+      "passed": true,
+      "at": "2026-09-10T08:58:41.7338143Z"
+    }
+  ]
+}

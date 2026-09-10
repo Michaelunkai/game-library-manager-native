@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Game Library Manager - A Docker-based game library manager for downloading and organizing your game collection">
+    <meta name="theme-color" content="#0b1020">
+    <title>Game Library Manager v5.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=5.2">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header" role="banner">
+            <div class="header-left">
+                <a href="https://github.com/Michaelunkai/game-library-manager-web" target="_blank" class="github-link" title="View on GitHub">
+                    <svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                </a>
+                <h1><span class="brand-mark">🎮</span> Game Library</h1>
+                <span class="version">v5.0</span>
+            </div>
+            <div class="header-center">
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Find a game, tag, category, or Docker image..." autocomplete="off" aria-label="Search games">
+                    <span class="search-icon">🔍</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="admin-login" id="adminLoginBox">
+                    <input type="password" id="adminPassword" placeholder="Admin key" autocomplete="off" aria-label="Admin password">
+                </div>
+                <div class="admin-logged" id="adminLoggedBox" style="display: none;">
+                    <span class="admin-badge">👑 Admin</span>
+                    <button id="logoutBtn" class="logout-btn" title="Log out">🚪</button>
+                </div>
+                <div class="stats">
+                    <span id="gameCount">0</span> games
+                    <span class="separator">|</span>
+                    <span id="filteredCount">0</span> shown
+                    <span class="separator">|</span>
+                    <span id="selectedCount">0</span> selected
+                </div>
+                <button id="sortBtn" class="header-btn" title="Sort games" aria-haspopup="menu">
+                    <span>Sort</span>
+                    <span id="sortIndicator">↓ Name</span>
+                </button>
+                <button id="themeBtn" class="header-btn icon-only" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+                <button id="settingsBtn" class="header-btn icon-only" title="Settings" aria-label="Open settings">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Action Bar -->
+        <div class="action-bar" role="toolbar" aria-label="Library actions">
+            <div class="action-bar-left">
+                <label class="path-input-label">
+                    <span>📁 Mount Path:</span>
+                    <input type="text" id="globalMountPath" value="E:/games" placeholder="E:/games" aria-label="Global mount path">
+                </label>
+                <button id="syncDockerBtn" class="action-bar-btn sync-btn" title="Sync with Docker Hub to find new tags">🔄 Sync</button>
+            </div>
+            <div class="action-bar-center">
+                <label class="rating-filter-label" title="Filter games by minimum star rating">
+                    &#9733; Rating:
+                    <select id="ratingFilter" class="action-bar-select">
+                        <option value="0">All</option>
+                        <option value="1">1+ Stars</option>
+                        <option value="2">2+ Stars</option>
+                        <option value="3">3+ Stars</option>
+                        <option value="4">4+ Stars</option>
+                        <option value="5">5 Stars</option>
+                    </select>
+                </label>
+                <button id="showInstalledBtn" class="action-bar-btn">✅ Show Installed</button>
+                <button id="selectAllBtn" class="action-bar-btn">☑️ Select All</button>
+                <button id="deselectAllBtn" class="action-bar-btn">⬜ Deselect All</button>
+                <button id="addImagesBtn" class="action-bar-btn enrich-images" title="Scan all games and fetch missing/wrong cover images from multiple databases">🖼️ Add Images</button>
+                <button id="addTimesBtn" class="action-bar-btn enrich-times" title="Fetch How Long To Beat data for all games from online databases">⏱️ Add Times</button>
+                <div class="run-dropdown-container">
+                    <button id="runSelectedBtn" class="action-bar-btn primary" disabled>▶️ Run Selected (0)</button>
+                    <button id="runFormatBtn" class="action-bar-btn primary format-toggle" disabled title="Choose script format">▼</button>
+                    <div id="runFormatMenu" class="dropdown-menu format-menu" style="display: none;">
+                        <button class="format-option" data-format="ps1">📘 Download .PS1 (PowerShell)</button>
+                        <button class="format-option" data-format="bat">📗 Download .BAT (Batch)</button>
+                    </div>
+                </div>
+                <div class="move-to-container">
+                    <button id="moveToBtn" class="action-bar-btn" disabled>📁 Move To</button>
+                    <div id="moveToMenu" class="dropdown-menu move-to-menu" style="display: none;">
+                        <!-- Tabs will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            <div class="action-bar-right">
+                <div class="kill-dropdown-container">
+                    <button id="killContainersBtn" class="action-bar-btn danger" title="Kill all Docker containers">🛑 Kill All</button>
+                    <button id="killFormatBtn" class="action-bar-btn danger format-toggle" title="Choose script format">▼</button>
+                    <div id="killFormatMenu" class="dropdown-menu format-menu" style="display: none;">
+                        <button class="format-option" data-format="ps1">📘 Download .PS1 (PowerShell)</button>
+                        <button class="format-option" data-format="bat">📗 Download .BAT (Batch)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tag Filter Bar -->
+        <div id="tagFilterBar" class="tag-filter-bar">
+            <!-- Tag chips populated by JS -->
+        </div>
+        <div id="installedScanStatus" class="installed-scan-status starting" role="status" aria-live="polite">
+            🔄 Installed scanner starting...
+        </div>
+
+        <!-- Stats Dashboard -->
+        <div class="stats-dashboard" id="statsDashboard">
+            <div class="stats-card">
+                <span class="stats-icon">&#127918;</span>
+                <div class="stats-info">
+                    <span class="stats-value" id="statsTotalGames">0</span>
+                    <span class="stats-label">Total Games</span>
+                </div>
+            </div>
+            <div class="stats-card">
+                <span class="stats-icon">&#9989;</span>
+                <div class="stats-info">
+                    <span class="stats-value" id="statsInstalled">0 <span class="stats-pct" id="statsInstalledPct">(0%)</span></span>
+                    <span class="stats-label">Installed</span>
+                </div>
+            </div>
+            <div class="stats-card">
+                <span class="stats-icon">&#9201;</span>
+                <div class="stats-info">
+                    <span class="stats-value" id="statsAvgTime">&#8212;</span>
+                    <span class="stats-label">Avg Time-to-Beat</span>
+                </div>
+            </div>
+            <div class="stats-card">
+                <span class="stats-icon">&#128444;</span>
+                <div class="stats-info">
+                    <span class="stats-value" id="statsWithImages">0</span>
+                    <span class="stats-label">Games with Covers</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-container">
+            <!-- Tabs Sidebar -->
+            <aside class="sidebar" aria-label="Game categories">
+                <div class="tabs-header">
+                    <h3>Categories</h3>
+                    <span id="tabCount" class="tab-count">29 tabs</span>
+                </div>
+                <section id="adminCategoryPanel" class="admin-category-panel admin-only" aria-label="Admin category manager">
+                    <div class="admin-category-panel__header">
+                        <span>Category Control</span>
+                        <small>Permanent admin tools</small>
+                    </div>
+                    <div class="admin-category-create">
+                        <input type="text" id="newCategoryName" placeholder="New category name" autocomplete="off" aria-label="New category name">
+                        <button type="button" id="createCategoryBtn" class="admin-category-btn primary">Create</button>
+                    </div>
+                    <p class="admin-category-hint">Rename, hide, delete, or move selected games. Saves immediately to the live site config.</p>
+                </section>
+                <nav id="tabsContainer" class="tabs-nav">
+                    <!-- Tabs will be populated by JavaScript -->
+                </nav>
+            </aside>
+
+            <!-- Games Grid -->
+            <main class="content" aria-label="Games">
+                <div id="gamesGrid" class="games-grid">
+                    <!-- Games will be populated by JavaScript -->
+                </div>
+                <div id="loadingIndicator" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading the full Docker library...</p>
+                </div>
+                <div id="noResults" class="no-results" style="display: none;">
+                    <p>No games matched this view.</p>
+                    <small>Try clearing search, rating, tag, installed, or category filters.</small>
+                </div>
+            </main>
+        </div>
+
+        <!-- Game Details Modal -->
+        <div id="gameModal" class="modal">
+            <div class="modal-content">
+                <button class="modal-close" id="modalClose">&times;</button>
+                <div class="modal-body">
+                    <div class="modal-image">
+                        <img id="modalImage" src="" alt="Game cover">
+                    </div>
+                    <div class="modal-info">
+                        <h2 id="modalTitle">Game Title</h2>
+                        <div class="modal-meta">
+                            <span class="meta-item">
+                                <span class="meta-label">Category:</span>
+                                <span id="modalCategory" class="meta-value category-badge">Action</span>
+                            </span>
+                            <span class="meta-item">
+                                <span class="meta-label">HLTB Time:</span>
+                                <span id="modalTime" class="meta-value">~10 hours</span>
+                            </span>
+                            <span class="meta-item">
+                                <span class="meta-label">Docker Image Size:</span>
+                                <span id="modalSize" class="meta-value">0.0 GB</span>
+                            </span>
+                        </div>
+                        <p id="modalDescription" class="modal-description">Game details...</p>
+                        <div class="docker-section">
+                            <h3>🐳 Docker Command</h3>
+                            <div class="command-box">
+                                <code id="dockerCommand">docker run...</code>
+                                <button id="copyCommand" class="copy-btn" title="Copy to clipboard">📋</button>
+                            </div>
+                            <div class="action-buttons">
+                                <div class="modal-run-dropdown">
+                                    <button id="runDockerBtn" class="action-btn primary">
+                                        <span class="btn-icon">▶️</span>
+                                        <span>Download .PS1</span>
+                                    </button>
+                                    <button id="runDockerBatBtn" class="action-btn primary">
+                                        <span class="btn-icon">📦</span>
+                                        <span>Download .BAT</span>
+                                    </button>
+                                </div>
+                                <button id="copyScriptBtn" class="action-btn secondary">
+                                    <span class="btn-icon">📄</span>
+                                    <span>Copy Script</span>
+                                </button>
+                            </div>
+                            <div class="terminal-info">
+                                <p id="osInfo">Detected OS: <span id="detectedOS">Windows</span></p>
+                                <p class="terminal-hint">Download .PS1 (PowerShell) or .BAT (Batch) script. Double-click to run!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal">
+            <div class="modal-content settings-modal">
+                <button class="modal-close" id="settingsClose">&times;</button>
+                <h2>⚙️ Settings</h2>
+                <div class="settings-body">
+                    <div class="setting-group">
+                        <h3>Display</h3>
+                        <label class="setting-item">
+                            <span>Grid Size</span>
+                            <select id="gridSize">
+                                <option value="small">Small</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="large">Large</option>
+                            </select>
+                        </label>
+                        <label class="setting-item">
+                            <span>Show HLTB Times</span>
+                            <input type="checkbox" id="showTimes" checked>
+                        </label>
+                        <label class="setting-item">
+                            <span>Show Categories</span>
+                            <input type="checkbox" id="showCategories" checked>
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <h3>Docker Settings</h3>
+                        <label class="setting-item">
+                            <span>Docker Hub Username</span>
+                            <input type="text" id="dockerUsername" value="michadockermisha" placeholder="Docker Hub username">
+                        </label>
+                        <label class="setting-item">
+                            <span>Repository Name</span>
+                            <input type="text" id="repoName" value="backup" placeholder="Repository name">
+                        </label>
+                        <label class="setting-item">
+                            <span>Default Mount Path</span>
+                            <input type="text" id="mountPath" value="E:/games" placeholder="E:/games">
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <h3>Export/Import</h3>
+                        <div class="setting-actions">
+                            <button id="exportData" class="setting-btn">📤 Export Data</button>
+                            <button id="importData" class="setting-btn">📥 Import Data</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Move Category Modal -->
+        <div id="moveCategoryModal" class="modal" aria-hidden="true">
+            <div class="modal-content move-category-modal" role="dialog" aria-modal="true" aria-labelledby="moveCategoryTitle">
+                <button type="button" class="modal-close" id="moveCategoryClose" aria-label="Close category mover">&times;</button>
+                <div class="move-category-hero">
+                    <span class="move-category-eyebrow">Admin category move</span>
+                    <h2 id="moveCategoryTitle">Move games permanently</h2>
+                    <p id="moveCategorySubtitle">Choose the destination category. The change saves to the live website immediately.</p>
+                </div>
+                <div class="move-category-summary" id="moveCategorySummary">No games selected yet.</div>
+                <div class="move-category-search">
+                    <input type="text" id="moveCategorySearch" placeholder="Search categories..." autocomplete="off" aria-label="Search move categories">
+                </div>
+                <div id="moveCategoryGrid" class="move-category-grid" role="listbox" aria-label="Destination categories"></div>
+            </div>
+        </div>
+
+        <!-- Sort Menu -->
+        <div id="sortMenu" class="dropdown-menu" style="display: none;" role="menu" aria-label="Sort games">
+            <button data-sort="name" data-order="asc" class="sort-option active">↓ Name (A-Z)</button>
+            <button data-sort="name" data-order="desc" class="sort-option">↑ Name (Z-A)</button>
+            <button data-sort="time" data-order="asc" class="sort-option">⏱️ Time to Beat (Low-High)</button>
+            <button data-sort="time" data-order="desc" class="sort-option">⏱️ Time to Beat (High-Low)</button>
+            <button data-sort="date" data-order="desc" class="sort-option">🆕 Recently Added</button>
+            <button data-sort="date" data-order="asc" class="sort-option">📅 Oldest First</button>
+            <button data-sort="rating" data-order="desc" class="sort-option">⭐ Rating (High-Low)</button>
+            <button data-sort="rating" data-order="asc" class="sort-option">⭐ Rating (Low-High)</button>
+            <button data-sort="size" data-order="asc" class="sort-option">↓ Size (Small-Large)</button>
+            <button data-sort="size" data-order="desc" class="sort-option">↑ Size (Large-Small)</button>
+            <button data-sort="category" data-order="asc" class="sort-option">↓ Category</button>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+
+        <!-- Scroll to Top Button -->
+        <button id="scrollTopBtn" class="scroll-top-btn" title="Scroll to top" aria-label="Scroll to top">
+            ↑
+        </button>
+
+        <!-- Mobile Sidebar Toggle -->
+        <button id="sidebarToggle" class="sidebar-toggle" title="Toggle categories" aria-label="Toggle categories sidebar">
+            ☰
+        </button>
+
+        <!-- Sidebar Overlay (for mobile) -->
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+        <!-- Keyboard Shortcuts Hint -->
+        <div id="keyboardHints" class="keyboard-hints">
+            <span><kbd>Ctrl</kbd><kbd>K</kbd> Search</span>
+            <span><kbd>Esc</kbd> Close</span>
+            <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+        </div>
+    </div>
+
+    <script src="app.js?v=5.3"></script>
+</body>
+</html>

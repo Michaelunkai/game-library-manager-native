@@ -1,0 +1,24 @@
+{
+  "verifiedAtUtc": "2026-09-10T09:11:47.8531747Z",
+  "projectPath": "F:\\study\\repos\\game-library-manager-native",
+  "executable": "F:\\study\\repos\\game-library-manager-native\\dist\\GameLibrary.exe",
+  "sha256": "E605C2C92B5E38A8C222A59B1FBD7CBFF71C62B17C88BC9DDBD3CA09587E8516",
+  "sizeBytes": 468333647,
+  "catalog": {
+    "liveGameCount": 1260,
+    "curatedRecords": 1179,
+    "bundledCatalogFiles": 2343
+  },
+  "checks": {
+    "diagnostic": { "passed": true, "count": 63 },
+    "ui": { "passed": true, "count": 28 },
+    "window": {
+      "title": "Game Library",
+      "secondary": true,
+      "monitorFlags": 0,
+      "monitorBounds": [2560, 0, 5120, 1440]
+    },
+    "state": { "pending": 0, "installedRecords": 2 }
+  },
+  "sourceHandling": "copied-not-moved; the prior live bundle was preserved while this project was organized"
+}

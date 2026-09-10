@@ -1,0 +1,137 @@
+{
+  "at": "2026-09-10T08:53:19.8302746Z",
+  "passed": false,
+  "error": "System.InvalidOperationException: UI proof failed: Install marker updates are delivered before the batch process exits\r\n   at GameLibrary.Native.MainWindow.\u003C\u003Ec__DisplayClass151_0.\u003CRunUiProof\u003Eg__Check|0(String name, Boolean passed) in F:\\backup\\glm-native-recovery-20260909\\native\\SelfTests.cs:line 997\r\n   at GameLibrary.Native.MainWindow.RunUiProof(String report) in F:\\backup\\glm-native-recovery-20260909\\native\\SelfTests.cs:line 1066",
+  "checks": [
+    {
+      "name": "Packaged WPF window visible with taskbar identity",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3829322Z"
+    },
+    {
+      "name": "Native exit command and adjustable sidebar are present",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3830203Z"
+    },
+    {
+      "name": "Tray icon and useful menu created",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.383024Z"
+    },
+    {
+      "name": "Search filters native list",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3846125Z"
+    },
+    {
+      "name": "Select all operates on filtered items",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3847945Z"
+    },
+    {
+      "name": "Clear selection works",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3849064Z"
+    },
+    {
+      "name": "Empty view is recoverable",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3854689Z"
+    },
+    {
+      "name": "Reset restores results",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3858909Z"
+    },
+    {
+      "name": "Search crosses categories without changing catalog privacy",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.386097Z"
+    },
+    {
+      "name": "Global search never exposes protected categories",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3862292Z"
+    },
+    {
+      "name": "Docker URL is searchable",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3863318Z"
+    },
+    {
+      "name": "Catalog statistics stay constant while filtering",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3863321Z"
+    },
+    {
+      "name": "Installed launcher path is searchable",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3864006Z"
+    },
+    {
+      "name": "Installed view remains limited during global search",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3866749Z"
+    },
+    {
+      "name": "Installed-only control composes with global search",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3870798Z"
+    },
+    {
+      "name": "Without-installed control excludes installed games",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3872457Z"
+    },
+    {
+      "name": "Reset clears installed filters",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3874107Z"
+    },
+    {
+      "name": "Lowest rating sort uses ascending scores with unrated games last",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3905432Z"
+    },
+    {
+      "name": "Installed view defaults to most recently played",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3940292Z"
+    },
+    {
+      "name": "All view hides protected games and their specific tags",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.3946341Z"
+    },
+    {
+      "name": "Theme switches",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.4320887Z"
+    },
+    {
+      "name": "Minimize / hide retains tray",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.4389245Z"
+    },
+    {
+      "name": "Restore returns window",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.4449621Z"
+    },
+    {
+      "name": "Progress window captures real process output and nonzero exit",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.7231909Z"
+    },
+    {
+      "name": "Failed process completion fires once after stopping without marking installation successful",
+      "passed": true,
+      "at": "2026-09-10T08:53:09.7231919Z"
+    },
+    {
+      "name": "Install marker updates are delivered before the batch process exits",
+      "passed": false,
+      "at": "2026-09-10T08:53:19.8302188Z"
+    }
+  ]
+}

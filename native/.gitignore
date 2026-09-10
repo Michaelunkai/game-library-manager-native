@@ -1,0 +1,6 @@
+bin/
+obj/
+dist/
+Assets/catalog.zip
+evidence/
+backend/node_modules/

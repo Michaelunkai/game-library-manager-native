@@ -1,0 +1,11 @@
+{
+  "name": "Game Library Manager",
+  "short_name": "Game Library",
+  "description": "Docker-based game library manager for downloading and organizing a game collection.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "icons": []
+}

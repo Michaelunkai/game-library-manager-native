@@ -1,0 +1,118 @@
+﻿[
+    {
+        "id":  "all",
+        "name":  "All"
+    },
+    {
+        "id":  "finished",
+        "name":  "Finished"
+    },
+    {
+        "id":  "mybackup",
+        "name":  "MyBackup"
+    },
+    {
+        "id":  "not_for_me",
+        "name":  "meh"
+    },
+    {
+        "id":  "soulslike",
+        "name":  "SoulsLike"
+    },
+    {
+        "id":  "localcoop",
+        "name":  "LocalCoop"
+    },
+    {
+        "id":  "oporationsystems",
+        "name":  "OporationSystems"
+    },
+    {
+        "id":  "music",
+        "name":  "music"
+    },
+    {
+        "id":  "simulators",
+        "name":  "simulators"
+    },
+    {
+        "id":  "tvshows",
+        "name":  "repeat"
+    },
+    {
+        "id":  "bulkgames",
+        "name":  "BulkGames"
+    },
+    {
+        "id":  "nintendo/switch",
+        "name":  "Nintendo/Switch"
+    },
+    {
+        "id":  "shooters",
+        "name":  "shooters"
+    },
+    {
+        "id":  "openworld",
+        "name":  "OpenWorld"
+    },
+    {
+        "id":  "hacknslash",
+        "name":  "HackNslash"
+    },
+    {
+        "id":  "chill",
+        "name":  "Chill"
+    },
+    {
+        "id":  "storydriven",
+        "name":  "StoryDriven"
+    },
+    {
+        "id":  "platformers",
+        "name":  "platformers"
+    },
+    {
+        "id":  "rpg",
+        "name":  "RPG"
+    },
+    {
+        "id":  "adventure",
+        "name":  "Adventure"
+    },
+    {
+        "id":  "racing",
+        "name":  "Racing"
+    },
+    {
+        "id":  "puzzle",
+        "name":  "Puzzle"
+    },
+    {
+        "id":  "strategy",
+        "name":  "Strategy"
+    },
+    {
+        "id":  "sports",
+        "name":  "Sports"
+    },
+    {
+        "id":  "action",
+        "name":  "Action"
+    },
+    {
+        "id":  "fighting",
+        "name":  "Fighting"
+    },
+    {
+        "id":  "win11maintaince",
+        "name":  "Win11Maintaince"
+    },
+    {
+        "id":  "3th_party_tools",
+        "name":  "3th party tools"
+    },
+    {
+        "id":  "gamedownloaders",
+        "name":  "GameDownloaders"
+    }
+]

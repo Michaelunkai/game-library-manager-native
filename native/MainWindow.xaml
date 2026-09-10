@@ -1,0 +1,64 @@
+<Window x:Class="GameLibrary.Native.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:GameLibrary.Native" Title="Game Library" Width="1440" Height="900" MinWidth="1100" MinHeight="660" WindowStartupLocation="CenterScreen" Icon="Assets/GameLibrary.ico" AutomationProperties.AutomationId="GameLibraryWindow">
+  <Window.Resources><local:CoverConverter x:Key="CoverConverter"/></Window.Resources>
+  <Grid Background="{DynamicResource CanvasBrush}">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="228"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Grid.Column="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,1,0">
+      <DockPanel Margin="18,24,18,18">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,24"><TextBlock Text="◈  GAME LIBRARY" FontWeight="Bold" FontSize="19"/><TextBlock Text="Your collection, at home." Foreground="{DynamicResource MutedBrush}" Margin="0,8,0,0"/></StackPanel>
+        <StackPanel DockPanel.Dock="Bottom">
+          <TextBlock x:Name="AccountLabel" Text="Personal library" Foreground="{DynamicResource MutedBrush}" Margin="0,12,0,12"/>
+          <Button Content="Manage categories" Click="ManageCategories" AutomationProperties.AutomationId="ManageCategories" Margin="0,0,0,8"/>
+          <Button Content="Refresh covers &amp; times" Click="RefreshMetadataMenu" AutomationProperties.AutomationId="RefreshMetadata" Margin="0,0,0,8"/>
+          <Button x:Name="AdminButton" Content="Admin sign in" Click="AdminSignIn" AutomationProperties.AutomationId="AdminSignIn" Margin="0,0,0,8"/>
+          <Button Content="Settings &amp; backups" Click="OpenSettings" AutomationProperties.AutomationId="OpenSettings" Margin="0,0,0,0"/>
+        </StackPanel>
+        <ListBox x:Name="CategoryList" SelectionChanged="CategoryChanged" AutomationProperties.AutomationId="Categories"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" Padding="12,10"/></DataTemplate></ListBox.ItemTemplate></ListBox>
+      </DockPanel>
+    </Border>
+    <Grid Grid.Column="1" Margin="28,24,28,16">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <DockPanel Margin="0,0,0,20">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="↻  Refresh catalog" Click="RefreshCatalog" AutomationProperties.AutomationId="RefreshCatalog"/><Button Content="☀ / ☾" Click="ToggleTheme" ToolTip="Toggle light or dark theme" AutomationProperties.AutomationId="ToggleTheme" Margin="0"/></StackPanel>
+        <StackPanel><TextBlock x:Name="PageTitle" Text="All games" FontSize="30" FontWeight="SemiBold"/><TextBlock x:Name="CatalogCaption" Text="Loading your collection…" Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,0"/></StackPanel>
+      </DockPanel>
+      <Border Grid.Row="1" Background="{DynamicResource PanelBrush}" CornerRadius="10" Padding="20,15" Margin="0,0,0,18">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+          <StackPanel><TextBlock Text="IN THIS VIEW" FontSize="10" Foreground="{DynamicResource MutedBrush}"/><TextBlock x:Name="VisibleCount" Text="—" FontSize="24" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
+          <StackPanel Grid.Column="1"><TextBlock Text="YOUR WISHLIST" FontSize="10" Foreground="{DynamicResource MutedBrush}"/><TextBlock x:Name="WishlistCount" Text="—" FontSize="24" FontWeight="SemiBold" Margin="0,3,0,0"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="INSTALLED" FontSize="10" Foreground="{DynamicResource MutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock x:Name="InstalledCount" Text="—" FontSize="24" FontWeight="SemiBold" Margin="0,3,0,0"/><TextBlock x:Name="InstalledPercent" Text="" FontSize="12" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Bottom" Margin="7,0,0,4" AutomationProperties.AutomationId="InstalledPercent"/></StackPanel></StackPanel>
+          <StackPanel Grid.Column="3"><TextBlock Text="SELECTED SIZE" FontSize="10" Foreground="{DynamicResource MutedBrush}"/><TextBlock x:Name="SelectedSize" Text="0 GB" FontSize="24" FontWeight="SemiBold" Margin="0,3,0,0" Foreground="{DynamicResource AccentBrush}"/></StackPanel>
+          <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,12,0,0"><TextBlock Text="AVG. KNOWN TIME" FontSize="10" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock x:Name="AverageTime" Text="—" FontSize="14" AutomationProperties.AutomationId="AverageTime"/></StackPanel>
+          <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,12,0,0"><TextBlock Text="CACHED COVERS" FontSize="10" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock x:Name="CoverCount" Text="—" FontSize="14" AutomationProperties.AutomationId="CoverCount"/></StackPanel>
+        </Grid>
+      </Border>
+      <Grid Grid.Row="2" Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="175"/><ColumnDefinition Width="145"/><ColumnDefinition Width="135"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid Margin="0,0,10,0"><TextBox x:Name="SearchBox" TextChanged="SearchChanged" AutomationProperties.AutomationId="SearchBox" ToolTip="Search across categories by name, Docker tag, category, image, URL, or installed path (Ctrl+K). The Installed view stays limited to installed games."/><TextBlock Text="Search your games…  Ctrl+K" Margin="12,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid>
+        <ComboBox x:Name="SortBox" Grid.Column="1" SelectionChanged="FilterChanged" AutomationProperties.AutomationId="SortBox" Margin="0,0,10,0" ToolTip="Sort games"/>
+        <ComboBox x:Name="TagBox" Grid.Column="2" SelectionChanged="FilterChanged" AutomationProperties.AutomationId="TagFilter" Margin="0,0,10,0" ToolTip="Filter by tag"/>
+        <ComboBox x:Name="RatingBox" Grid.Column="3" SelectionChanged="FilterChanged" AutomationProperties.AutomationId="RatingFilter" ToolTip="Minimum rating"/>
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,10,0,0">
+          <CheckBox x:Name="InstalledOnlyFilter" Content="Installed only" Checked="InstalledFilterChanged" Unchecked="InstalledFilterChanged" AutomationProperties.AutomationId="InstalledOnlyFilter" Margin="0,0,18,0" ToolTip="Show only games installed on this PC, combined with the current category, search, tag, and minimum rating."/>
+          <CheckBox x:Name="WithoutInstalledFilter" Content="Without installed" Checked="InstalledFilterChanged" Unchecked="InstalledFilterChanged" AutomationProperties.AutomationId="WithoutInstalledFilter" ToolTip="Show only games that are not installed on this PC."/>
+        </StackPanel>
+      </Grid>
+      <DockPanel Grid.Row="3" Margin="0,0,0,14">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Install selected" Style="{StaticResource PrimaryButton}" Click="InstallSelected" AutomationProperties.AutomationId="InstallSelected"/><Button Content="Export script ▾" Click="ExportScriptMenu" AutomationProperties.AutomationId="ExportScript" Margin="0"/></StackPanel>
+        <StackPanel Orientation="Horizontal"><Button Content="Select all" Click="SelectAll" AutomationProperties.AutomationId="SelectAll"/><Button Content="Clear" Click="DeselectAll" AutomationProperties.AutomationId="DeselectAll"/><Button Content="Move to…" Click="MoveSelected" AutomationProperties.AutomationId="MoveSelected"/><Button Content="Scan folder" Click="ScanFolder" AutomationProperties.AutomationId="ScanFolder"/></StackPanel>
+      </DockPanel>
+      <Grid Grid.Row="4">
+        <ListBox x:Name="GameList" AutomationProperties.AutomationId="GameList" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True" MouseDoubleClick="GameDoubleClick" SelectionChanged="GameSelectionChanged">
+          <ListBox.ItemTemplate><DataTemplate>
+            <Grid Margin="14,10"><Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/></Grid.ColumnDefinitions>
+              <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}" VerticalAlignment="Center" Checked="SelectionChecked" Unchecked="SelectionChecked" AutomationProperties.Name="{Binding Name}"/>
+              <Border Grid.Column="1" Width="{Binding CoverWidth}" Height="{Binding CoverHeight}" Background="#304A42" CornerRadius="6" ClipToBounds="True"><Grid><TextBlock Text="{Binding Initial}" Foreground="#CBF6DA" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Cover, Converter={StaticResource CoverConverter}}" Stretch="UniformToFill"/></Grid></Border>
+              <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0"><TextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Meta}" Foreground="{DynamicResource MutedBrush}" Margin="0,8,0,0" FontSize="12"/><TextBlock Text="{Binding PlayedMeta}" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0" FontSize="12"/><TextBlock Text="{Binding Id}" Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding TagsLabel}" Foreground="{DynamicResource AccentBrush}" FontSize="11" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/></StackPanel>
+              <StackPanel Grid.Column="3" VerticalAlignment="Center"><TextBlock Text="{Binding RatingLabel}" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" FontSize="18"/><Button Content="▶  Play" Style="{StaticResource PrimaryButton}" Click="PlayFromCard" Tag="{Binding}" AutomationProperties.AutomationId="PlayGame" Padding="8,6" Margin="0,8,0,0"/><Button Content="✦  Play with Wand" Click="PlayWithWandFromCard" Tag="{Binding}" AutomationProperties.AutomationId="PlayWithWand" Padding="8,6" Margin="0,6,0,0"/><Button Content="{Binding WishlistLabel}" Click="ToggleWishlist" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/><Button Content="Details  →" Click="OpenGameDetails" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/></StackPanel>
+            </Grid>
+          </DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel x:Name="EmptyState" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="No games in this view" FontSize="24" HorizontalAlignment="Center"/><TextBlock Text="Try another search, category, tag, or rating." Foreground="{DynamicResource MutedBrush}" Margin="0,10,0,18"/><Button Content="Reset filters" Click="ResetFilters" AutomationProperties.AutomationId="ResetFilters"/></StackPanel>
+      </Grid>
+      <DockPanel Grid.Row="5" Margin="0,12,0,0"><Button Content="Sync details" Click="ShowSync" DockPanel.Dock="Right" Padding="10,5" Margin="8,0,0,0" AutomationProperties.AutomationId="SyncDetails"/><StackPanel><TextBlock x:Name="StatusText" Text="Starting…" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" ToolTip="Shared categories and tabs synchronize with the website. Personal preferences are stored on this PC."/><TextBlock x:Name="ArtworkStatus" Foreground="{DynamicResource MutedBrush}" FontSize="11" Visibility="Collapsed" TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="ArtworkStatus"/></StackPanel></DockPanel>
+    </Grid>
+  </Grid>
+</Window>
