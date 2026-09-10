@@ -68,6 +68,8 @@ public partial class MainWindow : Window
     private readonly bool secondMonitor;
     private readonly OfflineNetworkGuard? offlineNetwork;
     private bool startupPlacementQueued;
+    private bool startupPlacementDone;
+    private DateTime startupPlacementGraceUntilUtc;
     private string tab = "all";
     private string? adminToken;
     private readonly List<JobWindow> jobs = new();
@@ -93,7 +95,12 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         ContentRendered += (_, _) => QueueSecondaryPlacement();
         Closing += OnClosing;
-        StateChanged += (_, _) => ObserveUiAction("Window state change", () => { if (ready && WindowState == WindowState.Minimized && State.Settings.MinimizeToTray) HideToTray(); });
+        StateChanged += (_, _) => ObserveUiAction("Window state change", () =>
+        {
+            if (!ready || WindowState != WindowState.Minimized || !State.Settings.MinimizeToTray) return;
+            if (!startupPlacementDone || DateTime.UtcNow < startupPlacementGraceUntilUtc) { QueueSecondaryPlacement(force: true); return; }
+            HideToTray();
+        });
         PreviewKeyDown += Keyboard;
         poll.Tick += (_, _) => ObserveUiOperation("Catalog poll", () => Refresh(DateTime.UtcNow - lastCatalogRefresh >= TimeSpan.FromSeconds(15)));
         playtime.Tick += (_, _) => ObserveUiAction("Play-time update", UpdatePlaySessions);
@@ -121,7 +128,7 @@ public partial class MainWindow : Window
             RatingBox.ItemsSource = new[] { "Any rating", "1+ stars", "2+ stars", "3+ stars", "4+ stars", "5 stars" }; RatingBox.SelectedIndex = 0;
             lifetime.Token.ThrowIfCancellationRequested();
             InitializeTray(); ApplyTheme(); ready = true; Reload();
-            QueueSecondaryPlacement();
+            QueueSecondaryPlacement(force: true);
             // A fast automation client or a user can type while the bundled
             // catalog is still loading. Reapply that text after readiness so
             // the first search is never dropped by the ready guard.
@@ -131,25 +138,26 @@ public partial class MainWindow : Window
             Store.Log("Window ready; catalog=" + Games.Count);
             if (Program.TestReport != null) { if (!offline) await Refresh(true); await RunUiProof(Program.TestReport); return; }
             if (!offline) { poll.Start(); await Refresh(true); }
-            QueueSecondaryPlacement();
+            QueueSecondaryPlacement(force: true);
         }
         catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Error(ex); }
     }
-    private void PlaceOnSecondaryMonitor()
+    private bool PlaceOnSecondaryMonitor()
     {
         var screen = Forms.Screen.AllScreens.Where(candidate => !candidate.Primary).OrderBy(candidate => candidate.Bounds.Left).FirstOrDefault();
-        if (screen == null) return;
+        if (screen == null) return false;
         WindowStartupLocation = WindowStartupLocation.Manual;
         var area = screen.WorkingArea;
         var width = Math.Min(Width, (double)area.Width);
         var height = Math.Min(Height, (double)area.Height);
         Left = area.Left + Math.Max(0, (area.Width - width) / 2);
         Top = area.Top + Math.Max(0, (area.Height - height) / 2);
+        return true;
     }
-    private void QueueSecondaryPlacement()
+    private void QueueSecondaryPlacement(bool force = false)
     {
-        if (!secondMonitor || closing || startupPlacementQueued || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        if (!secondMonitor || closing || (!force && startupPlacementQueued) || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
         startupPlacementQueued = true;
         try
         {
@@ -159,8 +167,13 @@ public partial class MainWindow : Window
                 if (closing) return;
                 WindowStartupLocation = WindowStartupLocation.Manual;
                 WindowState = WindowState.Normal;
-                PlaceOnSecondaryMonitor();
+                var placed = PlaceOnSecondaryMonitor();
                 if (!IsVisible) Show();
+                if (ready && placed)
+                {
+                    startupPlacementDone = true;
+                    startupPlacementGraceUntilUtc = DateTime.UtcNow.AddSeconds(20);
+                }
             }));
         }
         catch (InvalidOperationException) { startupPlacementQueued = false; }

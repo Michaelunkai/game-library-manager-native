@@ -35,7 +35,7 @@ checks with zero failures, and the fresh external WPF UI proof records 31
 passing checks. The final source executable was copied into
 `dist\GameLibrary.exe` and retains its SHA-256 identity:
 
-`85DA28CA15C0CF6C5850153FE391B0AEC79CB71D72582CA86575F24AC43E2111`
+`D6050254383E927CEB251F1237786151611C08C5478262AD5096ACACF07A06E9`
 
 The final executable is 460,116,840 bytes and embeds the complete 2,343-file
 catalog payload. The live verification located its window on the non-primary
