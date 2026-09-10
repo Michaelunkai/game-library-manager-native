@@ -17,9 +17,21 @@ public sealed class LibraryStore
     public string Cache => Path.Combine(Root, "cache");
     public string StatePath => Path.Combine(Root, "state.json");
     public string? RecoveryNotice { get; private set; }
+    internal static string ResolveDefaultRoot(string baseDirectory)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(baseDirectory));
+        // The verified distribution keeps its writable profile one level above
+        // dist\, alongside the source catalog and evidence. This makes a
+        // double-click launch use the same F: profile as the documented route
+        // instead of silently creating a second profile under C:.
+        if (string.Equals(directory.Name, "dist", StringComparison.OrdinalIgnoreCase) && directory.Parent != null)
+            directory = directory.Parent;
+        return Path.Combine(directory.FullName, "data");
+    }
+    public static string DefaultRoot => ResolveDefaultRoot(AppContext.BaseDirectory);
     public LibraryStore(string? root = null)
     {
-        Root = root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameLibraryManager");
+        Root = root == null ? DefaultRoot : Path.GetFullPath(root);
         using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("GameLibrary.Native.Assets.catalog.sha256");
         var revision = resource == null ? "v1" : new StreamReader(resource).ReadToEnd().Trim()[..16];
         Assets = Path.Combine(Root, "assets-" + revision);

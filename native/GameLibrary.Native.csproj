@@ -14,7 +14,10 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <StartupObject>GameLibrary.Native.Program</StartupObject>
     <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Keep WPF native runtime files beside the EXE. Self-extracting them at
+         launch writes to the user's TEMP (C:) before managed code can choose
+         the F:-resident profile. -->
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
   <ItemGroup>

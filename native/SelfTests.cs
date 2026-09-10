@@ -30,6 +30,13 @@ public static class SelfTests
         void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
         void Reject(Action action) { try { action(); } catch (Exception ex) when (ex is ArgumentException or FormatException) { return; } throw new Exception("Invalid input was accepted."); }
         var store = new LibraryStore(root); var state = new UserState();
+        Check("Default profile resolves beside the distribution on the bundle drive", () =>
+        {
+            var expected = Path.Combine(root, "data");
+            var resolved = LibraryStore.ResolveDefaultRoot(Path.Combine(root, "dist"));
+            Require(string.Equals(resolved, expected, StringComparison.OrdinalIgnoreCase), "The default profile did not resolve beside dist.");
+            Require(!resolved.StartsWith(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameLibraryManager"), StringComparison.OrdinalIgnoreCase), "The default profile still targets LocalApplicationData.");
+        });
         Check("Windowless diagnostic failures return a report without escaping", () =>
         {
             string diagnosticReport = Path.Combine(root, "diagnostic-failure.json");

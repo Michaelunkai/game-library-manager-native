@@ -1,6 +1,7 @@
 # Generated/native build output
 /dist/
 /data/
+/native/data/
 /native/dist/
 /native/bin/
 /native/obj/

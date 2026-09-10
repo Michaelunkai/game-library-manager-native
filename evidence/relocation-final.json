@@ -1,17 +1,24 @@
 {
-  "verifiedAtUtc": "2026-09-10T09:11:47.8531747Z",
+  "verifiedAtUtc": "2026-09-10T09:46:55.2690330Z",
   "projectPath": "F:\\study\\repos\\game-library-manager-native",
   "executable": "F:\\study\\repos\\game-library-manager-native\\dist\\GameLibrary.exe",
-  "sha256": "E605C2C92B5E38A8C222A59B1FBD7CBFF71C62B17C88BC9DDBD3CA09587E8516",
-  "sizeBytes": 468333647,
+  "sha256": "8D152C92E07276233F5BA3DF7B5B3A38576B2FE0470A5830928BD8770F7FC14A",
+  "sizeBytes": 460116840,
   "catalog": {
     "liveGameCount": 1260,
     "curatedRecords": 1179,
     "bundledCatalogFiles": 2343
   },
   "checks": {
-    "diagnostic": { "passed": true, "count": 63 },
-    "ui": { "passed": true, "count": 28 },
+    "diagnostic": { "passed": true, "count": 64 },
+    "ui": { "passed": true, "count": 31 },
+    "directLaunch": {
+      "passed": true,
+      "arguments": [],
+      "dataRoot": "F:\\study\\repos\\game-library-manager-native\\data",
+      "runtimeModulesLoadedBesideExe": true,
+      "cTempChanged": 0
+    },
     "window": {
       "title": "Game Library",
       "secondary": true,
@@ -20,5 +27,6 @@
     },
     "state": { "pending": 0, "installedRecords": 2 }
   },
+  "package": { "files": 70, "nativeRuntimeBesideExe": true },
   "sourceHandling": "copied-not-moved; the prior live bundle was preserved while this project was organized"
 }
