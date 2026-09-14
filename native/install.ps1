@@ -80,8 +80,8 @@ $shellApplication = New-Object -ComObject Shell.Application
 foreach ($linkPath in $verifiedLinks) {
     $shortcut = $shell.CreateShortcut($linkPath)
     if ($shortcut.TargetPath -ne $targetExe -or $shortcut.IconLocation -ne ($targetIcon + ',0')) { throw ('Shortcut target or icon verification failed: ' + $linkPath) }
-    $folder = $shellApplication.Namespace((Split-Path -LiteralPath $linkPath -Parent))
-    $item = if ($folder) { $folder.ParseName((Split-Path -LiteralPath $linkPath -Leaf)) } else { $null }
+    $folder = $shellApplication.Namespace([IO.Path]::GetDirectoryName($linkPath))
+    $item = if ($folder) { $folder.ParseName([IO.Path]::GetFileName($linkPath)) } else { $null }
     if (-not $item -or [string]$item.ExtendedProperty('System.AppUserModel.ID') -ne 'GameLibraryManager.Native') { throw ('Shortcut AppUserModelID verification failed: ' + $linkPath) }
 }
 [pscustomobject]@{ app='GameLibraryManager.Native'; at=[DateTime]::UtcNow.ToString('o'); root=$targetRoot; executable=$targetExe; sha256=$expected; icon=$targetIcon; iconSha256=$expectedIcon; appUserModelId='GameLibraryManager.Native'; shortcutRepairExitCode=$repair.ExitCode; bundledWandBridge=$true; bundledNativeWpfRuntime=$true; shortcuts=$links } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $targetRoot 'install-receipt.json') -Encoding UTF8
