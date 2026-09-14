@@ -12,11 +12,23 @@ namespace GameLibrary.Native;
 
 public static class Program
 {
+    // This identifier is shared by the process, the Start-menu shortcut, and
+    // any shortcut copied into the user's pinned Taskbar folder.  Keeping the
+    // value in one place is important: a mismatch makes Windows treat the
+    // pinned shortcut and the running window as different applications.
+    internal const string AppUserModelId = "GameLibraryManager.Native";
     public static string? TestReport;
     public static bool PauseProof;
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length >= 1 && string.Equals(args[0], "--repair-shortcuts", StringComparison.Ordinal))
+        {
+            var executable = args.Length >= 2
+                ? Path.GetFullPath(args[1])
+                : Process.GetCurrentProcess().MainModule?.FileName;
+            return string.IsNullOrWhiteSpace(executable) ? 1 : ShortcutManager.RepairForExecutable(executable);
+        }
         if (args.Length >= 2 && args[0] == "--self-test") return RunDiagnostic(args[1], () => SelfTests.Run(args[1]));
         if (args.Length >= 2 && args[0] == "--wand-audit")
         {
@@ -36,6 +48,15 @@ public static class Program
             }
             return LiveSyncProof.Run(args[1]).GetAwaiter().GetResult();
         }
+        // Set the identity before WPF creates its first HWND.  This is the
+        // identity Windows uses to group the live window with a pinned link.
+        SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
+        // Repair links copied by older installers (including links already in
+        // the user's pinned Taskbar folder) before the first HWND is created.
+        // This makes an upgrade self-healing even when the installer is not
+        // rerun and avoids the pinned/live duplicate-icon state.
+        var runningExecutable = Process.GetCurrentProcess().MainModule?.FileName;
+        if (!string.IsNullOrWhiteSpace(runningExecutable)) ShortcutManager.RepairForExecutable(runningExecutable);
         string? data = null;
         bool offline = false;
         StartupMonitorMode monitorMode = StartupMonitorMode.Auto;
@@ -136,5 +157,6 @@ public static class Program
             return 1;
         }
     }
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    internal static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
 }

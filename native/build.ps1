@@ -71,6 +71,15 @@ try {
     [void][IO.Directory]::CreateDirectory($distributionRoot)
     & $dotnetPath publish GameLibrary.Native.csproj -c Release -r win-x64 --self-contained $selfContained -o $distributionRoot "-p:BaseOutputPath=$BuildOutputRoot"
     if ($LASTEXITCODE -ne 0) { throw ('Publish failed: exit ' + $LASTEXITCODE) }
+    # Keep a physical copy beside the EXE as the icon source for shell links.
+    # A shortcut that points at a stable .ico is refreshable independently of
+    # Explorer's cached apphost resource and remains valid when the EXE is
+    # replaced in place during an upgrade.
+    $sourceIcon = Join-Path $nativeRoot 'Assets\GameLibrary.ico'
+    $publishedIcon = Join-Path $distributionRoot 'GameLibrary.ico'
+    if (-not (Test-Path -LiteralPath $sourceIcon -PathType Leaf)) { throw 'The application icon asset is missing; refusing an icon-less package.' }
+    Copy-Item -LiteralPath $sourceIcon -Destination $publishedIcon -Force
+    if ((Get-FileHash -LiteralPath $sourceIcon -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $publishedIcon -Algorithm SHA256).Hash) { throw 'Published application icon checksum does not match the source asset.' }
     # The single-file publisher carries the managed payload into the EXE but may
     # omit native Node addons from the publish directory. Copy the exact bundled
     # Wand bridge runtime from the RID-specific build output so the installed EXE
@@ -94,6 +103,7 @@ try {
     foreach ($required in $requiredTools) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw ('Required bundled runtime file is missing: ' + $required) }
     }
+    if (-not (Test-Path -LiteralPath $publishedIcon -PathType Leaf)) { throw 'Published package is missing GameLibrary.ico.' }
     $exe = Join-Path $distributionRoot 'GameLibrary.exe'
     Get-Item -LiteralPath $exe | Select-Object FullName,Length,LastWriteTime
     Write-Output ('SHA256: ' + (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash)

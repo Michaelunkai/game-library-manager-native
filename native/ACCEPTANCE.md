@@ -11,6 +11,11 @@ This record covers release 1.1.0 of the native WPF application and its reviewed 
 - Shared edits enter a durable per-field outbox before transport. Conditional writes, conflict retention, interrupted-acknowledgement reconciliation, and read-back verification implement bidirectional native/website synchronization without silently discarding local intent.
 - The Windows 11 Fluent shell includes custom caption controls, Mica where supported, semantic light/dark/high-contrast palettes, keyboard focus, accessible targets, reduced popup motion, and status announcements.
 - The executable and application bundle use the new multi-resolution Fluent game-library icon.
+- Start-menu, desktop, and existing canonical Taskbar shortcuts carry the
+  shared `GameLibraryManager.Native` AppUserModelID; the installer verifies
+  that identity and the adjacent `.ico` path after repair.
+- The WPF HWND publishes non-zero big and small icons through `WM_GETICON`
+  after explicit `WM_SETICON`, covering the custom WindowChrome/taskbar path.
 
 ## Fresh verification before release
 

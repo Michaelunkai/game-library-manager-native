@@ -93,8 +93,14 @@ public partial class MainWindow : Window
 {
     private static class NativeWindow
     {
+        internal const uint WmSetIcon = 0x0080;
+        internal const uint WmGetIcon = 0x007F;
+        internal const int IconSmall = 0;
+        internal const int IconBig = 1;
         [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr handle);
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr handle, int command);
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern IntPtr SendMessage(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
         [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left; public int Top; public int Right; public int Bottom; }
         [DllImport("user32.dll", SetLastError = true)] private static extern bool GetWindowRect(IntPtr handle, out Rect rect);
         [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
@@ -125,6 +131,12 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer searchDelay = new() { Interval = TimeSpan.FromMilliseconds(160) };
     private DateTime lastCatalogRefresh;
     private Forms.NotifyIcon? tray;
+    // Keep the native icon handles alive for the lifetime of the HWND.  WPF's
+    // Window.Icon alone is not sufficient with a custom WindowChrome: the
+    // shell can query WM_GETICON before WPF has materialized its class icon.
+    private System.Drawing.Icon? nativeBigIcon;
+    private System.Drawing.Icon? nativeSmallIcon;
+    private readonly List<MemoryStream> nativeIconStreams = new();
     private bool ready, refreshing, closing, searchPending, installedScanning;
     private bool changingSelection, catalogStatsDirty = true;
     private readonly bool offline;
@@ -154,11 +166,10 @@ public partial class MainWindow : Window
         Store = store; this.offline = offline; startupPlacement = WindowPlacement.Capture(monitorMode);
         offlineNetwork = offline ? new OfflineNetworkGuard() : null;
         Sync = new SyncClient(store, offlineNetwork);
-        Program.SetCurrentProcessExplicitAppUserModelID("GameLibraryManager.Native");
         InitializeComponent();
         PlaceOnStartupMonitor();
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
-        SourceInitialized += (_, _) => WindowEffects.Apply(this, State.Settings.Theme == "light");
+        SourceInitialized += (_, _) => { ApplyNativeWindowIcon(); WindowEffects.Apply(this, State.Settings.Theme == "light"); };
         Loaded += OnLoaded;
         ContentRendered += (_, _) => QueueStartupPlacement();
         Closing += OnClosing;
@@ -304,12 +315,41 @@ public partial class MainWindow : Window
         catch (Exception ex) { Store.Log("Shutdown state flush failed: " + ex); }
         poll.Stop(); installedScanPoll.Stop(); searchDelay.Stop(); playtime.Stop();
         try { tray?.Dispose(); } catch (Exception ex) { Store.Log("Tray cleanup failed: " + ex.Message); } finally { tray = null; }
+        try { nativeBigIcon?.Dispose(); nativeSmallIcon?.Dispose(); } catch (Exception ex) { try { Store.Log("Window icon cleanup failed: " + ex.Message); } catch { } }
+        nativeBigIcon = null; nativeSmallIcon = null;
+        foreach (var stream in nativeIconStreams) stream.Dispose();
+        nativeIconStreams.Clear();
         foreach (var job in jobs.ToArray())
         {
             try { job.Close(); }
             catch (Exception ex) { try { Store.Log("Download window cleanup failed: " + ex.Message); } catch { } }
         }
         try { Store.Log("Clean shutdown"); } catch { }
+    }
+    private void ApplyNativeWindowIcon()
+    {
+        try
+        {
+            var resource = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/GameLibrary.ico"));
+            if (resource == null) return;
+            using var source = resource.Stream;
+            using var buffer = new MemoryStream();
+            source.CopyTo(buffer);
+            var bytes = buffer.ToArray();
+            var bigStream = new MemoryStream(bytes, writable: false);
+            var smallStream = new MemoryStream(bytes, writable: false);
+            nativeIconStreams.Add(bigStream); nativeIconStreams.Add(smallStream);
+            nativeBigIcon = new System.Drawing.Icon(bigStream, 48, 48);
+            nativeSmallIcon = new System.Drawing.Icon(smallStream, 16, 16);
+            var handle = new WindowInteropHelper(this).Handle;
+            if (handle == IntPtr.Zero) return;
+            NativeWindow.SendMessage(handle, NativeWindow.WmSetIcon, (IntPtr)NativeWindow.IconBig, nativeBigIcon.Handle);
+            NativeWindow.SendMessage(handle, NativeWindow.WmSetIcon, (IntPtr)NativeWindow.IconSmall, nativeSmallIcon.Handle);
+        }
+        catch (Exception ex)
+        {
+            try { Store.Log("Native window icon setup failed: " + ex); } catch { }
+        }
     }
     internal void Reload()
     {

@@ -13,6 +13,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Interop;
 using System.Windows.Threading;
 
 namespace GameLibrary.Native;
@@ -1095,7 +1096,11 @@ public partial class MainWindow
         }
         try
         {
-            Check("Packaged WPF window visible with taskbar identity", IsVisible && ShowInTaskbar && Icon != null && Games.Count >= 1179);
+            var nativeHandle = new WindowInteropHelper(this).Handle;
+            var nativeBigIcon = nativeHandle == IntPtr.Zero ? IntPtr.Zero : NativeWindow.SendMessage(nativeHandle, NativeWindow.WmGetIcon, (IntPtr)NativeWindow.IconBig, IntPtr.Zero);
+            var nativeSmallIcon = nativeHandle == IntPtr.Zero ? IntPtr.Zero : NativeWindow.SendMessage(nativeHandle, NativeWindow.WmGetIcon, (IntPtr)NativeWindow.IconSmall, IntPtr.Zero);
+            Check("Packaged WPF window visible with taskbar identity", IsVisible && ShowInTaskbar && Icon != null && nativeBigIcon != IntPtr.Zero && nativeSmallIcon != IntPtr.Zero && Games.Count >= 1179,
+                $"hwnd=0x{nativeHandle.ToInt64():X}; big=0x{nativeBigIcon.ToInt64():X}; small=0x{nativeSmallIcon.ToInt64():X}");
             Check("Fluent shell exposes custom caption controls and semantic status", FindName("AppTitleBar") is FrameworkElement titleBar
                 && titleBar.ActualHeight >= 44
                 && FindName("MinimizeWindow") is Button minimize && minimize.MinHeight >= 40

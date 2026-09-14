@@ -58,6 +58,11 @@ disables decorative backdrop effects in Windows high-contrast mode.
 
 ## Release
 
+The current local patch build is version 1.1.1. It keeps the process
+AppUserModelID aligned with the Start-menu and pinned-taskbar shortcuts,
+repairs existing canonical pins during startup or installation, and sets the
+native big/small window icons before the shell can query the HWND.
+
 Version 1.1.0 is published at
 https://github.com/Michaelunkai/game-library-manager-native/releases/tag/v1.1.0.
 The complete ZIP is the fresh-install package; the separate EXE is the exact

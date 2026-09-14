@@ -10,6 +10,10 @@ if (Test-Path -LiteralPath $targetExe) {
     if ((Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash -ne $receipt.sha256) { throw 'The installed executable changed outside this installer. Nothing was removed.' }
     Remove-Item -LiteralPath $targetExe
 }
+$targetIcon = Join-Path $targetRoot 'GameLibrary.ico'
+if (Test-Path -LiteralPath $targetIcon -PathType Leaf -and $receipt.icon -eq $targetIcon -and $receipt.iconSha256 -eq (Get-FileHash -LiteralPath $targetIcon -Algorithm SHA256).Hash) {
+    Remove-Item -LiteralPath $targetIcon
+}
 $shell = New-Object -ComObject WScript.Shell
 foreach ($linkPath in $receipt.shortcuts) {
     if (Test-Path -LiteralPath $linkPath -PathType Leaf) {

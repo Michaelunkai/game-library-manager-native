@@ -6,6 +6,9 @@ $targetRoot = [IO.Path]::GetFullPath($InstallRoot)
 if ([IO.Path]::GetPathRoot($targetRoot).TrimEnd('\') -eq $targetRoot.TrimEnd('\')) { throw 'The installation directory cannot be a drive root.' }
 [void][IO.Directory]::CreateDirectory($targetRoot)
 $targetExe = Join-Path $targetRoot 'GameLibrary.exe'
+$sourceIcon = Join-Path $PSScriptRoot 'Assets\GameLibrary.ico'
+if (-not (Test-Path -LiteralPath $sourceIcon -PathType Leaf)) { throw 'The package is missing the multi-resolution GameLibrary.ico.' }
+$targetIcon = Join-Path $targetRoot 'GameLibrary.ico'
 $sourceTools = Join-Path $PSScriptRoot 'dist\tools'
 if (-not (Test-Path -LiteralPath $sourceTools -PathType Container)) { throw 'The build output is missing the bundled Wand bridge runtime.' }
 if (Test-Path -LiteralPath $targetExe) {
@@ -15,6 +18,9 @@ if (Test-Path -LiteralPath $targetExe) {
 Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
 $expected = (Get-FileHash -LiteralPath $sourceExe -Algorithm SHA256).Hash
 if ((Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash -ne $expected) { throw 'Installed EXE checksum does not match the package.' }
+Copy-Item -LiteralPath $sourceIcon -Destination $targetIcon -Force
+$expectedIcon = (Get-FileHash -LiteralPath $sourceIcon -Algorithm SHA256).Hash
+if ((Get-FileHash -LiteralPath $targetIcon -Algorithm SHA256).Hash -ne $expectedIcon) { throw 'Installed icon checksum does not match the package.' }
 $nativeRuntimeFiles = @(
     'D3DCompiler_47_cor3.dll',
     'PenImc_cor3.dll',
@@ -46,8 +52,8 @@ $installedNode = Join-Path $targetTools 'node\node.exe'
 if (-not (Test-Path -LiteralPath $installedBridge -PathType Leaf) -or -not (Test-Path -LiteralPath $installedCdpLauncher -PathType Leaf) -or -not (Test-Path -LiteralPath $installedManifest -PathType Leaf) -or -not (Test-Path -LiteralPath $installedAddon -PathType Leaf) -or -not (Test-Path -LiteralPath $installedNode -PathType Leaf)) { throw 'Installed Wand bridge runtime or registration manifest is incomplete.' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination (Join-Path $targetRoot 'uninstall.ps1') -Force
 $links = @()
+$shell = New-Object -ComObject WScript.Shell
 if (-not $NoShortcuts) {
-    $shell = New-Object -ComObject WScript.Shell
     $links += Join-Path ([Environment]::GetFolderPath('Programs')) 'Game Library.lnk'
     if ($DesktopShortcut) { $links += Join-Path ([Environment]::GetFolderPath('Desktop')) 'Game Library.lnk' }
     foreach ($linkPath in $links) {
@@ -56,8 +62,27 @@ if (-not $NoShortcuts) {
             if ($old.TargetPath -ne $targetExe) { throw ('An unrelated shortcut already exists: ' + $linkPath) }
         }
         $shortcut = $shell.CreateShortcut($linkPath)
-        $shortcut.TargetPath = $targetExe; $shortcut.WorkingDirectory = $targetRoot; $shortcut.IconLocation = $targetExe + ',0'; $shortcut.Description = 'Native Windows Game Library'; $shortcut.Save()
+        $shortcut.TargetPath = $targetExe; $shortcut.WorkingDirectory = $targetRoot; $shortcut.IconLocation = $targetIcon + ',0'; $shortcut.Description = 'Native Windows Game Library'; $shortcut.Save()
     }
 }
-[pscustomobject]@{ app='GameLibraryManager.Native'; at=[DateTime]::UtcNow.ToString('o'); root=$targetRoot; executable=$targetExe; sha256=$expected; bundledWandBridge=$true; bundledNativeWpfRuntime=$true; shortcuts=$links } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $targetRoot 'install-receipt.json') -Encoding UTF8
+$repair = Start-Process -FilePath $targetExe -ArgumentList @('--repair-shortcuts') -WorkingDirectory $targetRoot -WindowStyle Hidden -Wait -PassThru
+if ($repair.ExitCode -ne 0) { throw ('Installed shell links could not be repaired; exit code ' + $repair.ExitCode) }
+$verifiedLinks = @($links)
+$taskbarRoot = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+foreach ($name in @('Game Library.lnk', 'GameLibrary.lnk')) {
+    $taskbarLink = Join-Path $taskbarRoot $name
+    if (Test-Path -LiteralPath $taskbarLink -PathType Leaf) {
+        $taskbarShortcut = $shell.CreateShortcut($taskbarLink)
+        if ($taskbarShortcut.TargetPath -eq $targetExe) { $verifiedLinks += $taskbarLink }
+    }
+}
+$shellApplication = New-Object -ComObject Shell.Application
+foreach ($linkPath in $verifiedLinks) {
+    $shortcut = $shell.CreateShortcut($linkPath)
+    if ($shortcut.TargetPath -ne $targetExe -or $shortcut.IconLocation -ne ($targetIcon + ',0')) { throw ('Shortcut target or icon verification failed: ' + $linkPath) }
+    $folder = $shellApplication.Namespace((Split-Path -LiteralPath $linkPath -Parent))
+    $item = if ($folder) { $folder.ParseName((Split-Path -LiteralPath $linkPath -Leaf)) } else { $null }
+    if (-not $item -or [string]$item.ExtendedProperty('System.AppUserModel.ID') -ne 'GameLibraryManager.Native') { throw ('Shortcut AppUserModelID verification failed: ' + $linkPath) }
+}
+[pscustomobject]@{ app='GameLibraryManager.Native'; at=[DateTime]::UtcNow.ToString('o'); root=$targetRoot; executable=$targetExe; sha256=$expected; icon=$targetIcon; iconSha256=$expectedIcon; appUserModelId='GameLibraryManager.Native'; shortcutRepairExitCode=$repair.ExitCode; bundledWandBridge=$true; bundledNativeWpfRuntime=$true; shortcuts=$links } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $targetRoot 'install-receipt.json') -Encoding UTF8
 Write-Output ('Installed and checksum-verified: ' + $targetExe)
