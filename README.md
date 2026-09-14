@@ -55,3 +55,12 @@ The WPF shell uses custom Windows 11 caption controls, Mica where supported,
 rounded semantic surfaces, light and dark palettes, visible keyboard focus,
 comfortable control targets, and polite accessibility announcements. It
 disables decorative backdrop effects in Windows high-contrast mode.
+
+## Release
+
+Version 1.1.0 is published at
+https://github.com/Michaelunkai/game-library-manager-native/releases/tag/v1.1.0.
+The complete ZIP is the fresh-install package; the separate EXE is the exact
+binary for an existing complete bundle. Production synchronization is live at
+https://game-library-michaelunkai.netlify.app and advertises atomic conditional
+writes backed by Netlify Blobs.
