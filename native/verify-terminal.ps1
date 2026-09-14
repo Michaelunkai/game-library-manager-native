@@ -83,23 +83,23 @@ try {
     $review = Wait-Dialog 'Install selected games' $window
     $reviewText = Text-Descendants $review
     Add-Check 'Install review names the Windows BAT and WSL2 install routes' ($reviewText -match '(?i)Windows BAT' -and $reviewText -match '(?i)default terminal' -and $reviewText -match '(?i)WSL2 Ubuntu' -and $reviewText -match '(?i)\.SH')
-    $beforeCmd = @(Get-ProcessSnapshot 'cmd')
+    $beforePowerShell = @(Get-ProcessSnapshot 'powershell')
     $beforeHost = @(Get-ProcessSnapshot 'conhost')
     $actionAt = [DateTime]::Now
     Invoke-Control (Find-Button $review 'Start download')
     $job = Wait-Dialog ('Game Library ' + [char]0xB7 + ' Download terminal') $window
     $deadline = [DateTime]::UtcNow.AddSeconds(12)
     $bat = $null
-    $cmd = $null
+    $terminal = $null
     do {
         $bat = Get-ChildItem -LiteralPath (Join-Path $dataRoot 'jobs') -Filter '*.bat' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        $after = @(Get-ProcessSnapshot 'cmd' | Where-Object { $beforeCmd.Id -notcontains $_.Id -and $_.StartTime -ge $actionAt.AddSeconds(-2) })
-        $cmd = $after | Select-Object -First 1
-        if ($bat -and $cmd) { break }
+        $after = @(Get-ProcessSnapshot 'powershell' | Where-Object { $beforePowerShell.Id -notcontains $_.Id -and $_.StartTime -ge $actionAt.AddSeconds(-2) })
+        $terminal = $after | Select-Object -First 1
+        if ($bat -and $terminal) { break }
         Start-Sleep -Milliseconds 200
     } while ([DateTime]::UtcNow -lt $deadline)
-    Add-Check 'Native install writes a BAT job and hands it to cmd.exe' ($null -ne $bat -and $null -ne $cmd)
-    $terminalProcessIds = @($cmd.Id)
+    Add-Check 'Native install writes a BAT job and hands it to the visible transcript host' ($null -ne $bat -and $null -ne $terminal)
+    $terminalProcessIds = @($terminal.Id)
     $terminalHosts = @(Get-ProcessSnapshot 'conhost' | Where-Object { $beforeHost.Id -notcontains $_.Id -and $_.StartTime -ge $actionAt.AddSeconds(-2) })
     $terminalHostProcessIds = @($terminalHosts | Select-Object -ExpandProperty Id)
     $jobClock = [Diagnostics.Stopwatch]::StartNew()
@@ -111,9 +111,13 @@ try {
     Add-Check 'Native job window reports the user default terminal route' ($jobText -match '(?i)Running in your default terminal')
     $batText = if ($bat) { Get-Content -LiteralPath $bat.FullName -Raw } else { '' }
     Add-Check 'Generated BAT contains the reviewed PowerShell payload' ($batText.StartsWith('@echo off') -and $batText.Contains('# GLM_POWERSHELL_START'))
-    $terminalVisible = ($cmd.MainWindowHandle -ne [IntPtr]::Zero) -or (@($terminalHosts | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -or $_.MainWindowTitle.Length -gt 0 }).Count -gt 0)
+    $transcript = if ($bat) { [IO.Path]::ChangeExtension($bat.FullName, '.terminal.log') } else { $null }
+    $transcriptClock = [Diagnostics.Stopwatch]::StartNew()
+    while ($transcript -and -not (Test-Path -LiteralPath $transcript) -and $transcriptClock.Elapsed.TotalSeconds -lt 8) { Start-Sleep -Milliseconds 100 }
+    Add-Check 'Visible terminal output is mirrored to the durable job transcript' ($transcript -and (Test-Path -LiteralPath $transcript))
+    $terminalVisible = ($terminal.MainWindowHandle -ne [IntPtr]::Zero) -or (@($terminalHosts | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -or $_.MainWindowTitle.Length -gt 0 }).Count -gt 0)
     Add-Check 'Default terminal handoff creates an external console host' ($terminalProcessIds.Count -gt 0 -and $terminalHostProcessIds.Count -gt 0)
-    $payload = [pscustomobject]@{ at=[DateTime]::UtcNow.ToString('o'); passed=$true; executable=(Resolve-Path $ExePath).Path; sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $ExePath).Hash; dataRoot=$dataRoot; batPath=if($bat){$bat.FullName}else{$null}; terminalProcessId=if($cmd){$cmd.Id}else{$null}; terminalProcessName='cmd.exe'; terminalHostProcessIds=$terminalHostProcessIds; terminalVisible=$terminalVisible; checks=@($checks.ToArray()) }
+    $payload = [pscustomobject]@{ at=[DateTime]::UtcNow.ToString('o'); passed=$true; executable=(Resolve-Path $ExePath).Path; sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $ExePath).Hash; dataRoot=$dataRoot; batPath=if($bat){$bat.FullName}else{$null}; transcriptPath=$transcript; terminalProcessId=if($terminal){$terminal.Id}else{$null}; terminalProcessName='powershell.exe'; terminalHostProcessIds=$terminalHostProcessIds; terminalVisible=$terminalVisible; checks=@($checks.ToArray()) }
     $payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $report -Encoding UTF8
     Write-Output ('PASS: Native install opened the default terminal route; evidence=' + $report)
 }

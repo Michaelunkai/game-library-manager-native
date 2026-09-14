@@ -38,13 +38,13 @@ public static class Program
         }
         string? data = null;
         bool offline = false;
-        bool secondMonitor = true;
+        StartupMonitorMode monitorMode = StartupMonitorMode.Auto;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--data-dir" && i + 1 < args.Length) data = Path.GetFullPath(args[++i]);
             else if (args[i] == "--offline") offline = true;
-            else if (args[i] == "--second-monitor") secondMonitor = true;
-            else if (args[i] == "--main-monitor") secondMonitor = false;
+            else if (args[i] == "--second-monitor") monitorMode = StartupMonitorMode.Secondary;
+            else if (args[i] == "--main-monitor") monitorMode = StartupMonitorMode.Primary;
             else if (args[i] == "--ui-test" && i + 1 < args.Length) TestReport = Path.GetFullPath(args[++i]);
             else if (args[i] == "--pause-proof") PauseProof = true;
         }
@@ -66,12 +66,17 @@ public static class Program
         app.DispatcherUnhandledException += (_, e) =>
         {
             LogProcessFailure("Unhandled UI failure", e.Exception);
-            try { System.Windows.MessageBox.Show("The operation could not finish. Your saved library is preserved.\n\n" + e.Exception.Message, "Game Library", MessageBoxButton.OK, MessageBoxImage.Error); } catch { }
+            try
+            {
+                if (app.MainWindow is MainWindow window)
+                    window.ReportUiFailure("The operation could not finish", e.Exception);
+            }
+            catch { }
             e.Handled = true;
         };
         try
         {
-            var window = new MainWindow(store, offline, secondMonitor);
+            var window = new MainWindow(store, offline, monitorMode);
             app.MainWindow = window;
             using var stopping = new CancellationTokenSource();
             var listener = Task.Run(() =>

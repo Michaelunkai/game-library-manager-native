@@ -15,6 +15,22 @@ if (Test-Path -LiteralPath $targetExe) {
 Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
 $expected = (Get-FileHash -LiteralPath $sourceExe -Algorithm SHA256).Hash
 if ((Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash -ne $expected) { throw 'Installed EXE checksum does not match the package.' }
+$nativeRuntimeFiles = @(
+    'D3DCompiler_47_cor3.dll',
+    'PenImc_cor3.dll',
+    'PresentationNative_cor3.dll',
+    'vcruntime140_cor3.dll',
+    'wpfgfx_cor3.dll'
+)
+foreach ($runtimeName in $nativeRuntimeFiles) {
+    $sourceRuntime = Join-Path (Split-Path $sourceExe -Parent) $runtimeName
+    if (-not (Test-Path -LiteralPath $sourceRuntime -PathType Leaf)) { throw ('The build output is missing a required native WPF runtime: ' + $runtimeName) }
+    $targetRuntime = Join-Path $targetRoot $runtimeName
+    Copy-Item -LiteralPath $sourceRuntime -Destination $targetRuntime -Force
+    if ((Get-FileHash -LiteralPath $targetRuntime -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $sourceRuntime -Algorithm SHA256).Hash) {
+        throw ('Installed native WPF runtime checksum does not match: ' + $runtimeName)
+    }
+}
 $targetTools = Join-Path $targetRoot 'tools'
 foreach ($file in @(Get-ChildItem -LiteralPath $sourceTools -File -Recurse)) {
     $relative = $file.FullName.Substring($sourceTools.Length + 1)
@@ -23,8 +39,11 @@ foreach ($file in @(Get-ChildItem -LiteralPath $sourceTools -File -Recurse)) {
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
 }
 $installedBridge = Join-Path $targetTools 'wemod_add_custom_install.js'
+$installedCdpLauncher = Join-Path $targetTools 'wand_cdp_launch.js'
+$installedManifest = Join-Path $targetTools 'wand-supported-games.json'
 $installedAddon = Join-Path $targetTools 'wand-runtime\classic-level\prebuilds\win32-x64\classic-level.node'
-if (-not (Test-Path -LiteralPath $installedBridge -PathType Leaf) -or -not (Test-Path -LiteralPath $installedAddon -PathType Leaf)) { throw 'Installed Wand bridge runtime is incomplete.' }
+$installedNode = Join-Path $targetTools 'node\node.exe'
+if (-not (Test-Path -LiteralPath $installedBridge -PathType Leaf) -or -not (Test-Path -LiteralPath $installedCdpLauncher -PathType Leaf) -or -not (Test-Path -LiteralPath $installedManifest -PathType Leaf) -or -not (Test-Path -LiteralPath $installedAddon -PathType Leaf) -or -not (Test-Path -LiteralPath $installedNode -PathType Leaf)) { throw 'Installed Wand bridge runtime or registration manifest is incomplete.' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination (Join-Path $targetRoot 'uninstall.ps1') -Force
 $links = @()
 if (-not $NoShortcuts) {
@@ -40,5 +59,5 @@ if (-not $NoShortcuts) {
         $shortcut.TargetPath = $targetExe; $shortcut.WorkingDirectory = $targetRoot; $shortcut.IconLocation = $targetExe + ',0'; $shortcut.Description = 'Native Windows Game Library'; $shortcut.Save()
     }
 }
-[pscustomobject]@{ app='GameLibraryManager.Native'; at=[DateTime]::UtcNow.ToString('o'); root=$targetRoot; executable=$targetExe; sha256=$expected; bundledWandBridge=$true; shortcuts=$links } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $targetRoot 'install-receipt.json') -Encoding UTF8
+[pscustomobject]@{ app='GameLibraryManager.Native'; at=[DateTime]::UtcNow.ToString('o'); root=$targetRoot; executable=$targetExe; sha256=$expected; bundledWandBridge=$true; bundledNativeWpfRuntime=$true; shortcuts=$links } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $targetRoot 'install-receipt.json') -Encoding UTF8
 Write-Output ('Installed and checksum-verified: ' + $targetExe)

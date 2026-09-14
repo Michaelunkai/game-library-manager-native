@@ -21,6 +21,8 @@ public sealed class Game : INotifyPropertyChanged
     public string Details { get; set; } = "";
     public double Time { get; set; }
     [JsonIgnore] public double SizeGb { get; set; }
+    [JsonIgnore] public long InstalledBytes { get; set; }
+    [JsonIgnore] public DateTime InstalledSizeMeasuredUtc { get; set; }
     [JsonIgnore] public bool Discovered { get; set; }
     [JsonIgnore] public bool IsLocal { get; set; }
     [JsonIgnore] public DateTime Added { get; set; }
@@ -28,8 +30,14 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public string CategoryName { get; set; } = "";
     [JsonIgnore] public string TagsLabel { get; set; } = "";
     [JsonIgnore] public double PlayedHours { get; set; }
+    [JsonIgnore] public DateTime LastPlayedUtc { get; set; }
     [JsonIgnore] public bool IsPlaying { get; set; }
     [JsonIgnore] public bool IsPlayPaused { get; set; }
+    // This is deliberately an exact, locally verified Wand registration rather
+    // than a broad catalog match. The UI must never advertise a mod launch for
+    // a game that Wand does not already know at this executable path.
+    [JsonIgnore] public bool CanPlayWithWand { get; set; }
+    [JsonIgnore] public string PlayLabel => IsPlaying ? "●  Playing" : "▶  Play";
     [JsonIgnore] public string PlayedMeta => IsPlaying
         ? (IsPlayPaused ? $"Paused · {PlayedHours:0.0} h · timing held" : $"Playing · {PlayedHours:0.0} h")
         : PlayedHours > 0 ? $"Played {PlayedHours:0.0} h" : "Not played";
@@ -37,7 +45,12 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public bool ShowCategory { get; set; } = true;
     [JsonIgnore] public double CoverHeight { get; set; } = 98;
     [JsonIgnore] public double CoverWidth => CoverHeight * 0.735;
-    [JsonIgnore] public string Meta => string.Join("  ·  ", new[] { ShowCategory ? CategoryName : "", ShowTime ? (Time > 0 ? $"~{Time:0.#} h" : "Time unknown") : "", SizeGb > 0 ? $"{SizeGb:0.##} GB" : "Size unknown" }.Where(s => s.Length > 0));
+    [JsonIgnore] public double InstalledSizeGb => InstalledBytes > 0 ? InstalledBytes / 1_000_000_000d : 0;
+    [JsonIgnore] public double ComparableSizeGb => InstalledSizeGb > 0 ? InstalledSizeGb : SizeGb;
+    [JsonIgnore] public string SizeLabel => InstalledSizeGb > 0
+        ? $"{InstalledSizeGb:0.##} GB installed · " + (InstalledSizeMeasuredUtc == default ? "measured locally" : $"measured {InstalledSizeMeasuredUtc.ToLocalTime():g}")
+        : SizeGb > 0 ? $"{SizeGb:0.##} GB download" : "Size unknown";
+    [JsonIgnore] public string Meta => string.Join("  ·  ", new[] { ShowCategory ? CategoryName : "", ShowTime ? (Time > 0 ? $"~{Time:0.#} h" : "Time unknown") : "", SizeLabel }.Where(s => s.Length > 0));
     [JsonIgnore] public string Initial => string.IsNullOrWhiteSpace(Name) ? "G" : Name[..1].ToUpperInvariant();
     [JsonIgnore] public string RatingLabel => Rating > 0 ? new string('★', Rating) + new string('☆', 5 - Rating) : "☆☆☆☆☆";
     [JsonIgnore] public string WishlistLabel => Wishlisted ? "♥ Saved" : "♡ Save";
@@ -91,6 +104,9 @@ public sealed class UserState
     public Dictionary<string, List<string>> GameTags { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, string> LaunchPaths { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PlayTimeSeconds { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, DateTime> LastPlayedUtc { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, long> InstalledBytes { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, DateTime> InstalledSizeMeasuredUtc { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LocalGame> LocalGames { get; set; } = new(StringComparer.Ordinal);
     public List<PendingEdit> Pending { get; set; } = new();
 }

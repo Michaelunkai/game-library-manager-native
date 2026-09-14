@@ -10,13 +10,13 @@ F:\study\repos\game-library-manager-native\dist\GameLibrary.exe
 ```
 
 The direct launch is the supported route: it selects the adjacent F-drive
-`data\` profile automatically and keeps the window on the secondary display
-when that display is available; startup placement is normalized after WPF
-restores any stale Windows placement. The adjacent native WPF runtime DLLs and
+`data\` profile automatically and opens on the monitor where the launch was
+initiated. `--main-monitor` and `--second-monitor` remain available as explicit
+overrides. Startup placement is normalized after WPF restores any stale Windows
+placement. The adjacent native WPF runtime DLLs and
 `dist\tools` directory are part of the self-contained package; no native
 runtime extraction to the user's TEMP directory is required. `--offline`
-remains available for a no-network session, and `--main-monitor` is available
-when the primary display is explicitly wanted.
+remains available for a no-network session.
 
 ## Project layout
 
@@ -28,25 +28,30 @@ when the primary display is explicitly wanted.
 - `evidence\` — small verification receipts from the completed acceptance
   run.
 
-## Verification receipt
+## Reliability and synchronization
 
-`evidence\self-test-final-20260910.json` records 69 passing diagnostic
-checks with zero failures. The fresh external WPF UI proof records 31
-passing checks, and the WPF pause proof records 29 passing checks including
-an actual AHK-format pause/resume fixture. The final source executable was
-copied into `dist\GameLibrary.exe` and retains its SHA-256 identity:
+Local preferences, play history, install measurements, and paths are written
+atomically beside the bundle with a recoverable backup. Website-shared tabs,
+visibility, and category edits enter a durable per-field outbox before network
+I/O; they leave that outbox only after the production backend acknowledges the
+conditional write and a read-back matches. Conflicts and offline failures keep
+the local edit available for review.
 
-`4DAF00CF10CBABA8EB572E15EE43534C5DC091E14D3393847794C42F50DAD992`
+Install jobs use unique staging folders, exact completion markers, and
+cross-process reservations. A visible PowerShell host now records the complete
+terminal transcript beside each durable job log, so the affected game and its
+actual failing command remain inspectable instead of being reduced to a generic
+exit code.
 
-The final executable is 460,153,704 bytes and embeds the complete catalog
-payload: 1,179 games and 2,028 cached covers. The pause proof recorded
-`activeBeforePause=1.41`, `pausedDelta=0.00`, and `resumedDelta=1.64` seconds
-against `F:\study\Platforms\windows\autohotkey\mymainahk\frozen-processes.ini`.
-The live verification located its window on the non-primary display. Install
-requests are exact game/destination reservations with cross-process lock files,
-so repeated requests do not write the same game folder concurrently while
-independent destinations remain parallel.
+Installed games show recursively measured local bytes when available; Docker
+download size remains a separate fallback. Artwork and approximate completion
+time are loaded from the bundled catalog and incrementally refreshed through
+the title-validated metadata service without replacing good cached data after a
+provider mismatch or outage.
 
-The root bundle and the build-output bundle were synchronized by checksum
-after the final tests. The app was then launched from the root bundle and
-verified responding on the non-primary display.
+## Interface
+
+The WPF shell uses custom Windows 11 caption controls, Mica where supported,
+rounded semantic surfaces, light and dark palettes, visible keyboard focus,
+comfortable control targets, and polite accessibility announcements. It
+disables decorative backdrop effects in Windows high-contrast mode.

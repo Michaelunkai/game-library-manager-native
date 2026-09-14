@@ -25,21 +25,66 @@ namespace GameLibrary.Native;
 
 public sealed class CoverConverter : IValueConverter
 {
-    private static readonly Dictionary<string, BitmapImage?> cache = new(StringComparer.Ordinal);
+    private const int FallbackWidth = 128;
+    private const int FallbackHeight = 180;
+    private static readonly Dictionary<string, ImageSource> cache = new(StringComparer.Ordinal);
+
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        var path = value as string;
-        if (string.IsNullOrEmpty(path)) return null;
-        if (cache.TryGetValue(path, out var bitmap)) return bitmap;
+        var game = value as Game;
+        var source = game != null ? game.Cover ?? string.Empty : value as string ?? string.Empty;
+        var fallbackKey = game == null ? source : (string.IsNullOrWhiteSpace(game.Id) ? game.Name ?? string.Empty : game.Id);
+        var cacheKey = game == null ? source : "game:" + fallbackKey + "\0" + source;
+        if (cache.TryGetValue(cacheKey, out var image)) return image;
+
+        image = Load(source) ?? CreateFallback(fallbackKey);
+        if (cache.Count > 2500) cache.Clear();
+        cache[cacheKey] = image;
+        return image;
+    }
+
+    private static ImageSource? Load(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return null;
         try
         {
-            bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.DecodePixelHeight = 180;
-            bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.UriSource = new Uri(path); bitmap.EndInit(); bitmap.Freeze();
+            var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.DecodePixelHeight = FallbackHeight;
+            bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.UriSource = new Uri(source, UriKind.RelativeOrAbsolute); bitmap.EndInit();
+            if (bitmap.PixelWidth <= 0 || bitmap.PixelHeight <= 0) return null;
+            bitmap.Freeze();
+            return bitmap;
         }
-        catch { bitmap = null; }
-        if (cache.Count > 2500) cache.Clear();
-        cache[path] = bitmap;
-        return bitmap;
+        catch { return null; }
+    }
+
+    private static ImageSource CreateFallback(string key)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
+        byte red = (byte)(28 + hash[0] % 128);
+        byte green = (byte)(28 + hash[1] % 128);
+        byte blue = (byte)(28 + hash[2] % 128);
+        byte accentRed = (byte)Math.Min(255, red + 72);
+        byte accentGreen = (byte)Math.Min(255, green + 72);
+        byte accentBlue = (byte)Math.Min(255, blue + 72);
+        const int stride = FallbackWidth * 4;
+        var pixels = new byte[stride * FallbackHeight];
+
+        for (var y = 0; y < FallbackHeight; y++)
+        {
+            for (var x = 0; x < FallbackWidth; x++)
+            {
+                var accent = ((x / 16) + (y / 16)) % 2 == 0;
+                var offset = y * stride + x * 4;
+                pixels[offset] = accent ? accentBlue : blue;
+                pixels[offset + 1] = accent ? accentGreen : green;
+                pixels[offset + 2] = accent ? accentRed : red;
+                pixels[offset + 3] = 255;
+            }
+        }
+
+        var fallback = BitmapSource.Create(FallbackWidth, FallbackHeight, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        fallback.Freeze();
+        return fallback;
     }
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
@@ -75,14 +120,15 @@ public partial class MainWindow : Window
     private List<Game> filtered = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly DispatcherTimer poll = new() { Interval = TimeSpan.FromSeconds(2) };
+    private readonly DispatcherTimer installedScanPoll = new() { Interval = TimeSpan.FromSeconds(15) };
     private readonly DispatcherTimer playtime = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer searchDelay = new() { Interval = TimeSpan.FromMilliseconds(160) };
     private DateTime lastCatalogRefresh;
     private Forms.NotifyIcon? tray;
-    private bool ready, refreshing, closing, searchPending;
+    private bool ready, refreshing, closing, searchPending, installedScanning;
     private bool changingSelection, catalogStatsDirty = true;
     private readonly bool offline;
-    private readonly bool secondMonitor;
+    private readonly StartupPlacement startupPlacement;
     private readonly OfflineNetworkGuard? offlineNetwork;
     private bool startupPlacementQueued;
     private bool startupPlacementDone;
@@ -91,6 +137,8 @@ public partial class MainWindow : Window
     private string? adminToken;
     private readonly List<JobWindow> jobs = new();
     private readonly Dictionary<string, PlaySession> activePlays = new(StringComparer.Ordinal);
+    private readonly HashSet<string> wandIncludedGameIds = new(StringComparer.Ordinal);
+    private bool wandRegistrationSyncing;
     private readonly Dictionary<string, SemaphoreSlim> installGates = new(StringComparer.Ordinal);
     private readonly InstallReservationBook installReservations = new();
     // Direct Play and Play with Wand share one launch gate. This prevents a
@@ -101,26 +149,31 @@ public partial class MainWindow : Window
     internal bool IsClosing => closing;
     private static readonly HashSet<string> protectedTabs = new(StringComparer.Ordinal) { "not_for_me", "finished", "mybackup", "oporationsystems", "music", "win11maintaince", "3th_party_tools", "gamedownloaders" };
 
-    public MainWindow(LibraryStore store, bool offline = false, bool secondMonitor = true)
+    public MainWindow(LibraryStore store, bool offline = false, StartupMonitorMode monitorMode = StartupMonitorMode.Auto)
     {
-        Store = store; this.offline = offline; this.secondMonitor = secondMonitor;
+        Store = store; this.offline = offline; startupPlacement = WindowPlacement.Capture(monitorMode);
         offlineNetwork = offline ? new OfflineNetworkGuard() : null;
         Sync = new SyncClient(store, offlineNetwork);
         Program.SetCurrentProcessExplicitAppUserModelID("GameLibraryManager.Native");
         InitializeComponent();
-        if (secondMonitor) PlaceOnSecondaryMonitor();
+        PlaceOnStartupMonitor();
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
+        SourceInitialized += (_, _) => WindowEffects.Apply(this, State.Settings.Theme == "light");
         Loaded += OnLoaded;
-        ContentRendered += (_, _) => QueueSecondaryPlacement();
+        ContentRendered += (_, _) => QueueStartupPlacement();
         Closing += OnClosing;
+        SystemParameters.StaticPropertyChanged += SystemParametersChanged;
         StateChanged += (_, _) => ObserveUiAction("Window state change", () =>
         {
+            MaximizeWindow.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+            System.Windows.Automation.AutomationProperties.SetName(MaximizeWindow, WindowState == WindowState.Maximized ? "Restore" : "Maximize");
             if (!ready || WindowState != WindowState.Minimized || !State.Settings.MinimizeToTray) return;
-            if (!startupPlacementDone || DateTime.UtcNow < startupPlacementGraceUntilUtc) { QueueSecondaryPlacement(force: true); return; }
+            if (!startupPlacementDone || DateTime.UtcNow < startupPlacementGraceUntilUtc) { QueueStartupPlacement(force: true); return; }
             HideToTray();
         });
         PreviewKeyDown += Keyboard;
         poll.Tick += (_, _) => ObserveUiOperation("Catalog poll", () => Refresh(DateTime.UtcNow - lastCatalogRefresh >= TimeSpan.FromSeconds(15)));
+        installedScanPoll.Tick += (_, _) => ObserveUiOperation("Installed game scan", ScanConfiguredInstalledGamesAsync);
         playtime.Tick += (_, _) => ObserveUiAction("Play-time update", UpdatePlaySessions);
         searchDelay.Tick += (_, _) => ObserveUiAction("Search filter", () => { searchDelay.Stop(); ApplyFilter(); });
         GameList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, _) => ScheduleMetadata()));
@@ -133,20 +186,23 @@ public partial class MainWindow : Window
             StatusText.Text = "Preparing the bundled catalog…";
             await Task.Run(Store.EnsureAssets);
             lifetime.Token.ThrowIfCancellationRequested();
-            Sync.ReloadCache();
-            State = Store.LoadState();
+            State = await Task.Run(() =>
+            {
+                Sync.ReloadCache();
+                return Store.LoadState();
+            }, lifetime.Token);
             lifetime.Token.ThrowIfCancellationRequested();
-            Width = Math.Clamp(State.Settings.WindowWidth, MinWidth, SystemParameters.WorkArea.Width);
-            Height = Math.Clamp(State.Settings.WindowHeight, MinHeight, SystemParameters.WorkArea.Height);
-            if (secondMonitor) PlaceOnSecondaryMonitor();
+            Width = ClampWindowDimension(State.Settings.WindowWidth, MinWidth, SystemParameters.WorkArea.Width);
+            Height = ClampWindowDimension(State.Settings.WindowHeight, MinHeight, SystemParameters.WorkArea.Height);
+            PlaceOnStartupMonitor();
             tab = State.Settings.LastTab;
-            SortBox.ItemsSource = new[] { "Name A–Z", "Name Z–A", "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Recently Added", "Oldest First", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)", "Category" };
+            SortBox.ItemsSource = new[] { "Name A–Z", "Name Z–A", "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Recently Added", "Recently Played", "Oldest First", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)", "Category" };
             SortBox.SelectedItem = State.Settings.SortBy;
             if (SortBox.SelectedIndex < 0) SortBox.SelectedIndex = 4;
             RatingBox.ItemsSource = new[] { "Any rating", "1+ stars", "2+ stars", "3+ stars", "4+ stars", "5 stars" }; RatingBox.SelectedIndex = 0;
             lifetime.Token.ThrowIfCancellationRequested();
             InitializeTray(); ApplyTheme(); ready = true; Reload();
-            QueueSecondaryPlacement(force: true);
+            QueueStartupPlacement(force: true);
             // A fast automation client or a user can type while the bundled
             // catalog is still loading. Reapply that text after readiness so
             // the first search is never dropped by the ready guard.
@@ -155,18 +211,24 @@ public partial class MainWindow : Window
             StatusText.Text = Store.RecoveryNotice ?? $"Offline catalog ready · {Games.Count:N0} exact game identities";
             Store.Log("Window ready; catalog=" + Games.Count);
             if (Program.TestReport != null) { if (!offline) await Refresh(true); await RunUiProof(Program.TestReport); return; }
+            await SynchronizeWandSupportedGamesAsync();
             if (!offline) { poll.Start(); await Refresh(true); }
-            QueueSecondaryPlacement(force: true);
+            await ScanConfiguredInstalledGamesAsync();
+            if (!closing) installedScanPoll.Start();
+            QueueStartupPlacement(force: true);
         }
         catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Error(ex); }
     }
-    private static Forms.Screen? GetSecondaryScreen() => Forms.Screen.AllScreens
-        .Where(candidate => !candidate.Primary)
-        .OrderBy(candidate => candidate.Bounds.Left)
-        .FirstOrDefault();
-    private bool PlaceOnSecondaryMonitor() => PlaceOnSecondaryMonitor(GetSecondaryScreen());
-    private bool PlaceOnSecondaryMonitor(Forms.Screen? screen)
+    private Forms.Screen GetStartupScreen() => WindowPlacement.Resolve(startupPlacement);
+    internal static double ClampWindowDimension(double requested, double minimum, double available)
+    {
+        if (!double.IsFinite(requested) || requested <= 0) requested = minimum;
+        available = double.IsFinite(available) ? Math.Max(1, available) : Math.Max(1, minimum);
+        return Math.Min(available, Math.Max(Math.Min(Math.Max(1, minimum), available), requested));
+    }
+    private bool PlaceOnStartupMonitor() => PlaceOnStartupMonitor(GetStartupScreen());
+    private bool PlaceOnStartupMonitor(Forms.Screen? screen)
     {
         if (screen == null) return false;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -177,9 +239,9 @@ public partial class MainWindow : Window
         Top = area.Top + Math.Max(0, (area.Height - height) / 2);
         return true;
     }
-    private void QueueSecondaryPlacement(bool force = false)
+    private void QueueStartupPlacement(bool force = false)
     {
-        if (!secondMonitor || closing || (!force && startupPlacementQueued) || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        if (closing || (!force && startupPlacementQueued) || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
         startupPlacementQueued = true;
         try
         {
@@ -189,8 +251,8 @@ public partial class MainWindow : Window
                 if (closing) return;
                 WindowStartupLocation = WindowStartupLocation.Manual;
                 WindowState = WindowState.Normal;
-                var screen = GetSecondaryScreen();
-                var placed = PlaceOnSecondaryMonitor(screen);
+                var screen = GetStartupScreen();
+                var placed = PlaceOnStartupMonitor(screen);
                 if (!IsVisible) Show();
                 if (placed && screen != null)
                     placed = NativeWindow.PlaceOnWorkingArea(new WindowInteropHelper(this).Handle, screen.WorkingArea);
@@ -227,6 +289,7 @@ public partial class MainWindow : Window
             e.Cancel = true; return;
         }
         closing = true;
+        SystemParameters.StaticPropertyChanged -= SystemParametersChanged;
         try
         {
             try { lifetime.Cancel(); }
@@ -239,7 +302,7 @@ public partial class MainWindow : Window
             }
         }
         catch (Exception ex) { Store.Log("Shutdown state flush failed: " + ex); }
-        poll.Stop(); searchDelay.Stop(); playtime.Stop();
+        poll.Stop(); installedScanPoll.Stop(); searchDelay.Stop(); playtime.Stop();
         try { tray?.Dispose(); } catch (Exception ex) { Store.Log("Tray cleanup failed: " + ex.Message); } finally { tray = null; }
         foreach (var job in jobs.ToArray())
         {
@@ -263,6 +326,7 @@ public partial class MainWindow : Window
             game.IsPlaying = true;
             game.IsPlayPaused = active.Value.Timing.IsPaused;
         }
+        RefreshWandPlayAvailability();
         var categories = Store.LoadCategories(config);
         var hidden = Hidden(config);
         var choices = new List<Category> { new("all", "◈  All games"), new("wishlist", "♡  Wishlist"), new("installed", "▣  Installed") };
@@ -275,6 +339,105 @@ public partial class MainWindow : Window
         TagBox.ItemsSource = new[] { "All tags" }.Concat(State.GameTags.Values.SelectMany(t => t).Distinct().OrderBy(t => t)).ToArray();
         TagBox.SelectedItem = tag ?? "All tags"; if (TagBox.SelectedIndex < 0) TagBox.SelectedIndex = 0;
         ApplyFilter();
+    }
+    private void RefreshWandPlayAvailability()
+    {
+        foreach (var game in Games)
+        {
+            bool canLaunch = wandIncludedGameIds.Contains(game.Id);
+            if (game.CanPlayWithWand == canLaunch) continue;
+            game.CanPlayWithWand = canLaunch;
+            game.Notify(nameof(Game.CanPlayWithWand));
+        }
+    }
+    internal static int WandLibraryMatchScore(Game game, WandSupportedGame registration, string? savedLaunchPath)
+    {
+        if (!string.IsNullOrWhiteSpace(savedLaunchPath) && string.Equals(savedLaunchPath, registration.Path, StringComparison.OrdinalIgnoreCase)) return 100_000;
+        bool exactName = WandIntegration.Normalize(game.Name) == WandIntegration.Normalize(registration.Name);
+        if (exactName && string.Equals(game.Id, registration.Folder, StringComparison.Ordinal)) return 98_000;
+        if (exactName && string.Equals(game.Id, registration.Folder, StringComparison.OrdinalIgnoreCase)) return 96_000;
+        if (exactName && WandIntegration.Normalize(game.Id) == WandIntegration.Normalize(registration.Folder)) return 94_000;
+        if (exactName) return 90_000;
+        // A folder-shaped catalog id is not sufficient by itself. The catalog
+        // contains collisions such as Ashen/Ashen Empires and Tails of Iron/II;
+        // mapping on the id alone would put Wand on the wrong game card.
+        return 0;
+    }
+    private async Task SynchronizeWandSupportedGamesAsync()
+    {
+        if (closing || wandRegistrationSyncing || Program.TestReport != null) return;
+        wandRegistrationSyncing = true;
+        try
+        {
+            var registrations = await Task.Run(WandIntegration.LoadSupportedGames, lifetime.Token);
+            if (closing || registrations.Count == 0) return;
+            var used = new HashSet<string>(StringComparer.Ordinal);
+            var included = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var registration in registrations)
+            {
+                var match = Games
+                    .Where(game => !used.Contains(game.Id))
+                    .Select(game => new { Game = game, Score = WandLibraryMatchScore(game, registration, State.LaunchPaths.GetValueOrDefault(game.Id)) })
+                    .Where(candidate => candidate.Score > 0)
+                    .OrderByDescending(candidate => candidate.Score)
+                    .ThenBy(candidate => candidate.Game.Id, StringComparer.Ordinal)
+                    .Select(candidate => candidate.Game)
+                    .FirstOrDefault();
+                if (match == null)
+                {
+                    string runtimeId = Games.Any(game => string.Equals(game.Id, registration.Folder, StringComparison.Ordinal))
+                        ? "wand:" + registration.GameId
+                        : registration.Folder;
+                    match = new Game
+                    {
+                        Id = runtimeId,
+                        Name = registration.Name,
+                        Category = "installed",
+                        CategoryName = "Installed",
+                        Description = "Installed on this PC · exact Wand registration",
+                        IsLocal = true,
+                        ShowTime = State.Settings.ShowTimes,
+                        ShowCategory = State.Settings.ShowCategories,
+                        CoverHeight = State.Settings.GridSize == "small" ? 70 : State.Settings.GridSize == "large" ? 130 : 98
+                    };
+                    Games.Add(match);
+                    catalogStatsDirty = true;
+                }
+                used.Add(match.Id);
+                included.Add(match.Id);
+                if (!string.Equals(match.Name, registration.Name, StringComparison.Ordinal))
+                {
+                    match.Name = registration.Name;
+                    match.Notify(nameof(Game.Name));
+                }
+                State.LaunchPaths[match.Id] = registration.Path;
+                State.InstalledGames.Add(match.Id);
+                match.Installed = true;
+                match.CanPlayWithWand = true;
+                match.Notify("");
+            }
+            wandIncludedGameIds.Clear();
+            wandIncludedGameIds.UnionWith(included);
+            RefreshWandPlayAvailability();
+            ApplyFilter();
+            Store.Log("Wand included synchronized " + included.Count + " latest supported registrations.");
+            if (WandIncludedFilter.IsChecked == true)
+                StatusText.Text = "Wand included · " + included.Count + " latest registered games";
+        }
+        catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            Store.Log("Wand included refresh preserved the previous list: " + ex.Message);
+        }
+        finally { wandRegistrationSyncing = false; }
+    }
+    private bool CanLaunchWithExistingWand(Game game, out string message)
+    {
+        message = "This game is not in the latest Wand included registration list.";
+        if (!game.CanPlayWithWand || !wandIncludedGameIds.Contains(game.Id)) return false;
+        if (!State.LaunchPaths.ContainsKey(game.Id)) { message = "The exact Wand launch path is unavailable."; return false; }
+        message = string.Empty;
+        return true;
     }
     internal Task ImportBackupAsync(JsonObject document, CancellationToken cancellation) => Sync.ImportStateAsync(
         () => State,
@@ -305,12 +468,13 @@ public partial class MainWindow : Window
     internal void ApplyFilter()
     {
         if (!ready) return;
+        bool wandOnly = WandIncludedFilter.IsChecked == true;
         var hidden = Hidden(Sync.Effective(State));
-        IEnumerable<Game> visible = Games;
-        if (!IsAdmin) visible = visible.Where(g => !protectedTabs.Contains(g.Category) && !hidden.Contains(g.Category));
+        IEnumerable<Game> visible = wandOnly ? Games.Where(g => g.CanPlayWithWand) : Games;
+        if (!wandOnly && !IsAdmin) visible = visible.Where(g => !protectedTabs.Contains(g.Category) && !hidden.Contains(g.Category));
         string query = SearchBox.Text.Trim();
-        if (tab == "installed") visible = visible.Where(g => g.Installed);
-        else if (query.Length == 0)
+        if (!wandOnly && tab == "installed") visible = visible.Where(g => g.Installed);
+        else if (!wandOnly && query.Length == 0)
         {
             if (tab == "wishlist") visible = visible.Where(g => g.Wishlisted);
             else if (tab != "all") visible = visible.Where(g => g.Category == tab);
@@ -318,14 +482,17 @@ public partial class MainWindow : Window
         if (query.Length > 0) visible = visible.Where(g => MatchesSearch(g, query));
         if (InstalledOnlyFilter.IsChecked == true) visible = visible.Where(g => g.Installed);
         else if (WithoutInstalledFilter.IsChecked == true) visible = visible.Where(g => !g.Installed);
+        else if (wandOnly) visible = visible.Where(g => g.CanPlayWithWand);
         int rating = Math.Max(0, RatingBox.SelectedIndex); visible = visible.Where(g => g.Rating >= rating);
         string tag = TagBox.SelectedItem as string ?? "All tags";
         if (tag != "All tags") visible = visible.Where(g => State.GameTags.GetValueOrDefault(g.Id, new()).Contains(tag));
-        visible = SortGames(visible, SortBox.SelectedItem as string ?? "Recently Added");
+        string sort = SortBox.SelectedItem as string ?? "Recently Added";
+        visible = tab == "installed" ? SortInstalledGames(visible, sort) : SortGames(visible, sort);
         filtered = visible.ToList();
         GameList.ItemsSource = filtered;
         EmptyState.Visibility = filtered.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        PageTitle.Text = query.Length > 0 ? (tab == "installed" || InstalledOnlyFilter.IsChecked == true ? "Search installed games" : "Search all games")
+        PageTitle.Text = wandOnly ? (query.Length > 0 ? "Search Wand games" : "Wand included")
+            : query.Length > 0 ? (tab == "installed" || InstalledOnlyFilter.IsChecked == true ? "Search installed games" : "Search all games")
             : (CategoryList.SelectedItem as Category)?.Name.Replace("◈  ", "").Replace("♡  ", "").Replace("▣  ", "") ?? "All games";
         CatalogCaption.Text = $"{Games.Count:N0} games in your catalog · Search, organize, and play";
         UpdateStats();
@@ -335,8 +502,9 @@ public partial class MainWindow : Window
     {
         static IOrderedEnumerable<Game> NameAsc(IEnumerable<Game> games) => games.OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Id, StringComparer.Ordinal);
         static bool HasTime(Game g) => double.IsFinite(g.Time) && g.Time > 0;
-        static bool HasSize(Game g) => double.IsFinite(g.SizeGb) && g.SizeGb > 0;
+        static bool HasSize(Game g) => double.IsFinite(g.ComparableSizeGb) && g.ComparableSizeGb > 0;
         static bool HasRating(Game g) => g.Rating > 0;
+        static bool HasPlayed(Game g) => g.LastPlayedUtc != default || g.PlayedHours > 0;
         static bool HasDate(Game g) => g.Added != default || g.Category == "new";
         static DateTime DateValue(Game g) => g.Added != default ? g.Added : DateTime.UtcNow;
         return sort switch
@@ -346,13 +514,22 @@ public partial class MainWindow : Window
             "Time to Beat (Low–High)" => source.OrderBy(g => HasTime(g) ? 0 : 1).ThenBy(g => HasTime(g) ? g.Time : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Time to Beat (High–Low)" => source.OrderBy(g => HasTime(g) ? 0 : 1).ThenByDescending(g => HasTime(g) ? g.Time : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Oldest First" => source.OrderBy(g => HasDate(g) ? 0 : 1).ThenBy(g => HasDate(g) ? DateValue(g) : DateTime.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Recently Played" => source.OrderByDescending(g => HasPlayed(g)).ThenByDescending(g => g.LastPlayedUtc).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Rating (High–Low)" => source.OrderBy(g => HasRating(g) ? 0 : 1).ThenByDescending(g => HasRating(g) ? g.Rating : int.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Rating (Low–High)" => source.OrderBy(g => HasRating(g) ? 0 : 1).ThenBy(g => HasRating(g) ? g.Rating : int.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
-            "Size (Small–Large)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenBy(g => HasSize(g) ? g.SizeGb : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
-            "Size (Large–Small)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenByDescending(g => HasSize(g) ? g.SizeGb : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Size (Small–Large)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenBy(g => HasSize(g) ? g.ComparableSizeGb : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Size (Large–Small)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenByDescending(g => HasSize(g) ? g.ComparableSizeGb : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Category" => source.OrderBy(g => g.CategoryName, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             _ => source.OrderBy(g => HasDate(g) ? 0 : 1).ThenByDescending(g => HasDate(g) ? DateValue(g) : DateTime.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
         };
+    }
+    internal static IEnumerable<Game> SortInstalledGames(IEnumerable<Game> source, string secondarySort)
+    {
+        static bool HasPlayed(Game game) => game.LastPlayedUtc != default || game.PlayedHours > 0;
+        return SortGames(source, secondarySort).ToList()
+            .OrderByDescending(HasPlayed)
+            .ThenByDescending(game => game.LastPlayedUtc)
+            .ThenByDescending(game => game.PlayedHours);
     }
     private bool MatchesSearch(Game game, string query)
     {
@@ -382,8 +559,8 @@ public partial class MainWindow : Window
         catalogStatsDirty = false;
         }
         var selected = Games.Where(g => g.Selected).ToArray();
-        SelectedSize.Text = $"{selected.Sum(g => g.SizeGb):0.#} GB";
-        SelectedSize.ToolTip = $"{selected.Length} selected; {selected.Count(g => g.SizeGb <= 0)} sizes unknown";
+        SelectedSize.Text = $"{selected.Sum(g => g.ComparableSizeGb):0.#} GB";
+        SelectedSize.ToolTip = $"{selected.Length} selected; measured installed size is preferred over Docker download size; {selected.Count(g => g.ComparableSizeGb <= 0)} sizes unknown";
     }
     internal void Save() { try { Store.Save(State); } catch (Exception ex) { Error(ex); } }
     private string FrozenProcessesPath => string.IsNullOrWhiteSpace(State.Settings.FrozenProcessesPath)
@@ -516,14 +693,15 @@ public partial class MainWindow : Window
         catch (InvalidOperationException) { }
         catch (Exception ex) { try { Store.Log(operation + " dispatch failed: " + ex); } catch { } }
     }
-    private void ReportUiFailure(string operation, Exception ex)
+    internal void ReportUiFailure(string operation, Exception ex)
     {
         try { Store.Log(operation + ": " + ex); } catch { }
         if (closing || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
         try
         {
-            StatusText.Text = ex.Message;
-            if (IsVisible) System.Windows.MessageBox.Show(this, ex.Message, "Game Library", MessageBoxButton.OK, MessageBoxImage.Warning);
+            // Operation failures stay non-modal so a stale process, network error,
+            // or background task can never hold the entire library behind a dialog.
+            StatusText.Text = operation + ": " + ex.Message;
         }
         catch (Exception reportError) { try { Store.Log(operation + " reporting failed: " + reportError); } catch { } }
     }
@@ -533,8 +711,21 @@ public partial class MainWindow : Window
     private void FilterChanged(object sender, SelectionChangedEventArgs e) { if (!ready) return; State.Settings.SortBy = SortBox.SelectedItem as string ?? "Newest first"; Save(); ApplyFilter(); }
     private void InstalledFilterChanged(object sender, RoutedEventArgs e)
     {
-        if (sender == InstalledOnlyFilter && InstalledOnlyFilter.IsChecked == true) WithoutInstalledFilter.IsChecked = false;
-        else if (sender == WithoutInstalledFilter && WithoutInstalledFilter.IsChecked == true) InstalledOnlyFilter.IsChecked = false;
+        if (sender == InstalledOnlyFilter && InstalledOnlyFilter.IsChecked == true)
+        {
+            WithoutInstalledFilter.IsChecked = false;
+            WandIncludedFilter.IsChecked = false;
+        }
+        else if (sender == WithoutInstalledFilter && WithoutInstalledFilter.IsChecked == true)
+        {
+            InstalledOnlyFilter.IsChecked = false;
+            WandIncludedFilter.IsChecked = false;
+        }
+        else if (sender == WandIncludedFilter && WandIncludedFilter.IsChecked == true)
+        {
+            InstalledOnlyFilter.IsChecked = false;
+            WithoutInstalledFilter.IsChecked = false;
+        }
         if (ready) ApplyFilter();
     }
     // Kept as a stable test/automation entry point for older callers.
@@ -543,7 +734,7 @@ public partial class MainWindow : Window
     private void GameSelectionChanged(object sender, SelectionChangedEventArgs e) { }
     private void SelectAll(object sender, RoutedEventArgs e) { changingSelection = true; try { foreach (var game in filtered) game.Selected = true; } finally { changingSelection = false; } UpdateStats(); }
     private void DeselectAll(object sender, RoutedEventArgs e) { changingSelection = true; try { foreach (var game in Games) game.Selected = false; } finally { changingSelection = false; } UpdateStats(); }
-    private void ResetFilters(object sender, RoutedEventArgs e) { SearchBox.Text = ""; RatingBox.SelectedIndex = 0; TagBox.SelectedIndex = 0; InstalledOnlyFilter.IsChecked = false; WithoutInstalledFilter.IsChecked = false; ApplyFilter(); }
+    private void ResetFilters(object sender, RoutedEventArgs e) { SearchBox.Text = ""; RatingBox.SelectedIndex = 0; TagBox.SelectedIndex = 0; InstalledOnlyFilter.IsChecked = false; WithoutInstalledFilter.IsChecked = false; WandIncludedFilter.IsChecked = false; ApplyFilter(); }
     private void ToggleWishlist(object sender, RoutedEventArgs e) { if (((Button)sender).Tag is Game game) { if (!State.Wishlist.Add(game.Id)) State.Wishlist.Remove(game.Id); Save(); Reload(); } }
     private void GameDoubleClick(object sender, MouseButtonEventArgs e) { if (GameList.SelectedItem is Game game) Details(game); }
     private void OpenGameDetails(object sender, RoutedEventArgs e) { if (((Button)sender).Tag is Game game) Details(game); }
@@ -555,7 +746,13 @@ public partial class MainWindow : Window
     private void PlayWithWandFromCard(object sender, RoutedEventArgs e)
     {
         if (((Button)sender).Tag is not Game game) return;
+        if (!CanLaunchWithExistingWand(game, out var reason)) { StatusText.Text = reason; return; }
         ObserveUiOperation("Play with Wand", () => PlayWithWand(game));
+    }
+    private void ForceExitGameAndWandFromCard(object sender, RoutedEventArgs e)
+    {
+        if (((Button)sender).Tag is not Game game) return;
+        ObserveUiAction("Force exit game and Wand", () => ForceExitGameAndWand(game));
     }
     private void RefreshCatalog(object sender, RoutedEventArgs e) => ObserveUiOperation("Catalog refresh", () => Refresh(true));
     internal async Task Refresh(bool full)
@@ -565,23 +762,62 @@ public partial class MainWindow : Window
         if (full) lastCatalogRefresh = DateTime.UtcNow;
         refreshing = true; StatusText.Text = full ? "Refreshing catalog and Docker tags…" : "Checking shared changes…";
         var before = Sync.Effective(State).ToJsonString();
-        try { await Sync.Refresh(State, full, adminToken, lifetime.Token); if (!closing) { if (full || before != Sync.Effective(State).ToJsonString()) Reload(); StatusText.Text = Sync.Status; } }
+        try
+        {
+            await Sync.Refresh(State, full, adminToken, lifetime.Token);
+            if (!closing)
+            {
+                if (full || before != Sync.Effective(State).ToJsonString()) Reload();
+                await SynchronizeWandSupportedGamesAsync();
+                StatusText.Text = Sync.Status;
+            }
+        }
         catch (Exception ex) { if (!closing) Error(ex); }
         finally { refreshing = false; if (!closing) ScheduleMetadata(); }
     }
     private void ToggleTheme(object sender, RoutedEventArgs e) { State.Settings.Theme = State.Settings.Theme == "dark" ? "light" : "dark"; Save(); ApplyTheme(); }
+    private void MinimizeWindowClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void MaximizeWindowClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void CloseWindowClick(object sender, RoutedEventArgs e) => Close();
     private void ApplyTheme()
     {
         bool light = State.Settings.Theme == "light";
-        var values = new Dictionary<string, string> { ["CanvasBrush"] = light ? "#F3F5F6" : "#101217", ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["CardBrush"] = light ? "#E8EDF0" : "#1D222C", ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9", ["AccentBrush"] = light ? "#58B37F" : "#9CE7BB" };
+        var values = new Dictionary<string, string>
+        {
+            ["CanvasBrush"] = light ? "#F3F6F8" : "#0F1217", ["ShellBrush"] = light ? "#F9FBFC" : "#12161D",
+            ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["SurfaceBrush"] = light ? "#FFFFFF" : "#171B23",
+            ["ElevatedSurfaceBrush"] = light ? "#EDF2F5" : "#222936", ["CardBrush"] = light ? "#F0F4F6" : "#1D222C",
+            ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["SubtleStrokeBrush"] = light ? "#DDE5EA" : "#26303D",
+            ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9",
+            ["AccentBrush"] = light ? "#3E9C68" : "#9CE7BB", ["AccentHoverBrush"] = light ? "#2F8558" : "#B3F2CB",
+            ["AccentPressedBrush"] = light ? "#236A45" : "#78C99B", ["SuccessBrush"] = light ? "#218653" : "#63D39A",
+            ["WarningBrush"] = light ? "#9A6500" : "#F0C36B", ["DangerBrush"] = light ? "#C42B1C" : "#FF7B7B",
+            ["InformationBrush"] = light ? "#0067C0" : "#71B7FF", ["FocusBrush"] = light ? "#0067C0" : "#8DC8FF",
+            ["AccentOnBrush"] = light ? "#FFFFFF" : "#13211A", ["SelectionBrush"] = light ? "#9CCAF0" : "#426F61"
+        };
+        if (SystemParameters.HighContrast)
+        {
+            string canvas = SystemColors.WindowColor.ToString(), text = SystemColors.WindowTextColor.ToString();
+            string accent = SystemColors.HighlightColor.ToString(), accentText = SystemColors.HighlightTextColor.ToString();
+            values["CanvasBrush"] = values["ShellBrush"] = values["PanelBrush"] = values["SurfaceBrush"] = values["CardBrush"] = values["ElevatedSurfaceBrush"] = canvas;
+            values["TextBrush"] = values["MutedBrush"] = text;
+            values["StrokeBrush"] = values["SubtleStrokeBrush"] = SystemColors.WindowTextColor.ToString();
+            values["AccentBrush"] = values["AccentHoverBrush"] = values["AccentPressedBrush"] = values["FocusBrush"] = values["SelectionBrush"] = accent;
+            values["AccentOnBrush"] = accentText;
+        }
         foreach (var entry in values) System.Windows.Application.Current.Resources[entry.Key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(entry.Value));
+        WindowEffects.Apply(this, light);
+    }
+    private void SystemParametersChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SystemParameters.HighContrast)) Dispatcher.BeginInvoke(ApplyTheme);
     }
     private void Keyboard(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key == Key.K) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; }
         else if (e.Key == Key.F5) { ObserveUiOperation("Catalog refresh", () => Refresh(true)); e.Handled = true; }
         else if (KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key == Key.A && !SearchBox.IsKeyboardFocused) { SelectAll(this, new()); e.Handled = true; }
-        else if (e.Key == Key.Enter && GameList.IsKeyboardFocusWithin && GameList.SelectedItem is Game game) { Details(game); e.Handled = true; }
+        else if (e.Key == Key.Enter && GameList.IsKeyboardFocusWithin && System.Windows.Input.Keyboard.FocusedElement is not System.Windows.Controls.Primitives.ButtonBase && GameList.SelectedItem is Game game) { Details(game); e.Handled = true; }
         else if (e.Key == Key.Escape) { SearchBox.Clear(); DeselectAll(this, new()); }
     }
     private static ModifierKeys KeyboardModifiers => System.Windows.Input.Keyboard.Modifiers;
@@ -603,19 +839,20 @@ public partial class MainWindow : Window
         public Dictionary<int, string> ProcessCreationStamps { get; } = new();
         public bool PauseStateUnavailable { get; set; }
     }
-    private void StartPlaySession(Game game, Func<Process> start)
+    private bool StartPlaySession(Game game, Func<Process> start)
     {
-        if (TryActivateExistingPlay(game)) return;
+        if (TryActivateExistingPlay(game)) return true;
         Process? launched = null;
         try
         {
             launched = start();
-            TrackPlayProcess(game, launched, ownsProcess: true);
+            bool tracked = TrackPlayProcess(game, launched, ownsProcess: true);
             launched = null;
+            return tracked;
         }
         finally
         {
-            if (launched != null) StopUntrackedProcess(launched, "direct launch tracking");
+            if (launched != null) ReleaseUntrackedProcessHandle(launched, "direct launch tracking");
         }
     }
     private async Task StartPlaySessionAsync(Game game, Func<Task<Process>> start)
@@ -630,7 +867,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (launched != null) StopUntrackedProcess(launched, "direct async launch tracking");
+            if (launched != null) ReleaseUntrackedProcessHandle(launched, "direct async launch tracking");
         }
     }
     private bool TryActivateExistingPlay(Game game)
@@ -641,16 +878,69 @@ public partial class MainWindow : Window
         CommitPlaySession(game.Id, existing); Save();
         return false;
     }
-    private void TrackPlayProcess(Game game, Process process, bool usesWand = false, bool ownsProcess = false)
+    private void ForceExitGameAndWand(Game game)
+    {
+        Store.Log("User requested Exit game + Wand for " + game.Id + ".");
+        if (!activePlays.TryGetValue(game.Id, out var session))
+        {
+            SetGamePlayState(game.Id, playing: false, paused: false);
+            StatusText.Text = game.Name + " is no longer being tracked as running.";
+            return;
+        }
+
+        bool gameStopped = false;
+        try
+        {
+            if (session.Process.HasExited) gameStopped = true;
+            else
+            {
+                gameStopped = RequestImmediateProcessTreeExit(session.Process);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            Store.Log("User-requested force exit could not stop " + game.Id + ": " + ex.Message);
+        }
+
+        if (gameStopped && activePlays.TryGetValue(game.Id, out var current) && ReferenceEquals(current, session))
+        {
+            CommitPlaySession(game.Id, session);
+            Save();
+        }
+
+        // This method is reached only from the explicitly labelled destructive
+        // control above; normal play tracking never closes Wand or another game.
+        int closedWandProcesses = WandIntegration.ForceCloseRunningClient(Store);
+        StatusText.Text = gameStopped
+            ? "Force-closed " + game.Name + " and " + closedWandProcesses + " Wand process(es)."
+            : "Could not confirm that " + game.Name + " exited; requested Wand shutdown for " + closedWandProcesses + " process(es).";
+    }
+    internal static bool RequestImmediateProcessTreeExit(Process process)
+    {
+        if (process.HasExited) return true;
+        process.Kill(entireProcessTree: true);
+        // Kill is an immediate OS request. Do not hold the UI for a process wait;
+        // the explicit Exit action must also reach Wand without delay.
+        return true;
+    }
+    private bool TrackPlayProcess(Game game, Process process, bool usesWand = false, bool ownsProcess = false)
     {
         try
         {
+            process.Refresh();
+            if (process.HasExited)
+            {
+                ReleaseUntrackedProcessHandle(process, "process exited before tracking");
+                Store.Log("Game " + game.Id + " exited before play tracking could begin; no error dialog was shown.");
+                return false;
+            }
             process.EnableRaisingEvents = true;
             string executable;
             try { executable = process.MainModule?.FileName ?? State.LaunchPaths.GetValueOrDefault(game.Id, ""); }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { executable = State.LaunchPaths.GetValueOrDefault(game.Id, ""); }
             int processId = process.Id;
             var now = DateTime.UtcNow;
+            State.LastPlayedUtc[game.Id] = now;
             var session = new PlaySession { Process = process, ExecutablePath = executable, Timing = new ActivePlaytime(State.PlayTimeSeconds.GetValueOrDefault(game.Id), Stopwatch.GetTimestamp()), UsesWand = usesWand, GraceUntilUtc = now.AddSeconds(20), LastSavedUtc = now };
             session.ObservedProcessIds.Add(processId);
             if (FrozenProcessState.TryGetCreationStamp(process, out var creationStamp)) session.ProcessCreationStamps[processId] = creationStamp;
@@ -660,19 +950,37 @@ public partial class MainWindow : Window
             catch (Exception ex) { Store.Log("Initial AHK pause-state sample failed for " + game.Id + "; playtime will continue from the next poll: " + ex.Message); }
             Store.Log("Launched game " + game.Id + "; tracking play time from PID " + processId);
             StatusText.Text = "Playing " + game.Name + " · tracking time";
+            UpdateLastPlayed(game.Id, now);
+            Save();
+            ApplyFilter();
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            bool exited;
+            try { exited = process.HasExited; }
+            catch (InvalidOperationException) { exited = true; }
+            if (exited)
+            {
+                ReleaseUntrackedProcessHandle(process, "process exited during tracking setup");
+                Store.Log("Game " + game.Id + " exited during play tracking setup; the stale process race was ignored.");
+                return false;
+            }
+            if (ownsProcess) ReleaseUntrackedProcessHandle(process, "play tracking");
+            else { try { process.Dispose(); } catch { } }
+            throw;
         }
         catch
         {
-            if (ownsProcess) StopUntrackedProcess(process, "play tracking");
+            if (ownsProcess) ReleaseUntrackedProcessHandle(process, "play tracking");
             else { try { process.Dispose(); } catch { } }
             throw;
         }
     }
-    private void StopUntrackedProcess(Process process, string context)
+    private void ReleaseUntrackedProcessHandle(Process process, string context)
     {
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-        catch (Exception ex) { try { Store.Log("Could not stop the untracked process after " + context + ": " + ex.Message); } catch { } }
-        finally { try { process.Dispose(); } catch { } }
+        try { process.Dispose(); }
+        catch (Exception ex) { try { Store.Log("Could not release the untracked process handle after " + context + ": " + ex.Message); } catch { } }
     }
     private static void ActivateProcess(Process process)
     {
@@ -786,11 +1094,16 @@ public partial class MainWindow : Window
         var game = Games.FirstOrDefault(g => g.Id == id); if (game == null) return;
         game.PlayedHours = Math.Max(0, seconds) / 3600d; game.Notify(nameof(Game.PlayedHours)); game.Notify(nameof(Game.PlayedMeta)); game.Notify(nameof(Game.Meta));
     }
+    private void UpdateLastPlayed(string id, DateTime utc)
+    {
+        var game = Games.FirstOrDefault(g => g.Id == id); if (game == null) return;
+        game.LastPlayedUtc = utc; game.Notify(nameof(Game.LastPlayedUtc));
+    }
     private void SetGamePlayState(string id, bool playing, bool paused)
     {
         var game = Games.FirstOrDefault(candidate => candidate.Id == id); if (game == null) return;
         game.IsPlaying = playing; game.IsPlayPaused = playing && paused;
-        game.Notify(nameof(Game.IsPlaying)); game.Notify(nameof(Game.IsPlayPaused)); game.Notify(nameof(Game.PlayedMeta));
+        game.Notify(nameof(Game.IsPlaying)); game.Notify(nameof(Game.IsPlayPaused)); game.Notify(nameof(Game.PlayLabel)); game.Notify(nameof(Game.PlayedMeta));
     }
     private void AdminSignIn(object sender, RoutedEventArgs e)
     {
@@ -927,6 +1240,30 @@ public partial class MainWindow : Window
             review.ShowDialog();
         }
         catch (Exception ex) { Error(ex); }
+    }
+    private async Task ScanConfiguredInstalledGamesAsync()
+    {
+        if (!ready || closing || installedScanning) return;
+        await SynchronizeWandSupportedGamesAsync();
+        string root = State.Settings.MountPath?.Trim() ?? "";
+        if (root.Length == 0 || !Path.IsPathFullyQualified(root) || !Directory.Exists(root)) return;
+        installedScanning = true;
+        try
+        {
+            var snapshot = Games.Where(g => !g.IsLocal).Select(g => (g.Id, g.Name)).ToArray();
+            var found = await Task.Run(() => InstalledScanner.Discover(root, snapshot, lifetime.Token), lifetime.Token);
+            if (closing) return;
+            bool changed = ApplyInstalledScan(found, logNotices: false);
+            if (changed)
+                StatusText.Text = $"Installed scan updated the saved library · {found.Games.Count:N0} playable game(s) found";
+        }
+        catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            Store.Log("Automatic installed scan failed: " + ex.Message);
+            StatusText.Text = "Installed scan unavailable; saved installed games were preserved.";
+        }
+        finally { installedScanning = false; }
     }
     private void ScanFolder(object sender, RoutedEventArgs e) => ObserveUiOperation("Installed folder scan", ScanFolderAsync);
     private async Task ScanFolderAsync()

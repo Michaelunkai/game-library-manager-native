@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
@@ -13,6 +15,33 @@ namespace GameLibrary.Native;
 
 public sealed class MetadataClient : IDisposable
 {
+    // These are the provider identities that cannot be recovered from the
+    // Docker tag by ordinary title normalization. Keep this list closed: the
+    // provider's "known" labels are evidence that an override was curated,
+    // not permission to accept an arbitrary title for the requested id.
+    private static readonly IReadOnlyDictionary<string, string[]> KnownProviderAliases = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["dragonquest1n2hd2dremake"] = new[] { "Dragon Quest I & II HD-2D Remake" },
+        ["the-first-berserker-khazan"] = new[] { "The First Berserker Khazan" },
+        ["007-first-light"] = new[] { "007 First Light" },
+        ["ofashnsteel"] = new[] { "Of Ash and Steel" },
+        ["Oceanhorn2"] = new[] { "Oceanhorn 2: Knights of the Lost Realm" },
+        ["freedom-planet-2"] = new[] { "Freedom Planet 2" },
+        ["tails-of-iron-2"] = new[] { "Tails of Iron 2: Whiskers of Winter" },
+        ["song-of-nunu"] = new[] { "Song of Nunu: A League of Legends Story" },
+        ["beyond-good-and-evil-20th-ae"] = new[] { "Beyond Good & Evil - 20th Anniversary Edition" },
+        ["dying-light-2"] = new[] { "Dying Light 2 Stay Human: Reloaded Edition" },
+        ["death-stranding-2"] = new[] { "DEATH STRANDING 2: ON THE BEACH" },
+        ["the-last-oricru"] = new[] { "The Last Oricru - Final Cut" },
+        ["planet-of-lana-ii"] = new[] { "Planet of Lana II" },
+        ["avatarfrontiersofpandora"] = new[] { "Avatar: Frontiers of Pandora" },
+        ["mafiatheoldcountry"] = new[] { "Mafia: The Old Country" }
+    };
+    private static readonly HashSet<string> RejectedProviderTokens = new(StringComparer.Ordinal)
+    {
+        "soundtrack", "ost", "dlc", "demo", "artbook", "expansion", "season", "pass"
+    };
+
     private readonly HttpClient http;
     public MetadataClient(HttpMessageHandler? handler = null)
     {
@@ -20,19 +49,119 @@ public sealed class MetadataClient : IDisposable
         http.Timeout = TimeSpan.FromSeconds(25);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("GameLibraryNative/1.0");
     }
+    private static string NormalizeTitle(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var result = new StringBuilder();
+        string decomposed = value.Normalize(NormalizationForm.FormD);
+        char previous = '\0';
+        bool previousWasWord = false;
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark) continue;
+            // Apostrophes are spelling punctuation, not title-word boundaries:
+            // "Witch's" and the Docker-safe "witchs" should compare equally.
+            if (character is '\'' or '\u2019') continue;
+            if (character is '+' or '#')
+            {
+                if (result.Length > 0 && result[^1] != ' ') result.Append(' ');
+                result.Append(character == '+' ? "plus" : "sharp");
+                result.Append(' ');
+                previous = '\0';
+                previousWasWord = false;
+                continue;
+            }
+            if (!char.IsLetterOrDigit(character))
+            {
+                if (result.Length > 0 && result[^1] != ' ') result.Append(' ');
+                previous = '\0';
+                previousWasWord = false;
+                continue;
+            }
+
+            bool splitWord = previousWasWord &&
+                ((char.IsLetter(previous) && char.IsDigit(character)) ||
+                 (char.IsDigit(previous) && char.IsLetter(character)));
+            if (splitWord && result.Length > 0 && result[^1] != ' ') result.Append(' ');
+            result.Append(char.ToLowerInvariant(character));
+            previous = character;
+            previousWasWord = true;
+        }
+        return result.ToString().Trim();
+    }
+    private static string CompactTitle(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var result = new StringBuilder();
+        string decomposed = value.Normalize(NormalizationForm.FormD);
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark || character is '\'' or '\u2019') continue;
+            if (character == '+') result.Append("plus");
+            else if (character == '#') result.Append("sharp");
+            else if (char.IsLetterOrDigit(character)) result.Append(char.ToLowerInvariant(character));
+        }
+        return result.ToString();
+    }
+    private static bool HasIdentityNumberToken(string normalized) =>
+        normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(token =>
+            token.Any(char.IsDigit) || (token.Length > 0 && token.All(character => character is 'i' or 'v' or 'x' or 'l' or 'c' or 'd' or 'm')));
     public static bool SameTitle(string expected, string actual)
     {
-        static string Normalize(string value) => Regex.Replace(value.ToLowerInvariant(), @"[^\p{L}\p{N}]", "");
-        return Normalize(expected).Length > 0 && Normalize(expected) == Normalize(actual);
+        var normalizedExpected = NormalizeTitle(expected);
+        var normalizedActual = NormalizeTitle(actual);
+        if (normalizedExpected.Length == 0 || normalizedActual.Length == 0) return false;
+        if (normalizedExpected == normalizedActual) return true;
+        // Compact comparison repairs harmless provider presentation changes
+        // such as "LumenTale" versus "lumentale", but is disabled whenever a
+        // numeric or Roman-numeral token could change the game's identity.
+        return !HasIdentityNumberToken(normalizedExpected) && !HasIdentityNumberToken(normalizedActual) &&
+            CompactTitle(expected) == CompactTitle(actual);
     }
-    public static bool MatchesGame(Game game, JsonObject metadata) => DataJson.Text(metadata["id"]) == game.Id &&
-        (SameTitle(game.Name, DataJson.Text(metadata["name"])) ||
-         // The existing first-party endpoint explicitly marks its curated tag-to-Steam aliases.
-         // Generic search matches still require the exact normalized title (no soundtrack/DLC guess).
-         (DataJson.Text(metadata["name"]).Length > 0 && DataJson.Text(metadata["source"]?["image"]) == "steam-known" && DataJson.Text(metadata["source"]?["time"]) == "known-override"));
+    private static bool TitleMatchesExpected(string expected, string actual)
+    {
+        if (SameTitle(expected, actual)) return true;
+        var expectedTokens = NormalizeTitle(expected).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var actualTokens = NormalizeTitle(actual).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (expectedTokens.Length == 0 || actualTokens.Length == 0) return false;
+        if (actualTokens.Any(token => RejectedProviderTokens.Contains(token))) return false;
+
+        // Provider titles often append a subtitle or edition. Require every
+        // meaningful tag token in order, rather than accepting arbitrary
+        // fuzzy similarity (which previously admitted unrelated titles).
+        var required = expectedTokens.Where(token => token is not ("a" or "an" or "and" or "of" or "the")).ToArray();
+        if (required.Length < 2) return false;
+        int cursor = 0;
+        foreach (var token in required)
+        {
+            int found = Array.IndexOf(actualTokens, token, cursor);
+            if (found < 0) return false;
+            cursor = found + 1;
+        }
+        return true;
+    }
+    private static string ExpectedTitle(Game game) => game.Discovered && game.Id.Length > 0 ? LibraryStore.FormatName(game.Id) : game.Name;
+    private static bool IsKnownAlias(Game game, string actual) =>
+        KnownProviderAliases.TryGetValue(game.Id, out var aliases) && aliases.Any(alias => SameTitle(alias, actual));
+    private static bool IsCuratedProviderOverride(JsonObject metadata) =>
+        DataJson.Text(metadata["source"]?["image"]) == "steam-known" && DataJson.Text(metadata["source"]?["time"]) == "known-override";
+    internal static bool HasAcceptableDiscoveredTitle(Game game) =>
+        TitleMatchesExpected(ExpectedTitle(game), game.Name) || IsKnownAlias(game, game.Name);
+    public static bool MatchesGame(Game game, JsonObject metadata)
+    {
+        if (!string.Equals(DataJson.Text(metadata["id"]), game.Id, StringComparison.Ordinal)) return false;
+        string actual = DataJson.Text(metadata["name"]);
+        if (TitleMatchesExpected(ExpectedTitle(game), actual)) return true;
+        // A non-equivalent title is accepted only for a closed, explicitly
+        // curated provider alias and its provider override marker. This
+        // rejects false positives such as a same-id RAWG result for an
+        // unrelated game.
+        return IsCuratedProviderOverride(metadata) && IsKnownAlias(game, actual);
+    }
     public async Task<JsonObject> Refresh(Game game, LibraryStore store, bool cover, bool time, CancellationToken cancellation)
     {
-        string url = SyncClient.Production + "api/game-metadata?id=" + Uri.EscapeDataString(game.Id) + "&name=" + Uri.EscapeDataString(game.Name) + "&category=" + Uri.EscapeDataString(game.Category);
+        string queryName = ExpectedTitle(game);
+        string url = SyncClient.Production + "api/game-metadata?id=" + Uri.EscapeDataString(game.Id) + "&name=" + Uri.EscapeDataString(queryName) + "&category=" + Uri.EscapeDataString(game.Category);
         var raw = JsonNode.Parse(await http.GetStringAsync(url, cancellation))?.AsObject() ?? throw new FormatException("Empty metadata response.");
         if (raw["success"]?.GetValue<bool>() != true) throw new FormatException(DataJson.Text(raw["error"], "Metadata is unavailable."));
         if (!MatchesGame(game, raw)) throw new FormatException("The provider returned a different title (" + DataJson.Text(raw["name"]) + "). Existing metadata was preserved.");
@@ -99,7 +228,14 @@ public partial class MainWindow
     private JsonObject? metadataAttempts;
     internal static bool MetadataDue(Game game, JsonObject attempts, DateTime now)
     {
-        if (game.IsLocal || (!string.IsNullOrEmpty(game.Cover) && game.Time > 0)) return false;
+        if (game.IsLocal) return false;
+        // A previously accepted provider name can be loaded back into a
+        // discovered Docker row. Revisit it when it no longer matches the
+        // tag identity, but honor the same persisted retry barrier as missing
+        // artwork. Otherwise one rejected provider result is selected again
+        // on every loop and can keep the UI/logging/storage stack busy forever.
+        bool discoveredTitleMismatch = game.Discovered && !MetadataClient.HasAcceptableDiscoveredTitle(game);
+        if (!discoveredTitleMismatch && !string.IsNullOrEmpty(game.Cover) && game.Time > 0) return false;
         return !DateTime.TryParse(DataJson.Text(attempts[game.Id]?["retryAfter"]), out var retry) || retry.ToUniversalTime() <= now;
     }
     private void ScheduleMetadata()

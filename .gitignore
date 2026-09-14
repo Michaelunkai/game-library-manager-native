@@ -6,6 +6,7 @@
 /native/bin/
 /native/obj/
 /native/Assets/catalog.zip
+/.worktrees/
 
 # Local verification output can be regenerated; keep committed small receipts
 /evidence/*.log

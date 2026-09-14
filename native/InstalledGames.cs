@@ -20,7 +20,34 @@ public sealed class LocalGame
         Encoding.UTF8.GetBytes(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant()))).ToLowerInvariant();
 }
 
-public sealed record InstalledDiscovery(string Id, string Name, string Folder, string? Launcher, bool IsLocal);
+public sealed record InstalledDiscovery(string Id, string Name, string Folder, string? Launcher, bool IsLocal, long InstalledBytes = 0);
+
+internal static class InstalledSize
+{
+    internal static long Measure(string folder, System.Threading.CancellationToken cancellation = default)
+    {
+        if (!Directory.Exists(folder)) return 0;
+        long total = 0;
+        bool complete = true;
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+        try
+        {
+            foreach (string path in Directory.EnumerateFiles(folder, "*", options))
+            {
+                cancellation.ThrowIfCancellationRequested();
+                try { total = checked(total + new FileInfo(path).Length); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException) { complete = false; }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { complete = false; }
+        return complete ? Math.Max(0, total) : -1;
+    }
+}
 
 public sealed class InstalledScanResult
 {
@@ -31,37 +58,70 @@ public sealed class InstalledScanResult
     // Keep that distinction so an explicit scan can clear stale markers without
     // treating an incomplete download as an absent installation.
     internal HashSet<string> CatalogFoldersPresent { get; } = new(StringComparer.Ordinal);
+    // A folder with an executable can still require a manual choice when it
+    // contains several candidates. Keep that playable distinction separate
+    // from mere folder presence so support-only Docker payloads cannot remain
+    // marked Installed after an explicit scan.
+    internal HashSet<string> CatalogGamesWithExecutable { get; } = new(StringComparer.Ordinal);
     public int LauncherCount => Games.Count(g => g.Launcher != null);
 }
 
 public partial class MainWindow
 {
-    internal void ApplyInstalledScan(InstalledScanResult result, bool reconcileMissingCatalog = false)
+    internal bool ApplyInstalledScan(InstalledScanResult result, bool reconcileMissingCatalog = false, bool logNotices = true)
     {
+        bool changed = false;
         foreach (var entry in result.Games)
         {
             if (entry.IsLocal && !State.LocalGames.ContainsKey(entry.Id))
+            {
                 State.LocalGames[entry.Id] = new LocalGame { Name = entry.Name, Folder = entry.Folder };
+                changed = true;
+            }
+            else if (entry.IsLocal && State.LocalGames.TryGetValue(entry.Id, out var local) &&
+                (!string.Equals(local.Name, entry.Name, StringComparison.Ordinal) || !string.Equals(local.Folder, entry.Folder, StringComparison.Ordinal)))
+            {
+                local.Name = entry.Name; local.Folder = entry.Folder; changed = true;
+            }
             // An explicit launcher choice wins over scanner inference while it still exists.
             if (entry.Launcher != null && (!State.LaunchPaths.TryGetValue(entry.Id, out var previous) || !File.Exists(previous)))
+            {
                 State.LaunchPaths[entry.Id] = entry.Launcher;
-            State.InstalledGames.Add(entry.Id);
+                changed = true;
+            }
+            if (State.InstalledGames.Add(entry.Id)) changed = true;
+            if (entry.InstalledBytes >= 0 && (!State.InstalledBytes.TryGetValue(entry.Id, out var previousBytes) || previousBytes != entry.InstalledBytes))
+            {
+                State.InstalledBytes[entry.Id] = entry.InstalledBytes;
+                State.InstalledSizeMeasuredUtc[entry.Id] = DateTime.UtcNow;
+                changed = true;
+            }
+            else if (entry.InstalledBytes < 0)
+            {
+                if (State.InstalledBytes.Remove(entry.Id)) changed = true;
+                if (State.InstalledSizeMeasuredUtc.Remove(entry.Id)) changed = true;
+            }
         }
         if (reconcileMissingCatalog)
         {
             // An explicit scan of an available root is authoritative for catalog
-            // folders. Preserve a manually selected launcher on another path, and
-            // preserve folders that exist but still need an executable choice.
+            // installs with no playable executable. Preserve a playable folder
+            // that still needs an executable choice and preserve a manually
+            // selected launcher on another path.
             var catalogIds = Games.Where(g => !g.IsLocal).Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
             foreach (var id in State.InstalledGames.ToArray())
             {
-                if (!catalogIds.Contains(id) || result.CatalogFoldersPresent.Contains(id)) continue;
+                if (!catalogIds.Contains(id) || result.CatalogGamesWithExecutable.Contains(id)) continue;
                 if (State.LaunchPaths.TryGetValue(id, out var saved) && File.Exists(saved)) continue;
-                State.InstalledGames.Remove(id);
+                if (State.InstalledGames.Remove(id)) changed = true;
+                if (State.InstalledBytes.Remove(id)) changed = true;
+                if (State.InstalledSizeMeasuredUtc.Remove(id)) changed = true;
             }
         }
-        foreach (var notice in result.Notices) Store.Log("Installed scan: " + notice);
-        Save(); Reload();
+        if (logNotices)
+            foreach (var notice in result.Notices) Store.Log("Installed scan: " + notice);
+        if (changed) { Save(); Reload(); }
+        return changed;
     }
 
     internal async Task ScanCompletedDownloads(Game[] games, string destination, bool processSucceeded, DateTime? completionStartedAtUtc = null, string? operationId = null)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -7,11 +8,16 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using System.Threading;
 
 namespace GameLibrary.Native;
 
 public sealed class LibraryStore
 {
+    private const int MaxQueuedLogLines = 2048;
+    private readonly ConcurrentQueue<string> pendingLogLines = new();
+    private int pendingLogCount;
+    private int logWriterActive;
     public string Root { get; }
     public string Assets { get; }
     public string Cache => Path.Combine(Root, "cache");
@@ -110,10 +116,13 @@ public sealed class LibraryStore
     }
     public static UserState ValidateState(UserState state)
     {
-        if (state.SchemaVersion != 1 || state.Settings == null || state.Ratings == null || state.GameTags == null || state.Wishlist == null || state.InstalledGames == null || state.Pending == null || state.LaunchPaths == null || state.LocalGames == null)
+        if (state.SchemaVersion != 1 || state.Settings == null || state.Ratings == null || state.GameTags == null || state.Wishlist == null || state.InstalledGames == null || state.Pending == null || state.LaunchPaths == null || state.PlayTimeSeconds == null || state.LastPlayedUtc == null || state.InstalledBytes == null || state.InstalledSizeMeasuredUtc == null || state.LocalGames == null)
             throw new FormatException("Unsupported or incomplete library backup.");
         if (state.Ratings.Values.Any(v => v < 0 || v > 5)) throw new FormatException("Ratings must be between zero and five.");
         if (state.PlayTimeSeconds.Values.Any(v => !double.IsFinite(v) || v < 0)) throw new FormatException("Play time must be finite and non-negative.");
+        if (state.LastPlayedUtc.Any(e => e.Value.Kind == DateTimeKind.Local)) throw new FormatException("Last-played timestamps must be UTC.");
+        if (state.InstalledBytes.Values.Any(value => value < 0)) throw new FormatException("Installed size must be non-negative.");
+        if (state.InstalledSizeMeasuredUtc.Any(e => e.Value.Kind == DateTimeKind.Local)) throw new FormatException("Installed-size timestamps must be UTC.");
         if (!string.IsNullOrWhiteSpace(state.Settings.WandPath) && (!Path.IsPathFullyQualified(state.Settings.WandPath) || state.Settings.WandPath.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)) throw new FormatException("Wand path must be an absolute Windows executable path.");
         if (state.GameTags.Values.Any(v => v == null || v.Any(t => t == null || t.Length > 80))) throw new FormatException("Invalid game tags.");
         if (state.LocalGames.Any(e => e.Value == null || !e.Key.StartsWith("local:", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(e.Value.Name) || !Path.IsPathFullyQualified(e.Value.Folder)))
@@ -142,8 +151,20 @@ public sealed class LibraryStore
     public void CacheData(string file, string json) { JsonNode.Parse(json); AtomicWrite(SafeChild(Cache, file), json); }
     public JsonObject ReadMetadata()
     {
-        try { return JsonNode.Parse(File.ReadAllText(Path.Combine(Cache, "metadata.json")))!.AsObject(); }
-        catch { return new JsonObject(); }
+        var merged = new JsonObject();
+        try
+        {
+            var bundled = JsonNode.Parse(File.ReadAllText(Path.Combine(Assets, "data", "metadata.json")))!.AsObject();
+            foreach (var entry in bundled) merged[entry.Key] = entry.Value?.DeepClone();
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException) { }
+        try
+        {
+            var cached = JsonNode.Parse(File.ReadAllText(Path.Combine(Cache, "metadata.json")))!.AsObject();
+            foreach (var entry in cached) merged[entry.Key] = entry.Value?.DeepClone();
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException) { }
+        return merged;
     }
     public List<Game> LoadGames(UserState state, JsonObject config)
     {
@@ -173,6 +194,9 @@ public sealed class LibraryStore
             g.Wishlisted = state.Wishlist.Contains(g.Id);
             g.Installed = state.InstalledGames.Contains(g.Id);
             g.PlayedHours = state.PlayTimeSeconds.GetValueOrDefault(g.Id) / 3600d;
+            g.LastPlayedUtc = state.LastPlayedUtc.GetValueOrDefault(g.Id);
+            g.InstalledBytes = state.InstalledBytes.GetValueOrDefault(g.Id);
+            g.InstalledSizeMeasuredUtc = state.InstalledSizeMeasuredUtc.GetValueOrDefault(g.Id);
             g.TagsLabel = string.Join("  ·  ", state.GameTags.GetValueOrDefault(g.Id, new()));
             if (!g.IsLocal && string.IsNullOrEmpty(g.DockerImage)) g.DockerImage = $"{state.Settings.DockerUsername}/{state.Settings.RepoName}:{g.Id}";
             if (!g.IsLocal && string.IsNullOrEmpty(g.DockerImageUrl)) g.DockerImageUrl = $"https://hub.docker.com/r/{state.Settings.DockerUsername}/{state.Settings.RepoName}/tags?name={Uri.EscapeDataString(g.Id)}";
@@ -183,6 +207,9 @@ public sealed class LibraryStore
             }
             if (metadata[g.Id] is JsonObject extra)
             {
+                var identityProof = (JsonObject)extra.DeepClone();
+                identityProof["id"] = g.Id;
+                if (!MetadataClient.MatchesGame(g, identityProof)) continue;
                 // Provider classification only fills new Docker entries, never curated/shared overrides.
                 if (g.Discovered)
                 {
@@ -192,9 +219,19 @@ public sealed class LibraryStore
                     { g.Category = category; g.CategoryName = categories[category]; }
                 }
                 double enrichedTime = DataJson.Number(extra["time"]);
-                if (enrichedTime > 0 && (g.Time <= 0 || DataJson.Text(extra["source"]?["time"]) != "genre-estimate")) g.Time = enrichedTime;
+                if (enrichedTime is > 0 and < 100000 && (g.Time <= 0 || DataJson.Text(extra["source"]?["time"]) != "genre-estimate")) g.Time = enrichedTime;
                 var cover = DataJson.Text(extra["cover"]);
-                if (cover.Length > 0) { try { var path = SafeChild(Cache, cover); if (File.Exists(path)) g.Cover = path; } catch (ArgumentException) { } }
+                if (cover.Length > 0)
+                {
+                    try
+                    {
+                        var cached = SafeChild(Cache, cover);
+                        var bundled = SafeChild(Path.Combine(Assets, "data"), cover);
+                        if (File.Exists(cached)) g.Cover = cached;
+                        else if (File.Exists(bundled)) g.Cover = bundled;
+                    }
+                    catch (ArgumentException) { }
+                }
             }
         }
         return games;
@@ -207,12 +244,21 @@ public sealed class LibraryStore
     public static void MergeTags(List<Game> games, JsonNode response, Preferences settings)
     {
         var existing = games.ToDictionary(g => g.Id, StringComparer.Ordinal);
+        // Docker permits punctuation variants of the same tag. Resolve those
+        // variants to one already-curated catalog identity, but only when the
+        // catalog has no competing identity with the same alphanumeric form.
+        static string TagAlias(string value) => new(value.Where(char.IsLetterOrDigit).ToArray());
+        var canonicalAliases = games
+            .Where(g => !g.IsLocal)
+            .GroupBy(g => TagAlias(g.Id), StringComparer.Ordinal)
+            .Where(group => group.Key.Length > 0 && group.Select(g => g.Id).Distinct(StringComparer.Ordinal).Count() == 1)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         if (response["tags"] is not JsonArray tags) return;
         foreach (var tag in tags)
         {
             var name = tag is JsonValue ? DataJson.Text(tag) : DataJson.Text(tag?["name"]);
             if (!DockerScripts.ValidTag(name)) continue;
-            if (!existing.TryGetValue(name, out var game))
+            if (!existing.TryGetValue(name, out var game) && !canonicalAliases.TryGetValue(TagAlias(name), out game))
             {
                 game = new Game { Id = name, Name = FormatName(name), Category = "new", Discovered = true, Description = "Discovered on Docker Hub. Artwork and completion time are looked up automatically when available." };
                 games.Add(game); existing.Add(name, game);
@@ -227,15 +273,41 @@ public sealed class LibraryStore
     public static string FormatName(string id) => System.Text.RegularExpressions.Regex.Replace(id.Replace('_', ' ').Replace('-', ' '), "([a-z])([A-Z])", "$1 $2");
     public void Log(string message)
     {
+        string line = $"{DateTime.UtcNow:O} {message}{Environment.NewLine}";
+        pendingLogLines.Enqueue(line);
+        int count = Interlocked.Increment(ref pendingLogCount);
+        while (count > MaxQueuedLogLines && pendingLogLines.TryDequeue(out _))
+        {
+            count = Interlocked.Decrement(ref pendingLogCount);
+        }
+        ScheduleLogWriter();
+    }
+    private void ScheduleLogWriter()
+    {
+        if (Interlocked.CompareExchange(ref logWriterActive, 1, 0) != 0) return;
+        ThreadPool.QueueUserWorkItem(_ => DrainLogQueue());
+    }
+    private void DrainLogQueue()
+    {
         try
         {
-            lock (this) File.AppendAllText(Path.Combine(Root, "activity.log"), $"{DateTime.UtcNow:O} {message}{Environment.NewLine}");
+            while (pendingLogLines.TryDequeue(out var line))
+            {
+                Interlocked.Decrement(ref pendingLogCount);
+                try { File.AppendAllText(Path.Combine(Root, "activity.log"), line); }
+                catch (Exception ex)
+                {
+                    // A blocked, full, missing, or read-only profile volume must
+                    // consume only this background writer; it can never hold the
+                    // WPF dispatcher or prevent buttons/window painting.
+                    try { Debug.WriteLine("Game Library activity log unavailable: " + ex.Message + " | " + line); } catch { }
+                }
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            // Logging must never take down the UI when the profile volume is
-            // full, read-only, or temporarily locked by another process.
-            try { Debug.WriteLine("Game Library activity log unavailable: " + ex.Message + " | " + message); } catch { }
+            Interlocked.Exchange(ref logWriterActive, 0);
+            if (!pendingLogLines.IsEmpty) ScheduleLogWriter();
         }
     }
 }
