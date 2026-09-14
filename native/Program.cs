@@ -38,13 +38,13 @@ public static class Program
         }
         string? data = null;
         bool offline = false;
-        bool secondMonitor = true;
+        StartupMonitorMode monitorMode = StartupMonitorMode.Auto;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--data-dir" && i + 1 < args.Length) data = Path.GetFullPath(args[++i]);
             else if (args[i] == "--offline") offline = true;
-            else if (args[i] == "--second-monitor") secondMonitor = true;
-            else if (args[i] == "--main-monitor") secondMonitor = false;
+            else if (args[i] == "--second-monitor") monitorMode = StartupMonitorMode.Secondary;
+            else if (args[i] == "--main-monitor") monitorMode = StartupMonitorMode.Primary;
             else if (args[i] == "--ui-test" && i + 1 < args.Length) TestReport = Path.GetFullPath(args[++i]);
             else if (args[i] == "--pause-proof") PauseProof = true;
         }
@@ -76,7 +76,7 @@ public static class Program
         };
         try
         {
-            var window = new MainWindow(store, offline, secondMonitor);
+            var window = new MainWindow(store, offline, monitorMode);
             app.MainWindow = window;
             using var stopping = new CancellationTokenSource();
             var listener = Task.Run(() =>

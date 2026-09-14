@@ -39,6 +39,37 @@ public static class SelfTests
             Require(string.Equals(resolved, expected, StringComparison.OrdinalIgnoreCase), "The default profile did not resolve beside dist.");
             Require(!resolved.StartsWith(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameLibraryManager"), StringComparison.OrdinalIgnoreCase), "The default profile still targets LocalApplicationData.");
         });
+        Check("Startup monitor follows the launch pointer unless explicitly overridden", () =>
+        {
+            var placementType = typeof(MainWindow).Assembly.GetType("GameLibrary.Native.WindowPlacement")
+                ?? throw new InvalidOperationException("WindowPlacement is missing.");
+            var modeType = typeof(MainWindow).Assembly.GetType("GameLibrary.Native.StartupMonitorMode")
+                ?? throw new InvalidOperationException("StartupMonitorMode is missing.");
+            var select = placementType.GetMethod("SelectIndex", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("WindowPlacement.SelectIndex is missing.");
+            var screens = new[]
+            {
+                new System.Drawing.Rectangle(0, 0, 1920, 1040),
+                new System.Drawing.Rectangle(1920, -240, 2560, 1400)
+            };
+            object auto = Enum.Parse(modeType, "Auto");
+            object primary = Enum.Parse(modeType, "Primary");
+            object secondary = Enum.Parse(modeType, "Secondary");
+            int Invoke(System.Drawing.Point pointer, System.Drawing.Point? foreground, object mode) =>
+                (int)(select.Invoke(null, new object?[] { screens, pointer, foreground, 0, mode }) ?? -1);
+            Require(Invoke(new System.Drawing.Point(2500, 400), new System.Drawing.Point(200, 200), auto) == 1,
+                "Auto startup ignored the monitor containing the launch pointer.");
+            Require(Invoke(new System.Drawing.Point(9000, 9000), new System.Drawing.Point(2500, 400), auto) == 1,
+                "Auto startup did not fall back to the foreground window monitor.");
+            Require(Invoke(new System.Drawing.Point(9000, 9000), null, auto) == 0,
+                "Auto startup did not fall back to the primary monitor.");
+            Require(Invoke(new System.Drawing.Point(2500, 400), null, primary) == 0 && Invoke(new System.Drawing.Point(200, 200), null, secondary) == 1,
+                "Explicit primary/secondary monitor overrides changed semantics.");
+            var constructor = typeof(MainWindow).GetConstructors().Single(candidate => candidate.GetParameters().Length == 3);
+            var monitorParameter = constructor.GetParameters()[2];
+            Require(monitorParameter.ParameterType == modeType && string.Equals(monitorParameter.DefaultValue?.ToString(), "Auto", StringComparison.Ordinal),
+                "The native executable still defaults to a fixed secondary monitor.");
+        });
         Check("Windowless diagnostic failures return a report without escaping", () =>
         {
             string diagnosticReport = Path.Combine(root, "diagnostic-failure.json");

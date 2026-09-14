@@ -128,7 +128,7 @@ public partial class MainWindow : Window
     private bool ready, refreshing, closing, searchPending, installedScanning;
     private bool changingSelection, catalogStatsDirty = true;
     private readonly bool offline;
-    private readonly bool secondMonitor;
+    private readonly StartupPlacement startupPlacement;
     private readonly OfflineNetworkGuard? offlineNetwork;
     private bool startupPlacementQueued;
     private bool startupPlacementDone;
@@ -149,22 +149,22 @@ public partial class MainWindow : Window
     internal bool IsClosing => closing;
     private static readonly HashSet<string> protectedTabs = new(StringComparer.Ordinal) { "not_for_me", "finished", "mybackup", "oporationsystems", "music", "win11maintaince", "3th_party_tools", "gamedownloaders" };
 
-    public MainWindow(LibraryStore store, bool offline = false, bool secondMonitor = true)
+    public MainWindow(LibraryStore store, bool offline = false, StartupMonitorMode monitorMode = StartupMonitorMode.Auto)
     {
-        Store = store; this.offline = offline; this.secondMonitor = secondMonitor;
+        Store = store; this.offline = offline; startupPlacement = WindowPlacement.Capture(monitorMode);
         offlineNetwork = offline ? new OfflineNetworkGuard() : null;
         Sync = new SyncClient(store, offlineNetwork);
         Program.SetCurrentProcessExplicitAppUserModelID("GameLibraryManager.Native");
         InitializeComponent();
-        if (secondMonitor) PlaceOnSecondaryMonitor();
+        PlaceOnStartupMonitor();
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
         Loaded += OnLoaded;
-        ContentRendered += (_, _) => QueueSecondaryPlacement();
+        ContentRendered += (_, _) => QueueStartupPlacement();
         Closing += OnClosing;
         StateChanged += (_, _) => ObserveUiAction("Window state change", () =>
         {
             if (!ready || WindowState != WindowState.Minimized || !State.Settings.MinimizeToTray) return;
-            if (!startupPlacementDone || DateTime.UtcNow < startupPlacementGraceUntilUtc) { QueueSecondaryPlacement(force: true); return; }
+            if (!startupPlacementDone || DateTime.UtcNow < startupPlacementGraceUntilUtc) { QueueStartupPlacement(force: true); return; }
             HideToTray();
         });
         PreviewKeyDown += Keyboard;
@@ -190,7 +190,7 @@ public partial class MainWindow : Window
             lifetime.Token.ThrowIfCancellationRequested();
             Width = Math.Clamp(State.Settings.WindowWidth, MinWidth, SystemParameters.WorkArea.Width);
             Height = Math.Clamp(State.Settings.WindowHeight, MinHeight, SystemParameters.WorkArea.Height);
-            if (secondMonitor) PlaceOnSecondaryMonitor();
+            PlaceOnStartupMonitor();
             tab = State.Settings.LastTab;
             SortBox.ItemsSource = new[] { "Name A–Z", "Name Z–A", "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Recently Added", "Recently Played", "Oldest First", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)", "Category" };
             SortBox.SelectedItem = State.Settings.SortBy;
@@ -198,7 +198,7 @@ public partial class MainWindow : Window
             RatingBox.ItemsSource = new[] { "Any rating", "1+ stars", "2+ stars", "3+ stars", "4+ stars", "5 stars" }; RatingBox.SelectedIndex = 0;
             lifetime.Token.ThrowIfCancellationRequested();
             InitializeTray(); ApplyTheme(); ready = true; Reload();
-            QueueSecondaryPlacement(force: true);
+            QueueStartupPlacement(force: true);
             // A fast automation client or a user can type while the bundled
             // catalog is still loading. Reapply that text after readiness so
             // the first search is never dropped by the ready guard.
@@ -211,17 +211,14 @@ public partial class MainWindow : Window
             if (!offline) { poll.Start(); await Refresh(true); }
             await ScanConfiguredInstalledGamesAsync();
             if (!closing) installedScanPoll.Start();
-            QueueSecondaryPlacement(force: true);
+            QueueStartupPlacement(force: true);
         }
         catch (OperationCanceledException) when (closing || lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Error(ex); }
     }
-    private static Forms.Screen? GetSecondaryScreen() => Forms.Screen.AllScreens
-        .Where(candidate => !candidate.Primary)
-        .OrderBy(candidate => candidate.Bounds.Left)
-        .FirstOrDefault();
-    private bool PlaceOnSecondaryMonitor() => PlaceOnSecondaryMonitor(GetSecondaryScreen());
-    private bool PlaceOnSecondaryMonitor(Forms.Screen? screen)
+    private Forms.Screen GetStartupScreen() => WindowPlacement.Resolve(startupPlacement);
+    private bool PlaceOnStartupMonitor() => PlaceOnStartupMonitor(GetStartupScreen());
+    private bool PlaceOnStartupMonitor(Forms.Screen? screen)
     {
         if (screen == null) return false;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -232,9 +229,9 @@ public partial class MainWindow : Window
         Top = area.Top + Math.Max(0, (area.Height - height) / 2);
         return true;
     }
-    private void QueueSecondaryPlacement(bool force = false)
+    private void QueueStartupPlacement(bool force = false)
     {
-        if (!secondMonitor || closing || (!force && startupPlacementQueued) || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        if (closing || (!force && startupPlacementQueued) || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
         startupPlacementQueued = true;
         try
         {
@@ -244,8 +241,8 @@ public partial class MainWindow : Window
                 if (closing) return;
                 WindowStartupLocation = WindowStartupLocation.Manual;
                 WindowState = WindowState.Normal;
-                var screen = GetSecondaryScreen();
-                var placed = PlaceOnSecondaryMonitor(screen);
+                var screen = GetStartupScreen();
+                var placed = PlaceOnStartupMonitor(screen);
                 if (!IsVisible) Show();
                 if (placed && screen != null)
                     placed = NativeWindow.PlaceOnWorkingArea(new WindowInteropHelper(this).Handle, screen.WorkingArea);
