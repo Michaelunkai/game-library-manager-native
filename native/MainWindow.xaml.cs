@@ -162,6 +162,7 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         ContentRendered += (_, _) => QueueStartupPlacement();
         Closing += OnClosing;
+        SystemParameters.StaticPropertyChanged += SystemParametersChanged;
         StateChanged += (_, _) => ObserveUiAction("Window state change", () =>
         {
             MaximizeWindow.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
@@ -191,8 +192,8 @@ public partial class MainWindow : Window
                 return Store.LoadState();
             }, lifetime.Token);
             lifetime.Token.ThrowIfCancellationRequested();
-            Width = Math.Clamp(State.Settings.WindowWidth, MinWidth, SystemParameters.WorkArea.Width);
-            Height = Math.Clamp(State.Settings.WindowHeight, MinHeight, SystemParameters.WorkArea.Height);
+            Width = ClampWindowDimension(State.Settings.WindowWidth, MinWidth, SystemParameters.WorkArea.Width);
+            Height = ClampWindowDimension(State.Settings.WindowHeight, MinHeight, SystemParameters.WorkArea.Height);
             PlaceOnStartupMonitor();
             tab = State.Settings.LastTab;
             SortBox.ItemsSource = new[] { "Name A–Z", "Name Z–A", "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Recently Added", "Recently Played", "Oldest First", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)", "Category" };
@@ -220,6 +221,12 @@ public partial class MainWindow : Window
         catch (Exception ex) { Error(ex); }
     }
     private Forms.Screen GetStartupScreen() => WindowPlacement.Resolve(startupPlacement);
+    internal static double ClampWindowDimension(double requested, double minimum, double available)
+    {
+        if (!double.IsFinite(requested) || requested <= 0) requested = minimum;
+        available = double.IsFinite(available) ? Math.Max(1, available) : Math.Max(1, minimum);
+        return Math.Min(available, Math.Max(Math.Min(Math.Max(1, minimum), available), requested));
+    }
     private bool PlaceOnStartupMonitor() => PlaceOnStartupMonitor(GetStartupScreen());
     private bool PlaceOnStartupMonitor(Forms.Screen? screen)
     {
@@ -282,6 +289,7 @@ public partial class MainWindow : Window
             e.Cancel = true; return;
         }
         closing = true;
+        SystemParameters.StaticPropertyChanged -= SystemParametersChanged;
         try
         {
             try { lifetime.Cancel(); }
@@ -551,8 +559,8 @@ public partial class MainWindow : Window
         catalogStatsDirty = false;
         }
         var selected = Games.Where(g => g.Selected).ToArray();
-        SelectedSize.Text = $"{selected.Sum(g => g.SizeGb):0.#} GB";
-        SelectedSize.ToolTip = $"{selected.Length} selected; {selected.Count(g => g.SizeGb <= 0)} sizes unknown";
+        SelectedSize.Text = $"{selected.Sum(g => g.ComparableSizeGb):0.#} GB";
+        SelectedSize.ToolTip = $"{selected.Length} selected; measured installed size is preferred over Docker download size; {selected.Count(g => g.ComparableSizeGb <= 0)} sizes unknown";
     }
     internal void Save() { try { Store.Save(State); } catch (Exception ex) { Error(ex); } }
     private string FrozenProcessesPath => string.IsNullOrWhiteSpace(State.Settings.FrozenProcessesPath)
@@ -784,17 +792,32 @@ public partial class MainWindow : Window
             ["AccentBrush"] = light ? "#3E9C68" : "#9CE7BB", ["AccentHoverBrush"] = light ? "#2F8558" : "#B3F2CB",
             ["AccentPressedBrush"] = light ? "#236A45" : "#78C99B", ["SuccessBrush"] = light ? "#218653" : "#63D39A",
             ["WarningBrush"] = light ? "#9A6500" : "#F0C36B", ["DangerBrush"] = light ? "#C42B1C" : "#FF7B7B",
-            ["FocusBrush"] = light ? "#0067C0" : "#8DC8FF"
+            ["InformationBrush"] = light ? "#0067C0" : "#71B7FF", ["FocusBrush"] = light ? "#0067C0" : "#8DC8FF",
+            ["AccentOnBrush"] = light ? "#FFFFFF" : "#13211A", ["SelectionBrush"] = light ? "#9CCAF0" : "#426F61"
         };
+        if (SystemParameters.HighContrast)
+        {
+            string canvas = SystemColors.WindowColor.ToString(), text = SystemColors.WindowTextColor.ToString();
+            string accent = SystemColors.HighlightColor.ToString(), accentText = SystemColors.HighlightTextColor.ToString();
+            values["CanvasBrush"] = values["ShellBrush"] = values["PanelBrush"] = values["SurfaceBrush"] = values["CardBrush"] = values["ElevatedSurfaceBrush"] = canvas;
+            values["TextBrush"] = values["MutedBrush"] = text;
+            values["StrokeBrush"] = values["SubtleStrokeBrush"] = SystemColors.WindowTextColor.ToString();
+            values["AccentBrush"] = values["AccentHoverBrush"] = values["AccentPressedBrush"] = values["FocusBrush"] = values["SelectionBrush"] = accent;
+            values["AccentOnBrush"] = accentText;
+        }
         foreach (var entry in values) System.Windows.Application.Current.Resources[entry.Key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(entry.Value));
         WindowEffects.Apply(this, light);
+    }
+    private void SystemParametersChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SystemParameters.HighContrast)) Dispatcher.BeginInvoke(ApplyTheme);
     }
     private void Keyboard(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key == Key.K) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; }
         else if (e.Key == Key.F5) { ObserveUiOperation("Catalog refresh", () => Refresh(true)); e.Handled = true; }
         else if (KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key == Key.A && !SearchBox.IsKeyboardFocused) { SelectAll(this, new()); e.Handled = true; }
-        else if (e.Key == Key.Enter && GameList.IsKeyboardFocusWithin && GameList.SelectedItem is Game game) { Details(game); e.Handled = true; }
+        else if (e.Key == Key.Enter && GameList.IsKeyboardFocusWithin && System.Windows.Input.Keyboard.FocusedElement is not System.Windows.Controls.Primitives.ButtonBase && GameList.SelectedItem is Game game) { Details(game); e.Handled = true; }
         else if (e.Key == Key.Escape) { SearchBox.Clear(); DeselectAll(this, new()); }
     }
     private static ModifierKeys KeyboardModifiers => System.Windows.Input.Keyboard.Modifiers;

@@ -7,7 +7,7 @@
       <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-          <Border Width="28" Height="28" CornerRadius="7" Background="{DynamicResource AccentBrush}" Margin="0,0,11,0"><TextBlock Text="◇" Foreground="#102118" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <Border Width="28" Height="28" CornerRadius="7" Background="{DynamicResource AccentBrush}" Margin="0,0,11,0"><TextBlock Text="◇" Foreground="{DynamicResource AccentOnBrush}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
           <TextBlock Text="Game Library" Style="{StaticResource TitleText}" FontSize="14" VerticalAlignment="Center"/>
           <Border Background="{DynamicResource ElevatedSurfaceBrush}" CornerRadius="10" Padding="8,3" Margin="10,0,0,0"><TextBlock Text="LOCAL" Style="{StaticResource CaptionText}" FontSize="10" FontWeight="SemiBold"/></Border>
         </StackPanel>

@@ -108,7 +108,7 @@ public sealed class SyncClient : IDisposable
                 await Push(state, adminToken, cancellation);
             if (catalog)
             {
-                var files = new[] { "games.json", "tabs.json", "times.json", "image-sizes.json", "dates-added.json" };
+                var files = new[] { "games.json", "tabs.json", "times.json", "image-sizes.json", "dates-added.json", "metadata.json" };
                 var downloads = await Task.WhenAll(files.Select(async file =>
                 {
                     var json = await http.GetStringAsync("data/" + file + "?t=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cancellation);

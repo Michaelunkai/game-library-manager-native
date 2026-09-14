@@ -70,6 +70,11 @@ public static class SelfTests
             Require(monitorParameter.ParameterType == modeType && string.Equals(monitorParameter.DefaultValue?.ToString(), "Auto", StringComparison.Ordinal),
                 "The native executable still defaults to a fixed secondary monitor.");
         });
+        Check("Window dimensions remain valid when high DPI makes the work area smaller than the design minimum", () =>
+        {
+            Require(MainWindow.ClampWindowDimension(1440, 1100, 640) == 640 && MainWindow.ClampWindowDimension(900, 700, 360) == 360,
+                "High-DPI work-area clamping can still receive a minimum greater than its maximum.");
+        });
         Check("Windowless diagnostic failures return a report without escaping", () =>
         {
             string diagnosticReport = Path.Combine(root, "diagnostic-failure.json");
@@ -185,6 +190,31 @@ public static class SelfTests
         {
             var games = new List<Game>(); LibraryStore.MergeTags(games, JsonNode.Parse("{\"tags\":[{\"name\":\"NewGame\",\"full_size\":1000000000,\"last_updated\":\"2026-09-08T00:00:00Z\"}]}")!, state.Settings);
             Require(games.Single().Time == 0 && games.Single().Discovered && games.Single().SizeGb == 1 && games.Single().Added.Year == 2026, "Unknown playtime was fabricated or verified metadata lost.");
+        });
+        Check("Bundled metadata works offline and a mismatched cache cannot replace a catalog identity", () =>
+        {
+            var metadata = store.ReadMetadata();
+            Require(metadata.Count >= 50 && metadata.Any(entry => entry.Value is JsonObject value && File.Exists(LibraryStore.SafeChild(Path.Combine(store.Assets, "data"), DataJson.Text(value["cover"])))),
+                "Bundled supplemental metadata or its covers were unavailable on a clean profile.");
+            var config = store.ReadConfig();
+            var catalog = store.LoadGames(state, config);
+            var target = catalog.First(game => !game.IsLocal && metadata[game.Id] == null);
+            string originalName = target.Name; double originalTime = target.Time;
+            string cachePath = Path.Combine(store.Cache, "metadata.json");
+            byte[]? previous = File.Exists(cachePath) ? File.ReadAllBytes(cachePath) : null;
+            try
+            {
+                store.CacheData("metadata.json", new JsonObject
+                {
+                    [target.Id] = new JsonObject { ["name"] = "Unrelated Different Product", ["time"] = 999, ["source"] = new JsonObject { ["time"] = "provider" } }
+                }.ToJsonString());
+                var reloaded = store.LoadGames(state, config).Single(game => game.Id == target.Id);
+                Require(reloaded.Name == originalName && reloaded.Time == originalTime, "A mismatched cached metadata record replaced the catalog identity.");
+            }
+            finally
+            {
+                if (previous == null) File.Delete(cachePath); else File.WriteAllBytes(cachePath, previous);
+            }
         });
         Check("Installed size is measured and persisted separately from Docker download size", () =>
         {
@@ -612,6 +642,7 @@ public static class SelfTests
                     Require(script.Contains("yuzu") && script.Contains("gamebootstrapper") && script.Contains("toolkit"), "Install scripts must not treat emulator or bundled utility executables as native game proof.");
                 }
                 if (format == "sh") Require(script.Contains("completed_games") && script.Contains("failed_games") && script.Contains("Install batch completed with failures:"), "The shell export still aborts a multi-game batch at the first failure.");
+                if (format == "sh") Require(script.Contains("^[A-Za-z0-9-]{8,64}$") && script.IndexOf("Invalid install operation identity", StringComparison.Ordinal) < script.IndexOf("staging_folder=", StringComparison.Ordinal), "The shell export constructs destructive staging paths before validating its operation identity.");
                 if (format == "sh") Require(script.Contains("grep -Eiv") && script.Contains("/[^/]*(editor|toolkit|packager)"), "The Bash export does not reject support utilities when proving a native executable.");
                 File.WriteAllText(Path.Combine(root, "generated." + format), DockerScripts.Generate(new[] { game }, state.Settings, format));
             }
@@ -738,6 +769,20 @@ public static class SelfTests
                 && shell.Contains("native_install_lock", StringComparison.Ordinal)
                 && shell.Contains("native_install_unlock", StringComparison.Ordinal),
                  "Concurrent jobs still share the timestamp-only script/log path.");
+        });
+        Check("Interrupted install artifacts restore the previous game and remove only operation-scoped staging", () =>
+        {
+            string destination = Path.Combine(root, "install-recovery-proof");
+            string id = "recovery-proof"; string folder = DockerScripts.InstallFolder(id);
+            string staging = Path.Combine(destination, DockerScripts.StagingDirectoryName);
+            string oldOperation = Guid.NewGuid().ToString("N"), activeOperation = Guid.NewGuid().ToString("N");
+            string backup = Path.Combine(staging, folder + "-previous-" + oldOperation);
+            string partial = Path.Combine(staging, folder + "-" + oldOperation);
+            string active = Path.Combine(staging, folder + "-" + activeOperation);
+            Directory.CreateDirectory(backup); Directory.CreateDirectory(partial); Directory.CreateDirectory(active);
+            File.WriteAllText(Path.Combine(backup, "previous.exe"), "fixture");
+            int changed = JobWindow.RecoverStaleInstallArtifacts(destination, id, activeOperation);
+            Require(changed == 2 && File.Exists(Path.Combine(destination, folder, "previous.exe")) && !Directory.Exists(partial) && Directory.Exists(active), "Recovery failed to restore the previous install or touched the active operation.");
         });
         Check("Same-game installs to different destinations receive isolated Docker identities", () =>
         {
@@ -1057,8 +1102,9 @@ public partial class MainWindow
                 && FindName("MaximizeWindow") is Button maximize && maximize.MinHeight >= 40
                 && FindName("CloseWindow") is Button close && close.MinHeight >= 40
                 && System.Windows.Automation.AutomationProperties.GetLiveSetting(StatusText) == System.Windows.Automation.AutomationLiveSetting.Polite);
-            Check("Fluent design tokens and comfortable control targets are active", new[] { "SurfaceBrush", "ElevatedSurfaceBrush", "SuccessBrush", "WarningBrush", "DangerBrush", "FocusBrush", "CornerRadiusLarge" }.All(System.Windows.Application.Current.Resources.Contains)
+            Check("Fluent design tokens and comfortable control targets are active", new[] { "SurfaceBrush", "ElevatedSurfaceBrush", "SuccessBrush", "WarningBrush", "DangerBrush", "InformationBrush", "FocusBrush", "AccentOnBrush", "SelectionBrush", "CornerRadiusLarge" }.All(System.Windows.Application.Current.Resources.Contains)
                 && SearchBox.MinHeight >= 40 && SortBox.MinHeight >= 40
+                && InstalledOnlyFilter.MinHeight >= 40
                 && (System.Windows.Application.Current.FindResource(typeof(Button)) as Style)?.Setters.OfType<Setter>().Any(setter => setter.Property == FrameworkElement.MinHeightProperty && Convert.ToDouble(setter.Value, System.Globalization.CultureInfo.InvariantCulture) >= 40) == true
                 && FontFamily.Source.Contains("Segoe UI Variable", StringComparison.OrdinalIgnoreCase));
             Check("Tray icon and useful menu created", tray is { Visible: true } && tray.ContextMenuStrip?.Items.Count == 5);
@@ -1192,9 +1238,17 @@ public partial class MainWindow
             job.Show();
             var deadline = DateTime.UtcNow.AddSeconds(15);
             while (job.LastExitCode == null && DateTime.UtcNow < deadline) await Task.Delay(100);
-            Check("Progress window captures real process output and nonzero exit", job.LastExitCode == 7 && job.DisplayedOutput.Contains("native-progress-proof") && job.DisplayedOutput.Contains("Failed"));
+            Check("Progress window captures real process output and nonzero exit", job.LastExitCode == 7 && job.DisplayedOutput.Contains("native-progress-proof") && job.DisplayedOutput.Contains("failed", StringComparison.OrdinalIgnoreCase));
             Check("Failed process completion fires once after stopping without marking installation successful", completedEvents == 1 && completionSuccess == false && completionAfterStopped);
             job.Close(); RestoreWindow();
+            var terminalJob = new JobWindow(Store, "@echo off\r\necho native-terminal-transcript-proof\r\nexit /b 7", Array.Empty<string>(), openInDefaultTerminal: true, scriptExtension: "bat");
+            terminalJob.Show();
+            var terminalDeadline = DateTime.UtcNow.AddSeconds(15);
+            while (terminalJob.LastExitCode == null && DateTime.UtcNow < terminalDeadline) await Task.Delay(100);
+            Check("Visible terminal failures preserve child output and the real nonzero exit code", terminalJob.LastExitCode == 7
+                && terminalJob.DisplayedOutput.Contains("native-terminal-transcript-proof", StringComparison.Ordinal)
+                && terminalJob.DisplayedOutput.Contains("Install failed", StringComparison.OrdinalIgnoreCase));
+            terminalJob.Close(); RestoreWindow();
             string markerRoot = Path.Combine(Store.Root, "immediate-marker-proof");
             string markerId = "immediate-proof";
             string markerFolder = Path.Combine(markerRoot, DockerScripts.InstallFolder(markerId));

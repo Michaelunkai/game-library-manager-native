@@ -28,10 +28,11 @@ internal static class InstalledSize
     {
         if (!Directory.Exists(folder)) return 0;
         long total = 0;
+        bool complete = true;
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = true,
-            IgnoreInaccessible = true,
+            IgnoreInaccessible = false,
             AttributesToSkip = FileAttributes.ReparsePoint
         };
         try
@@ -40,11 +41,11 @@ internal static class InstalledSize
             {
                 cancellation.ThrowIfCancellationRequested();
                 try { total = checked(total + new FileInfo(path).Length); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException) { }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException) { complete = false; }
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        return Math.Max(0, total);
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { complete = false; }
+        return complete ? Math.Max(0, total) : -1;
     }
 }
 
@@ -89,11 +90,16 @@ public partial class MainWindow
                 changed = true;
             }
             if (State.InstalledGames.Add(entry.Id)) changed = true;
-            if (entry.InstalledBytes > 0 && State.InstalledBytes.GetValueOrDefault(entry.Id) != entry.InstalledBytes)
+            if (entry.InstalledBytes >= 0 && (!State.InstalledBytes.TryGetValue(entry.Id, out var previousBytes) || previousBytes != entry.InstalledBytes))
             {
                 State.InstalledBytes[entry.Id] = entry.InstalledBytes;
                 State.InstalledSizeMeasuredUtc[entry.Id] = DateTime.UtcNow;
                 changed = true;
+            }
+            else if (entry.InstalledBytes < 0)
+            {
+                if (State.InstalledBytes.Remove(entry.Id)) changed = true;
+                if (State.InstalledSizeMeasuredUtc.Remove(entry.Id)) changed = true;
             }
         }
         if (reconcileMissingCatalog)

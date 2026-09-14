@@ -47,7 +47,9 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public double CoverWidth => CoverHeight * 0.735;
     [JsonIgnore] public double InstalledSizeGb => InstalledBytes > 0 ? InstalledBytes / 1_000_000_000d : 0;
     [JsonIgnore] public double ComparableSizeGb => InstalledSizeGb > 0 ? InstalledSizeGb : SizeGb;
-    [JsonIgnore] public string SizeLabel => InstalledSizeGb > 0 ? $"{InstalledSizeGb:0.##} GB installed" : SizeGb > 0 ? $"{SizeGb:0.##} GB download" : "Size unknown";
+    [JsonIgnore] public string SizeLabel => InstalledSizeGb > 0
+        ? $"{InstalledSizeGb:0.##} GB installed · " + (InstalledSizeMeasuredUtc == default ? "measured locally" : $"measured {InstalledSizeMeasuredUtc.ToLocalTime():g}")
+        : SizeGb > 0 ? $"{SizeGb:0.##} GB download" : "Size unknown";
     [JsonIgnore] public string Meta => string.Join("  ·  ", new[] { ShowCategory ? CategoryName : "", ShowTime ? (Time > 0 ? $"~{Time:0.#} h" : "Time unknown") : "", SizeLabel }.Where(s => s.Length > 0));
     [JsonIgnore] public string Initial => string.IsNullOrWhiteSpace(Name) ? "G" : Name[..1].ToUpperInvariant();
     [JsonIgnore] public string RatingLabel => Rating > 0 ? new string('★', Rating) + new string('☆', 5 - Rating) : "☆☆☆☆☆";

@@ -151,8 +151,20 @@ public sealed class LibraryStore
     public void CacheData(string file, string json) { JsonNode.Parse(json); AtomicWrite(SafeChild(Cache, file), json); }
     public JsonObject ReadMetadata()
     {
-        try { return JsonNode.Parse(File.ReadAllText(Path.Combine(Cache, "metadata.json")))!.AsObject(); }
-        catch { return new JsonObject(); }
+        var merged = new JsonObject();
+        try
+        {
+            var bundled = JsonNode.Parse(File.ReadAllText(Path.Combine(Assets, "data", "metadata.json")))!.AsObject();
+            foreach (var entry in bundled) merged[entry.Key] = entry.Value?.DeepClone();
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException) { }
+        try
+        {
+            var cached = JsonNode.Parse(File.ReadAllText(Path.Combine(Cache, "metadata.json")))!.AsObject();
+            foreach (var entry in cached) merged[entry.Key] = entry.Value?.DeepClone();
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException) { }
+        return merged;
     }
     public List<Game> LoadGames(UserState state, JsonObject config)
     {
@@ -195,6 +207,9 @@ public sealed class LibraryStore
             }
             if (metadata[g.Id] is JsonObject extra)
             {
+                var identityProof = (JsonObject)extra.DeepClone();
+                identityProof["id"] = g.Id;
+                if (!MetadataClient.MatchesGame(g, identityProof)) continue;
                 // Provider classification only fills new Docker entries, never curated/shared overrides.
                 if (g.Discovered)
                 {
@@ -204,9 +219,19 @@ public sealed class LibraryStore
                     { g.Category = category; g.CategoryName = categories[category]; }
                 }
                 double enrichedTime = DataJson.Number(extra["time"]);
-                if (enrichedTime > 0 && (g.Time <= 0 || DataJson.Text(extra["source"]?["time"]) != "genre-estimate")) g.Time = enrichedTime;
+                if (enrichedTime is > 0 and < 100000 && (g.Time <= 0 || DataJson.Text(extra["source"]?["time"]) != "genre-estimate")) g.Time = enrichedTime;
                 var cover = DataJson.Text(extra["cover"]);
-                if (cover.Length > 0) { try { var path = SafeChild(Cache, cover); if (File.Exists(path)) g.Cover = path; } catch (ArgumentException) { } }
+                if (cover.Length > 0)
+                {
+                    try
+                    {
+                        var cached = SafeChild(Cache, cover);
+                        var bundled = SafeChild(Path.Combine(Assets, "data"), cover);
+                        if (File.Exists(cached)) g.Cover = cached;
+                        else if (File.Exists(bundled)) g.Cover = bundled;
+                    }
+                    catch (ArgumentException) { }
+                }
             }
         }
         return games;

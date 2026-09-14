@@ -125,6 +125,7 @@ public sealed class JobWindow : Window
         }
         this.containerGameIds = identityMap;
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
+        SourceInitialized += (_, _) => WindowEffects.Apply(this, false);
         Title = openInDefaultTerminal ? "Game Library · Download terminal" : wsl2 ? "Game Library · WSL2 Ubuntu install" : "Game Library · Download progress";
         Width = 900; Height = 600; MinWidth = 600; MinHeight = 400;
         var grid = new DockPanel { Margin = new Thickness(18) };
@@ -138,7 +139,7 @@ public sealed class JobWindow : Window
         Directory.CreateDirectory(Path.Combine(store.Root, "jobs"));
         log = BuildJobLogPath(store.Root, DateTime.Now, Guid.NewGuid());
         Loaded += (_, _) => _ = RunObservedAsync();
-        Closing += (_, e) => { if (Busy) { e.Cancel = true; status.Text = "Stop the operation before closing. Partial files will be preserved."; } };
+        Closing += (_, e) => { if (Busy) { e.Cancel = true; status.Text = "Stop the operation before closing. The previous installation will be preserved."; } };
     }
     private async Task RunObservedAsync()
     {
@@ -203,6 +204,7 @@ public sealed class JobWindow : Window
                 operationCancellation.Token.ThrowIfCancellationRequested();
                 ownsInstallation = true;
             }
+            if (ownsInstallation) RecoverInstallArtifacts(OperationId);
             string path = Path.ChangeExtension(log, "." + scriptExtension);
             string? terminalTranscript = openInDefaultTerminal ? Path.ChangeExtension(log, ".terminal.log") : null;
             if (terminalTranscript != null && File.Exists(terminalTranscript)) File.Delete(terminalTranscript);
@@ -254,7 +256,8 @@ public sealed class JobWindow : Window
             // without waiting for a second launch or folder scan.
             await DrainCompletionsAsync();
             LastExitCode = process.ExitCode;
-            status.Text = cancelled ? "Stopped. Partial files were preserved." : process.ExitCode == 0 ? "Completed successfully · " + log : SummarizeFailure(transcriptText, process.ExitCode) + " · details: " + log;
+            if (process.ExitCode != 0 && ownsInstallation && !cancelled) RecoverInstallArtifacts(null);
+            status.Text = cancelled ? "Stopped. Temporary staging was cleaned; the previous installation was preserved." : process.ExitCode == 0 ? "Completed successfully · " + log : SummarizeFailure(transcriptText, process.ExitCode) + " · details: " + log;
             store.Log("Download process exit=" + process.ExitCode + "; cancelled=" + cancelled); Append(status.Text);
         }
         catch (Exception ex) { status.Text = "Could not complete: " + ex.Message; Append(status.Text); }
@@ -389,8 +392,58 @@ public sealed class JobWindow : Window
     }
     private async Task FinishStopCleanupAsync(TaskCompletionSource<bool> completion)
     {
-        try { await StopOwnedContainersAsync(); completion.TrySetResult(true); }
+        try
+        {
+            var activeProcess = process;
+            try { if (activeProcess is { HasExited: false }) await activeProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or TimeoutException) { Append("Process shutdown observation: " + ex.Message); }
+            await StopOwnedContainersAsync(); RecoverInstallArtifacts(null); completion.TrySetResult(true);
+        }
         catch (Exception ex) { completion.TrySetException(ex); }
+    }
+    private void RecoverInstallArtifacts(string? protectedOperationId)
+    {
+        if (completionDestination == null) return;
+        foreach (string id in completionGameIds)
+        {
+            int recovered = RecoverStaleInstallArtifacts(completionDestination, id, protectedOperationId);
+            if (recovered > 0) Append($"Recovered/cleaned {recovered} interrupted staging artifact(s) for {id}.");
+        }
+    }
+    internal static int RecoverStaleInstallArtifacts(string destination, string gameId, string? protectedOperationId = null)
+    {
+        string root = Path.GetFullPath(destination);
+        if (!Directory.Exists(root)) return 0;
+        if (protectedOperationId != null && !Guid.TryParseExact(protectedOperationId, "N", out _)) throw new ArgumentException("Invalid protected operation identity.", nameof(protectedOperationId));
+        string folderName = DockerScripts.InstallFolder(gameId);
+        string stagingRoot = Path.Combine(root, DockerScripts.StagingDirectoryName);
+        if (!Directory.Exists(stagingRoot)) return 0;
+        string installFolder = Path.Combine(root, folderName);
+        var candidates = Directory.EnumerateDirectories(stagingRoot, folderName + "-*", SearchOption.TopDirectoryOnly)
+            .Select(path => new { Path = path, Name = Path.GetFileName(path) })
+            .Select(item =>
+            {
+                string suffix = item.Name[(folderName.Length + 1)..];
+                bool backup = suffix.StartsWith("previous-", StringComparison.Ordinal);
+                string operation = backup ? suffix["previous-".Length..] : suffix;
+                return new { item.Path, Backup = backup, Operation = operation };
+            })
+            .Where(item => Guid.TryParseExact(item.Operation, "N", out _) && !string.Equals(item.Operation, protectedOperationId, StringComparison.Ordinal))
+            .ToArray();
+        int changed = 0;
+        var backups = candidates.Where(item => item.Backup).OrderByDescending(item => Directory.GetLastWriteTimeUtc(item.Path)).ToArray();
+        if (!Directory.Exists(installFolder) && backups.Length > 0)
+        {
+            Directory.Move(backups[0].Path, installFolder);
+            backups = backups.Skip(1).ToArray();
+            changed++;
+        }
+        foreach (var item in candidates.Where(item => !item.Backup).Concat(backups))
+        {
+            if (!Directory.Exists(item.Path)) continue;
+            Directory.Delete(item.Path, true); changed++;
+        }
+        return changed;
     }
     private async Task StopOwnedContainersAsync()
     {

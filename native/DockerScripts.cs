@@ -226,6 +226,7 @@ public static class DockerScripts
         lines.Insert(3, "# Target: " + shellTarget + " · operations match the PowerShell/BAT exports.");
         lines.Add("destination=" + ShQuote(destination)); lines.Add("mkdir -p -- \"$destination/.gamelibrarymanager-locks\"");
         lines.Add("operation_id=\"${GLM_INSTALL_OPERATION_ID:-$(date +%s%N)-$$}\"");
+        lines.Add("if [[ ! \"$operation_id\" =~ ^[A-Za-z0-9-]{8,64}$ ]]; then echo 'Invalid install operation identity.' >&2; exit 1; fi");
         lines.Add("native_install_lock_held=\"${GLM_NATIVE_INSTALL_LOCK_HELD:-0}\"");
         lines.Add("completed_games=(); failed_games=()");
         lines.Add("native_container_owned() { local name=\"$1\" expected=\"$2\" expected_operation=\"${3:-}\" metadata operation; if ! metadata=$(docker container inspect \"$name\" --format " + ShQuote(ShellOwnershipFormat) + " 2>/dev/null); then return 1; fi; if [ \"$metadata\" != \"$expected\" ]; then echo \"Refusing destructive cleanup for unowned container ${name}.\" >&2; return 2; fi; if [ -n \"$expected_operation\" ]; then if ! operation=$(docker container inspect \"$name\" --format " + ShQuote("{{ index .Config.Labels \"" + OperationLabel + "\" }}") + " 2>/dev/null); then return 2; fi; if [ \"$operation\" != \"$expected_operation\" ]; then echo \"Refusing cleanup for a container owned by another install operation: ${name}.\" >&2; return 2; fi; fi; return 0; }");
