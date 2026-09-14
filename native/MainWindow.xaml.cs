@@ -158,11 +158,14 @@ public partial class MainWindow : Window
         InitializeComponent();
         PlaceOnStartupMonitor();
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
+        SourceInitialized += (_, _) => WindowEffects.Apply(this, State.Settings.Theme == "light");
         Loaded += OnLoaded;
         ContentRendered += (_, _) => QueueStartupPlacement();
         Closing += OnClosing;
         StateChanged += (_, _) => ObserveUiAction("Window state change", () =>
         {
+            MaximizeWindow.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+            System.Windows.Automation.AutomationProperties.SetName(MaximizeWindow, WindowState == WindowState.Maximized ? "Restore" : "Maximize");
             if (!ready || WindowState != WindowState.Minimized || !State.Settings.MinimizeToTray) return;
             if (!startupPlacementDone || DateTime.UtcNow < startupPlacementGraceUntilUtc) { QueueStartupPlacement(force: true); return; }
             HideToTray();
@@ -765,11 +768,26 @@ public partial class MainWindow : Window
         finally { refreshing = false; if (!closing) ScheduleMetadata(); }
     }
     private void ToggleTheme(object sender, RoutedEventArgs e) { State.Settings.Theme = State.Settings.Theme == "dark" ? "light" : "dark"; Save(); ApplyTheme(); }
+    private void MinimizeWindowClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void MaximizeWindowClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void CloseWindowClick(object sender, RoutedEventArgs e) => Close();
     private void ApplyTheme()
     {
         bool light = State.Settings.Theme == "light";
-        var values = new Dictionary<string, string> { ["CanvasBrush"] = light ? "#F3F5F6" : "#101217", ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["CardBrush"] = light ? "#E8EDF0" : "#1D222C", ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9", ["AccentBrush"] = light ? "#58B37F" : "#9CE7BB" };
+        var values = new Dictionary<string, string>
+        {
+            ["CanvasBrush"] = light ? "#F3F6F8" : "#0F1217", ["ShellBrush"] = light ? "#F9FBFC" : "#12161D",
+            ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["SurfaceBrush"] = light ? "#FFFFFF" : "#171B23",
+            ["ElevatedSurfaceBrush"] = light ? "#EDF2F5" : "#222936", ["CardBrush"] = light ? "#F0F4F6" : "#1D222C",
+            ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["SubtleStrokeBrush"] = light ? "#DDE5EA" : "#26303D",
+            ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9",
+            ["AccentBrush"] = light ? "#3E9C68" : "#9CE7BB", ["AccentHoverBrush"] = light ? "#2F8558" : "#B3F2CB",
+            ["AccentPressedBrush"] = light ? "#236A45" : "#78C99B", ["SuccessBrush"] = light ? "#218653" : "#63D39A",
+            ["WarningBrush"] = light ? "#9A6500" : "#F0C36B", ["DangerBrush"] = light ? "#C42B1C" : "#FF7B7B",
+            ["FocusBrush"] = light ? "#0067C0" : "#8DC8FF"
+        };
         foreach (var entry in values) System.Windows.Application.Current.Resources[entry.Key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(entry.Value));
+        WindowEffects.Apply(this, light);
     }
     private void Keyboard(object sender, System.Windows.Input.KeyEventArgs e)
     {

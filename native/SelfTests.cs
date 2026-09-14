@@ -1036,7 +1036,7 @@ public partial class MainWindow
     private async Task RunUiProof(string report)
     {
         var checks = new List<object>();
-        void Check(string name, bool passed) { checks.Add(new { name, passed, at = DateTime.UtcNow }); if (!passed) throw new InvalidOperationException("UI proof failed: " + name); }
+        void Check(string name, bool passed, string? detail = null) { checks.Add(new { name, passed, detail, at = DateTime.UtcNow }); if (!passed) throw new InvalidOperationException("UI proof failed: " + name + (detail == null ? string.Empty : " (" + detail + ")")); }
         static T? FindVisual<T>(DependencyObject? root, Func<T, bool> predicate) where T : DependencyObject
         {
             if (root == null) return null;
@@ -1051,18 +1051,29 @@ public partial class MainWindow
         try
         {
             Check("Packaged WPF window visible with taskbar identity", IsVisible && ShowInTaskbar && Icon != null && Games.Count >= 1179);
+            Check("Fluent shell exposes custom caption controls and semantic status", FindName("AppTitleBar") is FrameworkElement titleBar
+                && titleBar.ActualHeight >= 44
+                && FindName("MinimizeWindow") is Button minimize && minimize.MinHeight >= 40
+                && FindName("MaximizeWindow") is Button maximize && maximize.MinHeight >= 40
+                && FindName("CloseWindow") is Button close && close.MinHeight >= 40
+                && System.Windows.Automation.AutomationProperties.GetLiveSetting(StatusText) == System.Windows.Automation.AutomationLiveSetting.Polite);
+            Check("Fluent design tokens and comfortable control targets are active", new[] { "SurfaceBrush", "ElevatedSurfaceBrush", "SuccessBrush", "WarningBrush", "DangerBrush", "FocusBrush", "CornerRadiusLarge" }.All(System.Windows.Application.Current.Resources.Contains)
+                && SearchBox.MinHeight >= 40 && SortBox.MinHeight >= 40
+                && (System.Windows.Application.Current.FindResource(typeof(Button)) as Style)?.Setters.OfType<Setter>().Any(setter => setter.Property == FrameworkElement.MinHeightProperty && Convert.ToDouble(setter.Value, System.Globalization.CultureInfo.InvariantCulture) >= 40) == true
+                && FontFamily.Source.Contains("Segoe UI Variable", StringComparison.OrdinalIgnoreCase));
             Check("Tray icon and useful menu created", tray is { Visible: true } && tray.ContextMenuStrip?.Items.Count == 5);
             if (!offline) Check("Actual packaged window loads live catalog and production config", Sync.Online && Sync.LastSync != null);
-            var playStateGame = Games.FirstOrDefault(game => game.CanPlayWithWand) ?? Games.First();
+            var playStateGame = filtered.FirstOrDefault(game => game.CanPlayWithWand) ?? filtered.First();
             GameList.ScrollIntoView(playStateGame);
             await Dispatcher.InvokeAsync(() => GameList.UpdateLayout(), DispatcherPriority.Render);
             var playStateContainer = GameList.ItemContainerGenerator.ContainerFromItem(playStateGame);
             var playButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "PlayGame");
             var wandButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "PlayWithWand");
             var exitButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "ForceExitGameAndWand");
+            string idleCardEvidence = $"container={playStateContainer != null}; play={playButton?.Content}; wand={wandButton?.Visibility}; expectedWand={(playStateGame.CanPlayWithWand ? Visibility.Visible : Visibility.Collapsed)}; exit={exitButton?.Visibility}";
             Check("Idle cards reflect exact Wand eligibility while hiding force-exit controls", playButton?.Content?.ToString()?.Contains("Play", StringComparison.Ordinal) == true
                 && wandButton?.Visibility == (playStateGame.CanPlayWithWand ? Visibility.Visible : Visibility.Collapsed)
-                && exitButton?.Visibility == Visibility.Collapsed);
+                && exitButton?.Visibility == Visibility.Collapsed, idleCardEvidence);
             string processFixtureFolder = Path.Combine(Store.Root, "process-fixture");
             Directory.CreateDirectory(processFixtureFolder);
             string processFixture = Path.Combine(processFixtureFolder, "TrackedGame.exe");
@@ -1261,7 +1272,21 @@ public partial class MainWindow
             using (var file = File.Create(Path.ChangeExtension(report, ".png"))) png.Save(file);
             LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = true, executable = Environment.ProcessPath, catalog = Games.Count, checks }));
         }
-        catch (Exception ex) { LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = false, error = ex.ToString(), checks })); }
+        catch (Exception ex)
+        {
+            try
+            {
+                var content = (FrameworkElement)Content;
+                if (content.ActualWidth > 0 && content.ActualHeight > 0)
+                {
+                    var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(content);
+                    var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var file = File.Create(Path.ChangeExtension(report, ".failure.png")); png.Save(file);
+                }
+            }
+            catch { }
+            LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = false, error = ex.ToString(), checks }));
+        }
         finally { Close(); }
     }
 

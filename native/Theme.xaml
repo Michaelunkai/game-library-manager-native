@@ -2,12 +2,26 @@
   <SolidColorBrush x:Key="CanvasBrush" Color="#101217"/>
   <SolidColorBrush x:Key="PanelBrush" Color="#171B23"/>
   <SolidColorBrush x:Key="CardBrush" Color="#1D222C"/>
+  <SolidColorBrush x:Key="ShellBrush" Color="#12161D"/>
+  <SolidColorBrush x:Key="SurfaceBrush" Color="#171B23"/>
+  <SolidColorBrush x:Key="ElevatedSurfaceBrush" Color="#222936"/>
   <SolidColorBrush x:Key="StrokeBrush" Color="#303847"/>
+  <SolidColorBrush x:Key="SubtleStrokeBrush" Color="#26303D"/>
   <SolidColorBrush x:Key="TextBrush" Color="#F2F5FA"/>
   <SolidColorBrush x:Key="MutedBrush" Color="#A9B5C9"/>
   <SolidColorBrush x:Key="AccentBrush" Color="#9CE7BB"/>
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#B3F2CB"/>
+  <SolidColorBrush x:Key="AccentPressedBrush" Color="#78C99B"/>
+  <SolidColorBrush x:Key="SuccessBrush" Color="#63D39A"/>
+  <SolidColorBrush x:Key="WarningBrush" Color="#F0C36B"/>
+  <SolidColorBrush x:Key="DangerBrush" Color="#FF7B7B"/>
+  <SolidColorBrush x:Key="FocusBrush" Color="#8DC8FF"/>
+  <CornerRadius x:Key="CornerRadiusSmall">8</CornerRadius>
+  <CornerRadius x:Key="CornerRadiusMedium">12</CornerRadius>
+  <CornerRadius x:Key="CornerRadiusLarge">16</CornerRadius>
+  <DropShadowEffect x:Key="ElevatedShadow" BlurRadius="28" ShadowDepth="8" Opacity="0.25" Color="#000000"/>
   <Style TargetType="Window">
-    <Setter Property="FontFamily" Value="Segoe UI"/>
+    <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
     <Setter Property="FontSize" Value="14"/>
     <Setter Property="Background" Value="{DynamicResource CanvasBrush}"/>
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
@@ -20,18 +34,18 @@
     <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="14,9"/>
-    <Setter Property="MinHeight" Value="38"/>
+    <Setter Property="MinHeight" Value="42"/>
     <Setter Property="Margin" Value="0,0,8,0"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+          <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource CornerRadiusSmall}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
           </Border>
           <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/><Setter TargetName="Bd" Property="Opacity" Value="0.96"/></Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/><Setter TargetName="Bd" Property="BorderThickness" Value="2"/></Trigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}"/><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/></Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource FocusBrush}"/><Setter TargetName="Bd" Property="BorderThickness" Value="2"/></Trigger>
             <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.72"/></Trigger>
             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.38"/></Trigger>
           </ControlTemplate.Triggers>
@@ -40,6 +54,12 @@
     </Setter>
   </Style>
   <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="#13211A"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style x:Key="SubtleButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+  <Style x:Key="CaptionButton" TargetType="Button" BasedOn="{StaticResource SubtleButton}"><Setter Property="Width" Value="48"/><Setter Property="Height" Value="48"/><Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe UI Symbol"/><Setter Property="FontSize" Value="11"/></Style>
+  <Style x:Key="CloseCaptionButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}"><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#C42B1C"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="#C42B1C"/></Trigger></Style.Triggers></Style>
+  <Style x:Key="SurfaceCard" TargetType="Border"><Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SubtleStrokeBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusMedium}"/></Style>
+  <Style x:Key="TitleText" TargetType="TextBlock"><Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
+  <Style x:Key="CaptionText" TargetType="TextBlock"><Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/></Style>
   <Style TargetType="TextBox">
     <Setter Property="Background" Value="{DynamicResource CardBrush}"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="12,9"/><Setter Property="MinHeight" Value="42"/><Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/><Setter Property="SelectionBrush" Value="#426F61"/>
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost"/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/><Setter TargetName="Bd" Property="BorderThickness" Value="2"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
