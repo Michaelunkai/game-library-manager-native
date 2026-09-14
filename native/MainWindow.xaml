@@ -38,7 +38,8 @@
         <ComboBox x:Name="RatingBox" Grid.Column="3" SelectionChanged="FilterChanged" AutomationProperties.AutomationId="RatingFilter" ToolTip="Minimum rating"/>
         <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,10,0,0">
           <CheckBox x:Name="InstalledOnlyFilter" Content="Installed only" Checked="InstalledFilterChanged" Unchecked="InstalledFilterChanged" AutomationProperties.AutomationId="InstalledOnlyFilter" Margin="0,0,18,0" ToolTip="Show only games installed on this PC, combined with the current category, search, tag, and minimum rating."/>
-          <CheckBox x:Name="WithoutInstalledFilter" Content="Without installed" Checked="InstalledFilterChanged" Unchecked="InstalledFilterChanged" AutomationProperties.AutomationId="WithoutInstalledFilter" ToolTip="Show only games that are not installed on this PC."/>
+          <CheckBox x:Name="WithoutInstalledFilter" Content="Without installed" Checked="InstalledFilterChanged" Unchecked="InstalledFilterChanged" AutomationProperties.AutomationId="WithoutInstalledFilter" Margin="0,0,18,0" ToolTip="Show only games that are not installed on this PC."/>
+          <CheckBox x:Name="WandIncludedFilter" Content="Wand included" Checked="InstalledFilterChanged" Unchecked="InstalledFilterChanged" AutomationProperties.AutomationId="WandIncludedFilter" ToolTip="Show only installed games with an exact Wand registration and a working game executable."/>
         </StackPanel>
       </Grid>
       <DockPanel Grid.Row="3" Margin="0,0,0,14">
@@ -48,11 +49,22 @@
       <Grid Grid.Row="4">
         <ListBox x:Name="GameList" AutomationProperties.AutomationId="GameList" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True" MouseDoubleClick="GameDoubleClick" SelectionChanged="GameSelectionChanged">
           <ListBox.ItemTemplate><DataTemplate>
-            <Grid Margin="14,10"><Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/></Grid.ColumnDefinitions>
+            <Grid Margin="14,10"><Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="210"/></Grid.ColumnDefinitions>
               <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}" VerticalAlignment="Center" Checked="SelectionChecked" Unchecked="SelectionChecked" AutomationProperties.Name="{Binding Name}"/>
-              <Border Grid.Column="1" Width="{Binding CoverWidth}" Height="{Binding CoverHeight}" Background="#304A42" CornerRadius="6" ClipToBounds="True"><Grid><TextBlock Text="{Binding Initial}" Foreground="#CBF6DA" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Cover, Converter={StaticResource CoverConverter}}" Stretch="UniformToFill"/></Grid></Border>
+              <Border Grid.Column="1" Width="{Binding CoverWidth}" Height="{Binding CoverHeight}" Background="#304A42" CornerRadius="6" ClipToBounds="True"><Grid><TextBlock Text="{Binding Initial}" Foreground="#CBF6DA" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Converter={StaticResource CoverConverter}}" Stretch="UniformToFill"/></Grid></Border>
               <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0"><TextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Meta}" Foreground="{DynamicResource MutedBrush}" Margin="0,8,0,0" FontSize="12"/><TextBlock Text="{Binding PlayedMeta}" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0" FontSize="12"/><TextBlock Text="{Binding Id}" Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding TagsLabel}" Foreground="{DynamicResource AccentBrush}" FontSize="11" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/></StackPanel>
-              <StackPanel Grid.Column="3" VerticalAlignment="Center"><TextBlock Text="{Binding RatingLabel}" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" FontSize="18"/><Button Content="▶  Play" Style="{StaticResource PrimaryButton}" Click="PlayFromCard" Tag="{Binding}" AutomationProperties.AutomationId="PlayGame" Padding="8,6" Margin="0,8,0,0"/><Button Content="✦  Play with Wand" Click="PlayWithWandFromCard" Tag="{Binding}" AutomationProperties.AutomationId="PlayWithWand" Padding="8,6" Margin="0,6,0,0"/><Button Content="{Binding WishlistLabel}" Click="ToggleWishlist" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/><Button Content="Details  →" Click="OpenGameDetails" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/></StackPanel>
+              <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                <TextBlock Text="{Binding RatingLabel}" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" FontSize="18"/>
+                <Button Content="{Binding PlayLabel}" Style="{StaticResource PrimaryButton}" Click="PlayFromCard" Tag="{Binding}" AutomationProperties.AutomationId="PlayGame" Padding="8,6" Margin="0,8,0,0"/>
+                <Button Content="✦  Play with Wand" Click="PlayWithWandFromCard" Tag="{Binding}" AutomationProperties.AutomationId="PlayWithWand" Padding="8,6" Margin="0,6,0,0">
+                  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding CanPlayWithWand}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                </Button>
+                <Button Content="⏹  Exit game + Wand" Click="ForceExitGameAndWandFromCard" Tag="{Binding}" AutomationProperties.AutomationId="ForceExitGameAndWand" Padding="8,6" Margin="0,6,0,0" Background="#A83232" Foreground="White" ToolTip="Force-close this tracked game and Wand. This is only shown while the game is running.">
+                  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsPlaying}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                </Button>
+                <Button Content="{Binding WishlistLabel}" Click="ToggleWishlist" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/>
+                <Button Content="Details  →" Click="OpenGameDetails" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/>
+              </StackPanel>
             </Grid>
           </DataTemplate></ListBox.ItemTemplate>
         </ListBox>

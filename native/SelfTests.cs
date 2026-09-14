@@ -10,6 +10,7 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -54,10 +55,84 @@ public static class SelfTests
             Require(Directory.EnumerateFiles(Path.Combine(store.Assets, "images"), "*", SearchOption.AllDirectories).Count() >= 2028, "Incomplete covers.");
             Require(games.Select(g => g.Id).Distinct(StringComparer.Ordinal).Count() == games.Count, "Duplicate exact identities.");
         });
+        Check("Packaged supported Wand registrations remain available without a profile dependency", () =>
+        {
+            string manifest = Path.Combine(AppContext.BaseDirectory, "tools", "wand-supported-games.json");
+            Require(File.Exists(manifest), "The bundled Wand registration manifest is missing.");
+            Require(JsonNode.Parse(File.ReadAllText(manifest)) is JsonArray registrations && registrations.Count == 39
+                && registrations.All(row => row is JsonObject record
+                    && DataJson.Text(record["titleId"]).Length > 0
+                    && DataJson.Text(record["gameId"]).Length > 0
+                    && DataJson.Text(record["path"]).StartsWith(@"E:\games\", StringComparison.OrdinalIgnoreCase)),
+                "The bundled Wand registration manifest is incomplete or invalid.");
+            var supported = WandIntegration.LoadSupportedGames(new[] { manifest });
+            Require(supported.Count == 39 && supported.Select(game => game.GameId).Distinct(StringComparer.Ordinal).Count() == 39,
+                "The runtime Wand manifest loader did not preserve all 39 unique registrations.");
+        });
+        Check("Command launchers track their exact child executable", () =>
+        {
+            string launcherRoot = Path.Combine(root, "wand-command-launcher");
+            string emulatorRoot = Path.Combine(launcherRoot, "emu");
+            Directory.CreateDirectory(emulatorRoot);
+            string emulator = Path.Combine(emulatorRoot, "Ryujinx.exe");
+            File.WriteAllBytes(emulator, new byte[] { 77, 90 });
+            string launcher = Path.Combine(launcherRoot, "Ryujinx.bat");
+            File.WriteAllText(launcher, "cd emu" + Environment.NewLine + "Ryujinx.exe -r ..\\Data" + Environment.NewLine + "cd ..");
+            Require(string.Equals(WandIntegration.ResolveTrackedExecutable(launcher), emulator, StringComparison.OrdinalIgnoreCase),
+                "The registered command launcher was not mapped to its exact runtime executable.");
+        });
+        Check("Exact Wand registrations resolve catalog ids and nested runtime executables without title guessing", () =>
+        {
+            var registration = new WandRegisteredInstallation("100", "200", @"C:\Games\Proof\Launcher.exe");
+            var catalog = JsonNode.Parse("{\"titles\":{\"100\":{\"id\":\"100\",\"name\":\"Proof Game\",\"gameIds\":[\"200\"]}},\"games\":{\"200\":{\"titleId\":\"100\",\"platformId\":\"steam\",\"versionPath\":\"Proof\\\\Binaries\\\\ProofGame.exe\"}}}")!.AsObject();
+            Require(WandIntegration.TryResolveRegisteredTarget(catalog, registration, out var target)
+                && target.TitleId == "100" && target.GameId == "200", "The exact saved Wand ids were not accepted from the matching catalog records.");
+            string install = Path.Combine(root, "nested-runtime-proof");
+            string launcher = Path.Combine(install, "Launcher.exe");
+            string runtime = Path.Combine(install, "Proof", "Binaries", "ProofGame.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(runtime)!);
+            File.WriteAllBytes(launcher, new byte[] { 77, 90 });
+            File.WriteAllBytes(runtime, new byte[] { 77, 90 });
+            Require(string.Equals(WandIntegration.ResolveTrackedExecutable(launcher, target.VersionPath), runtime, StringComparison.OrdinalIgnoreCase),
+                "A registered root launcher did not track the catalog's exact nested process.");
+        });
+        Check("Wand library matching rejects same-folder title collisions", () =>
+        {
+            var registration = new WandSupportedGame("tailsofiron", "53336", "57242", "Tails of Iron", @"E:\games\tailsofiron\TOI.exe");
+            var wrongFolderMatch = new Game { Id = "tailsofiron", Name = "Tails of Iron 2: Whiskers of Winter" };
+            var correctTitle = new Game { Id = "TailsofIron", Name = "Tails of Iron" };
+            Require(MainWindow.WandLibraryMatchScore(wrongFolderMatch, registration, null) == 0
+                && MainWindow.WandLibraryMatchScore(correctTitle, registration, null) > 0,
+                "A folder-id collision could attach Wand to the wrong game card.");
+        });
+        Check("Activity logging never blocks the caller on an unavailable log file", () =>
+        {
+            string logRoot = Path.Combine(root, "unavailable-log-proof");
+            var logStore = new LibraryStore(logRoot);
+            Directory.CreateDirectory(Path.Combine(logRoot, "activity.log"));
+            var timer = Stopwatch.StartNew();
+            logStore.Log("This write is expected to fail on the background writer.");
+            timer.Stop();
+            Require(timer.Elapsed < TimeSpan.FromMilliseconds(500), "Activity logging blocked its caller.");
+        });
+        Check("Packaged Wand same-route recovery remains self-contained", () =>
+        {
+            string launcher = Path.Combine(AppContext.BaseDirectory, "tools", "wand_cdp_launch.js");
+            string node = Path.Combine(AppContext.BaseDirectory, "tools", "node", "node.exe");
+            Require(File.Exists(launcher) && File.Exists(node), "The bundled Wand CDP recovery runtime is missing.");
+            string source = File.ReadAllText(launcher);
+            Require(source.Contains("launchNonce", StringComparison.Ordinal) && source.Contains("127.0.0.1:9222", StringComparison.Ordinal), "The Wand CDP recovery route lost its unique loopback-only launch behavior.");
+        });
         Check("Exact-case Docker tags remain distinct", () =>
         {
             var games = new List<Game>(); LibraryStore.MergeTags(games, JsonNode.Parse("{\"tags\":[{\"name\":\"AeternaNoctis\"},{\"name\":\"aeternanoctis\"}]}")!, state.Settings);
             Require(games.Count == 2, "Tags were collapsed.");
+        });
+        Check("Punctuation aliases attach Docker metadata to the canonical game", () =>
+        {
+            var games = new List<Game> { new() { Id = "007firstlight", Name = "007 First Light" } };
+            LibraryStore.MergeTags(games, JsonNode.Parse("{\"tags\":[{\"name\":\"007-first-light\",\"full_size\":123456789}]}")!, state.Settings);
+            Require(games.Count == 1 && games[0].Id == "007firstlight" && games[0].SizeGb > 0, "A punctuation-variant Docker tag created a duplicate identity.");
         });
         Check("Docker Hub 403 fallback remains usable without claiming fresh tags", () =>
         {
@@ -94,6 +169,39 @@ public static class SelfTests
             var reloaded = JsonNode.Parse(File.ReadAllText(Path.Combine(new LibraryStore(root).Cache, "metadata-attempts.json")))!.AsObject();
             Require(!MainWindow.MetadataDue(game, reloaded, DateTime.UtcNow) && MainWindow.MetadataDue(game, reloaded, DateTime.UtcNow.AddHours(2)), "Retry schedule lost across restart.");
             Require(!MainWindow.MetadataDue(new Game { Id = "local:x", IsLocal = true }, new(), DateTime.UtcNow), "Local executables triggered Docker metadata lookup.");
+        });
+        Check("Rejected discovered metadata honors its retry barrier", () =>
+        {
+            var game = new Game
+            {
+                Id = "dragon-quest-i-ii-hd-2d-remake",
+                Name = "DRAGON QUEST III HD-2D Remake",
+                Discovered = true,
+                Cover = "cached-cover",
+                Time = 10
+            };
+            var attempts = new JsonObject { [game.Id] = new JsonObject { ["retryAfter"] = DateTime.UtcNow.AddHours(1).ToString("O") } };
+            Require(!MainWindow.MetadataDue(game, attempts, DateTime.UtcNow), "A rejected provider title bypassed its persisted retry barrier.");
+            Require(MainWindow.MetadataDue(game, attempts, DateTime.UtcNow.AddHours(2)), "A rejected provider title was never released after its retry barrier.");
+        });
+        Check("Wand delayed startup remains asynchronous and tolerant", () =>
+        {
+            Require(WandIntegration.WandStartupWindow >= TimeSpan.FromMinutes(3), "The Wand startup window no longer covers a delayed desktop-client start.");
+        });
+        Check("Missing-cover converter returns a deterministic nonblank image", () =>
+        {
+            var converter = new CoverConverter();
+            var first = converter.Convert(new Game { Id = "cover-fallback-proof", Name = "Cover Fallback Proof", Cover = "" }, typeof(ImageSource), null!, null!);
+            var second = converter.Convert(new Game { Id = "cover-fallback-proof", Name = "A different display name", Cover = "" }, typeof(ImageSource), null!, null!);
+            var firstBitmap = first as BitmapSource;
+            var secondBitmap = second as BitmapSource;
+            Require(firstBitmap != null && secondBitmap != null
+                && firstBitmap.PixelWidth > 0 && firstBitmap.PixelHeight > 0
+                && ReferenceEquals(first, second), "A missing cover did not produce a stable renderable fallback.");
+            int stride = firstBitmap!.PixelWidth * Math.Max(1, firstBitmap.Format.BitsPerPixel / 8);
+            var pixel = new byte[stride * firstBitmap.PixelHeight];
+            firstBitmap.CopyPixels(pixel, stride, 0);
+            Require(pixel.Any(value => value != 0), "The missing-cover fallback rendered as a blank pixel buffer.");
         });
         Check("Atomic save and restart preserve preferences", () => { state.Wishlist.Add("AeternaNoctis"); state.Ratings["AeternaNoctis"] = 5; store.Save(state); var loaded = new LibraryStore(root).LoadState(); Require(loaded.Wishlist.Contains("AeternaNoctis") && loaded.Ratings["AeternaNoctis"] == 5, "State lost."); });
         Check("Damaged state recovers a preserved backup", () => { store.Save(state); File.WriteAllText(store.StatePath, "{bad"); var loaded = store.LoadState(); Require(loaded.Wishlist.Contains("AeternaNoctis"), "Backup not recovered."); Require(Directory.GetFiles(root, "*.corrupt-*").Length == 1, "Damaged state not preserved."); store.Save(loaded); });
@@ -196,6 +304,33 @@ public static class SelfTests
                 && request.CorrelationId == "custom:" + expectedSku,
                 "The native Wand handoff did not retain the exact executable and working directory.");
         });
+        Check("Play with Wand requires an existing exact Wand registration", () =>
+        {
+            string executable = Path.Combine(root, "wand-existing-registration", "Registered.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+            File.WriteAllText(executable, "fixture");
+            string manifest = Path.Combine(root, "wand-supported-games.json");
+            File.WriteAllText(manifest, new JsonArray(new JsonObject
+            {
+                ["titleId"] = "900", ["gameId"] = "901", ["path"] = executable
+            }).ToJsonString());
+            var catalog = new JsonObject
+            {
+                ["titles"] = new JsonObject { ["900"] = new JsonObject { ["id"] = "900", ["name"] = "Registered Game", ["gameIds"] = new JsonArray("901") } },
+                ["games"] = new JsonObject { ["901"] = new JsonObject { ["id"] = "901", ["titleId"] = "900", ["platformId"] = "steam", ["versionPath"] = "Registered.exe" } }
+            };
+            store.CacheData("wand-catalog.json", catalog.ToJsonString());
+            var game = new Game { Id = "registeredgame", Name = "Registered Game", Installed = true };
+            Require(WandIntegration.TryGetExistingWandInstallation(executable, new[] { manifest }, out var registration)
+                && registration.TitleId == "900" && registration.GameId == "901", "The saved exact Wand registration was not read.");
+            Require(WandIntegration.CanLaunchExistingWandInstall(game, executable, store, new[] { manifest }, out _), "An exact existing Wand registration was hidden.");
+            File.WriteAllText(manifest, new JsonArray(new JsonObject
+            {
+                ["titleId"] = "900", ["gameId"] = "different", ["path"] = executable
+            }).ToJsonString());
+            Require(!WandIntegration.CanLaunchExistingWandInstall(game, executable, store, new[] { manifest }, out var message)
+                && message.Contains("does not match", StringComparison.Ordinal), "A mismatched Wand registration was offered as playable.");
+        });
         Check("Wand resolution uses the stable game id and executable aliases", () =>
         {
             var catalog = JsonNode.Parse("{\"titles\":{\"12\":{\"id\":\"12\",\"slug\":\"the-vagrant\",\"name\":\"The Vagrant\",\"gameIds\":[\"34\"]}},\"games\":{\"34\":{\"id\":\"34\",\"titleId\":\"12\",\"platformId\":\"steam\",\"versionPath\":\"TheVagrant.exe\"}}}")!.AsObject();
@@ -268,7 +403,46 @@ public static class SelfTests
             store.Save(state);
             var loaded = store.LoadState();
             var game = store.LoadGames(loaded, store.ReadConfig()).FirstOrDefault(g => g.Id == id);
-            Require(loaded.PlayTimeSeconds[id] == 7380 && game != null && game.Installed && Math.Abs(game.PlayedHours - 2.05) < 0.001, "Play time was not persisted or displayed.");
+            var lastPlayed = DateTime.UtcNow.AddMinutes(-3);
+            state.LastPlayedUtc[id] = lastPlayed;
+            store.Save(state);
+            loaded = store.LoadState();
+            game = store.LoadGames(loaded, store.ReadConfig()).FirstOrDefault(g => g.Id == id);
+                Require(loaded.PlayTimeSeconds[id] == 7380 && loaded.LastPlayedUtc[id] == lastPlayed && game != null && game.Installed && Math.Abs(game.PlayedHours - 2.05) < 0.001 && game.LastPlayedUtc == lastPlayed, "Play time or last-played state was not persisted or displayed.");
+        });
+        Check("Playing state exposes the visible play and forced-exit controls", () =>
+        {
+            var game = new Game { IsPlaying = true };
+            Require(game.PlayLabel.Contains("Playing", StringComparison.Ordinal) && game.PlayedMeta.StartsWith("Playing", StringComparison.Ordinal), "A running game did not expose its playing state.");
+            game.IsPlaying = false;
+            Require(game.PlayLabel.Contains("Play", StringComparison.Ordinal) && !game.PlayLabel.Contains("Playing", StringComparison.Ordinal), "A finished game did not restore its Play label.");
+        });
+        Check("Wand launch cleanup releases handles without terminating a running game", () =>
+        {
+            var process = Process.Start(new ProcessStartInfo("ping.exe", "127.0.0.1 -n 30") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })
+                ?? throw new InvalidOperationException("Could not start the harmless process fixture.");
+            int processId = process.Id;
+            try
+            {
+                WandIntegration.ReleaseProcessHandleWithoutTermination(process);
+                Thread.Sleep(150);
+                using var observed = Process.GetProcessById(processId);
+                Require(!observed.HasExited, "Releasing a Wand launch handle terminated the running process.");
+            }
+            finally
+            {
+                try { using var cleanup = Process.GetProcessById(processId); if (!cleanup.HasExited) { cleanup.Kill(entireProcessTree: true); cleanup.WaitForExit(5000); } } catch (ArgumentException) { }
+            }
+        });
+        Check("Explicit Exit requests process-tree termination without blocking the UI", () =>
+        {
+            using var process = Process.Start(new ProcessStartInfo("ping.exe", "127.0.0.1 -n 30") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })
+                ?? throw new InvalidOperationException("Could not start the harmless process fixture.");
+            var elapsed = Stopwatch.StartNew();
+            Require(MainWindow.RequestImmediateProcessTreeExit(process), "The explicit Exit request was not issued.");
+            elapsed.Stop();
+            Require(elapsed.Elapsed < TimeSpan.FromSeconds(1), "The explicit Exit request blocked instead of returning immediately.");
+            Require(process.WaitForExit(5000), "The explicit Exit request did not terminate the process tree.");
         });
         Check("AHK frozen-process state requires counted exact identities", () =>
         {
@@ -340,10 +514,14 @@ public static class SelfTests
                 new Game { Id = "beta", Name = "Beta", CategoryName = "Alpha", Time = 0, SizeGb = 0, Rating = 0, Added = default },
                 new Game { Id = "new", Name = "New", CategoryName = "Beta", Category = "new", Time = 2, SizeGb = 1, Rating = 2, Added = default }
             };
-            var modes = new[] { "Name A–Z", "Name Z–A", "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Recently Added", "Oldest First", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)", "Category" };
+            var modes = new[] { "Name A–Z", "Name Z–A", "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Recently Added", "Recently Played", "Oldest First", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)", "Category" };
             Require(modes.All(mode => MainWindow.SortGames(games, mode).Count() == games.Length), "A website sort category is missing from native.");
             foreach (var mode in new[] { "Time to Beat (Low–High)", "Time to Beat (High–Low)", "Rating (High–Low)", "Rating (Low–High)", "Size (Small–Large)", "Size (Large–Small)" })
                 Require(MainWindow.SortGames(games, mode).Last().Id == "beta", "Unknown values did not stay last for " + mode + ".");
+            var played = new Game { Id = "played", Name = "Played", LastPlayedUtc = DateTime.UtcNow, PlayedHours = 0.1 };
+            var older = new Game { Id = "older", Name = "Older", LastPlayedUtc = DateTime.UtcNow.AddHours(-1), PlayedHours = 0.1 };
+            var never = new Game { Id = "never", Name = "Never" };
+            Require(MainWindow.SortInstalledGames(new[] { never, older, played }, "Size (Small–Large)").Select(g => g.Id).SequenceEqual(new[] { "played", "older", "never" }), "Installed games did not put the latest played game first.");
         });
         Check("PowerShell, BAT and shell scripts preserve exact tags", () =>
         {
@@ -353,7 +531,22 @@ public static class SelfTests
                 var script = DockerScripts.Generate(new[] { game }, state.Settings, format);
                 if (format == "bat") script = script.Split("\r\n# GLM_POWERSHELL_START\r\n")[1];
                 Require(script.Contains("backup:AeternaNoctis") && !script.Contains("wsl --") && !script.Contains("docker system prune"), "Unsafe or incorrect script.");
-                if (format is "bat" or "sh") Require(script.Contains("cp -rL") && script.Contains(DockerScripts.CompletionMarkerName) && script.Contains("GameLibraryManager|") && !script.Contains("cp -av"), "Install scripts must copy without Unix permission preservation and require an id-bound completion marker.");
+                if (format == "ps1")
+                {
+                    Require(script.Contains("[IO.FileStream]::new", StringComparison.Ordinal) && !script.Contains("[IO.File]::Open(", StringComparison.Ordinal),
+                        "The Windows installer lock must use a FileStream constructor supported by Windows PowerShell 5.1.");
+                }
+                if (format is "ps1" or "bat" or "sh")
+                {
+                    Require(script.Contains("container create") && script.Contains("cp --follow-link")
+                        && script.Contains(DockerScripts.CompletionMarkerName) && script.Contains("GameLibraryManager|")
+                        && script.Contains(DockerScripts.StagingDirectoryName) && script.Contains("contains no playable Windows executable")
+                        && !script.Contains("cp -rL /home", StringComparison.Ordinal) && !script.Contains("--mount", StringComparison.Ordinal),
+                        "Install scripts must use Docker's archive copy, then stage and prove a playable payload before replacing an existing install.");
+                    Require(script.Contains("yuzu") && script.Contains("gamebootstrapper") && script.Contains("toolkit"), "Install scripts must not treat emulator or bundled utility executables as native game proof.");
+                }
+                if (format == "sh") Require(script.Contains("completed_games") && script.Contains("failed_games") && script.Contains("Install batch completed with failures:"), "The shell export still aborts a multi-game batch at the first failure.");
+                if (format == "sh") Require(script.Contains("grep -Eiv") && script.Contains("/[^/]*(editor|toolkit|packager)"), "The Bash export does not reject support utilities when proving a native executable.");
                 File.WriteAllText(Path.Combine(root, "generated." + format), DockerScripts.Generate(new[] { game }, state.Settings, format));
             }
             var wsl = DockerScripts.Generate(new[] { game }, state.Settings, "sh", shellTarget: "wsl2");
@@ -370,8 +563,8 @@ public static class SelfTests
         {
             var game = new Game { Id = "shell-marker-expansion", Name = "Shell marker expansion" };
             string script = DockerScripts.Generate(new[] { game }, state.Settings, "sh", shellTarget: "native-linux");
-            string markerLine = script.Split('\n').Single(line => line.StartsWith("completion_marker=", StringComparison.Ordinal)).TrimEnd('\r');
-            string expected = "completion_marker=\"$destination/" + DockerScripts.InstallFolder(game.Id) + "/" + DockerScripts.CompletionMarkerName + "\"";
+            string markerLine = script.Split('\n').Single(line => line.TrimStart().StartsWith("completion_marker=", StringComparison.Ordinal)).Trim();
+            string expected = "completion_marker=\"$install_folder/" + DockerScripts.CompletionMarkerName + "\"";
             Require(markerLine == expected, "The POSIX completion marker must expand $destination inside double quotes.");
             Require(!markerLine.Contains("'$destination/", StringComparison.Ordinal), "The POSIX completion marker must not quote the destination variable literally.");
         });
@@ -380,15 +573,73 @@ public static class SelfTests
             var games = new[] { new Game { Id = "batch-alpha", Name = "Batch Alpha" }, new Game { Id = "batch-beta", Name = "Batch Beta" } };
             foreach (var format in new[] { "ps1", "sh", "bat" })
             {
-                string script = DockerScripts.Generate(games, state.Settings, format, shellTarget: format == "sh" ? "wsl2" : null);
+                var scriptSettings = DataJson.Read<Preferences>(DataJson.Write(state.Settings));
+                if (format == "sh") scriptSettings.MountPath = Path.Combine(root, "multi-game-output");
+                string script = DockerScripts.Generate(games, scriptSettings, format, shellTarget: format == "sh" ? "wsl2" : null);
                 Require(script.Contains("GameLibraryManager|batch-alpha") && script.Contains("GameLibraryManager|batch-beta") && script.Contains(DockerScripts.InstallFolder("batch-alpha")) && script.Contains(DockerScripts.InstallFolder("batch-beta")), "A multi-game " + format + " script lost a game-specific completion marker or folder.");
+                if (format == "sh")
+                {
+                    Require(script.Contains("completed_games+=") && script.Contains("failed_games+=") && script.Contains("later games were still attempted"), "The multi-game shell export does not isolate per-game failures.");
+                    File.WriteAllText(Path.Combine(root, "multi-game.sh"), script);
+                }
             }
         });
-        Check("Windows installs use the default terminal BAT contract", () =>
+        Check("Windows installs hand off a reviewed BAT job to the visible default terminal", () =>
         {
+            string batPath = Path.Combine(root, "install-games.bat");
             string bat = DockerScripts.Generate(new[] { new Game { Id = "terminalproof", Name = "Terminal proof" } }, state.Settings, "bat");
-            var start = JobWindow.BuildDefaultTerminalStartInfo(Path.Combine(root, "install-games.bat"));
-            Require(bat.StartsWith("@echo off\r\n", StringComparison.Ordinal) && bat.Contains("# GLM_POWERSHELL_START") && bat.Contains(DockerScripts.CompletionMarkerName) && !bat.Contains("\r\npause\r\n") && start.UseShellExecute && start.FileName.EndsWith("install-games.bat", StringComparison.OrdinalIgnoreCase), "Install did not preserve the visible BAT/default-terminal route, completion proof, or completion exit.");
+            var start = JobWindow.BuildDefaultTerminalStartInfo(batPath);
+            const string operationId = "11111111111111111111111111111111";
+            string bound = JobWindow.BindJobEnvironment(bat, "bat", operationId, lockHeld: true);
+            Require(bat.StartsWith("@echo off\r\n", StringComparison.Ordinal), "The install export is not a BAT job.");
+            Require(bat.Contains("# GLM_POWERSHELL_START") && bat.Contains(DockerScripts.CompletionMarkerName), "The BAT job lost its reviewed PowerShell payload or completion proof.");
+            Require(bat.Contains("exit /b %GLM_EXIT%\r\n") && !bat.Contains("\r\npause\r\n"), "The BAT job lost its completion exit contract.");
+            string expectedCmd = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+            Require(start.UseShellExecute && !start.CreateNoWindow
+                && string.Equals(start.FileName, expectedCmd, StringComparison.OrdinalIgnoreCase)
+                && start.Arguments == "/d /c call \"" + Path.GetFullPath(batPath) + "\""
+                && string.Equals(start.WorkingDirectory, root, StringComparison.OrdinalIgnoreCase), "The BAT job was not handed to the visible default terminal with its working directory.");
+            Require(bound.StartsWith("@set \"GLM_INSTALL_OPERATION_ID=" + operationId + "\"\r\n@set \"GLM_NATIVE_INSTALL_LOCK_HELD=1\"\r\n", StringComparison.Ordinal) && bound.EndsWith(bat, StringComparison.Ordinal), "The BAT job did not retain its bound operation identity and payload.");
+            Reject(() => JobWindow.BuildDefaultTerminalStartInfo(Path.Combine(root, "install-games.ps1")));
+        });
+        Check("Per-game install failures stay bounded and identify the affected game", () =>
+        {
+            var games = new[]
+            {
+                new Game { Id = "per-game-failure-alpha", Name = "Per Game Failure Alpha" },
+                new Game { Id = "per-game-failure-beta", Name = "Per Game Failure Beta" }
+            };
+            foreach (var format in new[] { "ps1", "bat", "sh" })
+            {
+                string script = DockerScripts.Generate(games, state.Settings, format, shellTarget: format == "sh" ? "native-linux" : null);
+                string payload = format == "bat" ? script.Split("\r\n# GLM_POWERSHELL_START\r\n")[1] : script;
+                foreach (var game in games)
+                {
+                    string failureIdentity = format == "sh" ? game.Name : game.Id;
+                    string pullFailure = "Docker pull failed for " + failureIdentity;
+                    string extractionFailure = "Extraction failed for " + failureIdentity;
+                    Require(payload.Contains(pullFailure, StringComparison.Ordinal)
+                        && payload.Contains(extractionFailure, StringComparison.Ordinal)
+                        && payload.Contains("after five attempts", StringComparison.Ordinal)
+                        && payload.Contains("after three attempts", StringComparison.Ordinal)
+                        && payload.Contains("GameLibraryManager|" + game.Id + "|", StringComparison.Ordinal)
+                        && payload.Contains(DockerScripts.InstallFolder(game.Id), StringComparison.Ordinal),
+                        "The " + format + " export lost a bounded, game-specific failure or completion scope for " + game.Id + ".");
+                }
+                if (format == "ps1")
+                    Require(payload.Contains("The previous installation was preserved; review the log and retry.", StringComparison.Ordinal)
+                        && payload.Contains("contains no playable Windows executable", StringComparison.Ordinal)
+                        && payload.Contains(DockerScripts.StagingDirectoryName, StringComparison.Ordinal),
+                        "The PowerShell export stopped reporting staged payload validation and preservation for per-game failures.");
+                else
+                    Require(payload.Contains("run_success=0", StringComparison.Ordinal) || payload.Contains("$runSuccess = $false", StringComparison.Ordinal),
+                        "The " + format + " export has no per-game success gate.");
+                if (format is "ps1" or "bat")
+                    Require(payload.Contains("$failedGames", StringComparison.Ordinal)
+                        && payload.Contains("Install batch completed with failures:", StringComparison.Ordinal)
+                        && payload.Contains("exit 1", StringComparison.Ordinal),
+                        "The Windows export still aborts at the first failed game instead of reporting per-game failures.");
+            }
         });
         Check("Concurrent install jobs receive unique script and log paths", () =>
         {
@@ -470,6 +721,64 @@ public static class SelfTests
             string folder = Path.Combine(root, "installed", "TestGame"); Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, "setup.exe"), "fixture"); File.WriteAllText(Path.Combine(folder, "TestGame.exe"), "fixture");
             var found = InstalledScanner.Scan(Path.GetDirectoryName(folder)!, new[] { ("TestGame", "Test Game") }, default); Require(found.Count == 1 && found["TestGame"].EndsWith("TestGame.exe"), "Wrong executable selected.");
         });
+        Check("Canonical punctuation variants do not hide an installed game", () =>
+        {
+            string library = Path.Combine(root, "canonical-install");
+            string folder = Path.Combine(library, "007 First Light");
+            string retail = Path.Combine(folder, "Retail");
+            Directory.CreateDirectory(retail);
+            string launcher = Path.Combine(retail, "007FirstLight.exe");
+            File.WriteAllText(launcher, "fixture");
+            File.WriteAllText(Path.Combine(folder, "unins000.exe"), "fixture");
+            var found = InstalledScanner.Discover(library, new[] { ("007firstlight", "007 First Light") }, default);
+            Require(found.Games.Count == 1 && found.Games[0].Id == "007firstlight" && string.Equals(found.Games[0].Launcher, launcher, StringComparison.OrdinalIgnoreCase), "The canonical 007 folder was not mapped to its playable executable.");
+        });
+        Check("Catalog scanner chooses real game binaries and rejects emulator payloads", () =>
+        {
+            string library = Path.Combine(root, "launcher-selection");
+            string shippingFolder = Path.Combine(library, "Unreal Game");
+            string shippingDirectory = Path.Combine(shippingFolder, "UnrealGame", "Binaries", "Win64");
+            Directory.CreateDirectory(shippingDirectory);
+            string bootstrap = Path.Combine(shippingFolder, "UnrealGame.exe");
+            string shipping = Path.Combine(shippingDirectory, "UnrealGame-Win64-Shipping.exe");
+            File.WriteAllText(bootstrap, "bootstrap");
+            using (var stream = new FileStream(shipping, FileMode.Create, FileAccess.Write, FileShare.Read)) stream.SetLength(24 * 1024 * 1024);
+
+            string duplicateFolder = Path.Combine(library, "Duplicate Game");
+            string duplicateNested = Path.Combine(duplicateFolder, "Duplicate Game");
+            Directory.CreateDirectory(duplicateNested);
+            string duplicateRoot = Path.Combine(duplicateFolder, "Duplicate Game.exe");
+            string duplicateCopy = Path.Combine(duplicateNested, "Duplicate Game.exe");
+            File.WriteAllText(duplicateRoot, "root");
+            File.WriteAllText(duplicateCopy, "nested");
+
+            string emulatorFolder = Path.Combine(library, "Emulator Payload");
+            Directory.CreateDirectory(emulatorFolder);
+            File.WriteAllText(Path.Combine(emulatorFolder, "yuzu.exe"), "emulator");
+            File.WriteAllText(Path.Combine(emulatorFolder, "Launcher.exe"), "generic launcher");
+            File.WriteAllText(Path.Combine(emulatorFolder, "HW2Toolkit.exe"), "toolkit");
+            File.WriteAllText(Path.Combine(emulatorFolder, "HW2Editor.exe"), "editor");
+
+            string legacyFolder = Path.Combine(library, "DeusExInvisibleWar");
+            string legacySystem = Path.Combine(legacyFolder, "System");
+            Directory.CreateDirectory(legacySystem);
+            File.WriteAllText(Path.Combine(legacySystem, "dx2.exe"), "bootstrap");
+            using (var stream = new FileStream(Path.Combine(legacySystem, "DX2Main.exe"), FileMode.Create, FileAccess.Write, FileShare.Read)) stream.SetLength(6 * 1024 * 1024);
+            File.WriteAllText(Path.Combine(legacySystem, "Ion Launcher.exe"), "launcher");
+
+            var found = InstalledScanner.Discover(library, new[]
+            {
+                ("unrealgame", "Unreal Game"),
+                ("duplicategame", "Duplicate Game"),
+                ("emulatorpayload", "Emulator Payload"),
+                ("DeusExInvisibleWar", "Deus Ex Invisible War")
+            }, default);
+            var selectedShipping = found.Games.Single(g => g.Id == "unrealgame").Launcher;
+            Require(selectedShipping == shipping, "The root bootstrap displaced the real shipping binary.");
+            Require(found.Games.Single(g => g.Id == "duplicategame").Launcher == duplicateRoot, "The shallow playable binary was not preferred over a duplicate copy.");
+            Require(found.Games.Single(g => g.Id == "DeusExInvisibleWar").Launcher == Path.Combine(legacySystem, "DX2Main.exe"), "The playable DX2Main binary was displaced by the tiny DX2 bootstrap.");
+            Require(!found.Games.Any(g => g.Id == "emulatorpayload") && found.CatalogFoldersPresent.Contains("emulatorpayload"), "An emulator or generic launcher was offered as a native game executable.");
+        });
         Check("Legacy hashed install folders still resolve their exact game executable", () =>
         {
             string library = Path.Combine(root, "legacy-install");
@@ -540,13 +849,34 @@ public static class SelfTests
             var found = InstalledScanner.ScanDownloads(library, new[] { ("actualgame", "Actual game"), ("supportonly", "Support only") }, default);
             Require(found.Games.Count == 1 && found.Games[0].Id == "actualgame" && found.CatalogFoldersPresent.Contains("supportonly") && found.Notices.Count > 0, "Completion scan marked incomplete or unselected payloads installed.");
         });
-        Check("Metadata title matching rejects soundtracks and preserves exact game names", () =>
+        Check("Downloaded scans recover a legacy folder that omits an initial article", () =>
         {
-            Require(MetadataClient.SameTitle("Viewfinder", "VIEWFINDER") && !MetadataClient.SameTitle("INMOST", "INMOST Soundtrack") && !MetadataClient.SameTitle("", ""), "Incorrect metadata title accepted.");
+            string library = Path.Combine(root, "legacy-article-folder");
+            string folder = Path.Combine(library, "legendoftianding");
+            Directory.CreateDirectory(folder);
+            string executable = Path.Combine(folder, "Zebra.exe");
+            File.WriteAllText(executable, "fixture");
+            var found = InstalledScanner.ScanDownloads(library, new[] { ("thelegendoftianding", "The Legend of Tianding") }, default);
+            var folders = InstalledScanner.FindCatalogFolders(library, "thelegendoftianding", "The Legend of Tianding");
+            Require(found.Games.Count == 1 && found.Games[0].Id == "thelegendoftianding"
+                && string.Equals(found.Games[0].Launcher, executable, StringComparison.OrdinalIgnoreCase)
+                && folders.Contains(folder, StringComparer.OrdinalIgnoreCase),
+                "The valid legacy Tianding folder was not mapped back to its catalog game.");
+        });
+        Check("Metadata alias matching accepts curated aliases and rejects generic title collisions", () =>
+        {
+            Require(MetadataClient.SameTitle("Viewfinder", "VIEWFINDER")
+                && MetadataClient.SameTitle("DAVE THE DIVER", "DAVE: THE DIVER")
+                && !MetadataClient.SameTitle("INMOST", "INMOST Soundtrack")
+                && !MetadataClient.SameTitle("", ""), "Incorrect metadata title alias was accepted.");
             var alias = JsonNode.Parse("{\"id\":\"ofashnsteel\",\"name\":\"Of Ash and Steel\",\"source\":{\"image\":\"steam-known\",\"time\":\"known-override\"}}")!.AsObject();
-            Require(MetadataClient.MatchesGame(new Game { Id = "ofashnsteel", Name = "ofashnsteel" }, alias), "Curated backend alias was rejected.");
+            var game = new Game { Id = "ofashnsteel", Name = "ofashnsteel" };
+            Require(MetadataClient.MatchesGame(game, alias), "Curated backend alias was rejected.");
             alias["source"]!["image"] = "steam";
-            Require(!MetadataClient.MatchesGame(new Game { Id = "ofashnsteel", Name = "ofashnsteel" }, alias), "A generic different-title search result was accepted.");
+            Require(!MetadataClient.MatchesGame(game, alias), "A generic different-title search result was accepted.");
+            alias["source"]!["image"] = "steam-known";
+            alias["id"] = "another-game";
+            Require(!MetadataClient.MatchesGame(game, alias), "A curated alias with a different stable identity was accepted.");
         });
         Check("Metadata time and downloaded cover survive offline restart", () =>
         {
@@ -625,11 +955,78 @@ public partial class MainWindow
     {
         var checks = new List<object>();
         void Check(string name, bool passed) { checks.Add(new { name, passed, at = DateTime.UtcNow }); if (!passed) throw new InvalidOperationException("UI proof failed: " + name); }
+        static T? FindVisual<T>(DependencyObject? root, Func<T, bool> predicate) where T : DependencyObject
+        {
+            if (root == null) return null;
+            if (root is T candidate && predicate(candidate)) return candidate;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            {
+                var found = FindVisual(VisualTreeHelper.GetChild(root, i), predicate);
+                if (found != null) return found;
+            }
+            return null;
+        }
         try
         {
             Check("Packaged WPF window visible with taskbar identity", IsVisible && ShowInTaskbar && Icon != null && Games.Count >= 1179);
             Check("Tray icon and useful menu created", tray is { Visible: true } && tray.ContextMenuStrip?.Items.Count == 5);
             if (!offline) Check("Actual packaged window loads live catalog and production config", Sync.Online && Sync.LastSync != null);
+            var playStateGame = Games.FirstOrDefault(game => game.CanPlayWithWand) ?? Games.First();
+            GameList.ScrollIntoView(playStateGame);
+            await Dispatcher.InvokeAsync(() => GameList.UpdateLayout(), DispatcherPriority.Render);
+            var playStateContainer = GameList.ItemContainerGenerator.ContainerFromItem(playStateGame);
+            var playButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "PlayGame");
+            var wandButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "PlayWithWand");
+            var exitButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "ForceExitGameAndWand");
+            Check("Idle cards reflect exact Wand eligibility while hiding force-exit controls", playButton?.Content?.ToString()?.Contains("Play", StringComparison.Ordinal) == true
+                && wandButton?.Visibility == (playStateGame.CanPlayWithWand ? Visibility.Visible : Visibility.Collapsed)
+                && exitButton?.Visibility == Visibility.Collapsed);
+            string processFixtureFolder = Path.Combine(Store.Root, "process-fixture");
+            Directory.CreateDirectory(processFixtureFolder);
+            string processFixture = Path.Combine(processFixtureFolder, "TrackedGame.exe");
+            File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ping.exe"), processFixture, true);
+            double playtimeBeforeFixture = State.PlayTimeSeconds.GetValueOrDefault(playStateGame.Id);
+            using var trackedFixture = Process.Start(new ProcessStartInfo(processFixture, "127.0.0.1 -n 30") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })
+                ?? throw new InvalidOperationException("Could not start the tracked UI process fixture.");
+            try
+            {
+                await ObserveWandGameProcess(playStateGame, processFixture, lifetime.Token);
+                await Task.Delay(350);
+                if (activePlays.TryGetValue(playStateGame.Id, out var observedSession)) SamplePlaySession(playStateGame.Id, observedSession, announceTransition: false);
+                await Dispatcher.InvokeAsync(() => { GameList.ScrollIntoView(playStateGame); GameList.UpdateLayout(); }, DispatcherPriority.Render);
+                playStateContainer = GameList.ItemContainerGenerator.ContainerFromItem(playStateGame);
+                playButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "PlayGame");
+                exitButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "ForceExitGameAndWand");
+                Check("A real running process changes Play to Playing, exposes Exit, and accrues playtime", playButton?.Content?.ToString()?.Contains("Playing", StringComparison.Ordinal) == true
+                    && exitButton?.Visibility == Visibility.Visible && exitButton.IsVisible
+                    && State.PlayTimeSeconds.GetValueOrDefault(playStateGame.Id) > playtimeBeforeFixture);
+                RequestImmediateProcessTreeExit(trackedFixture);
+                trackedFixture.WaitForExit(5000);
+                if (activePlays.TryGetValue(playStateGame.Id, out var completedSession)) { CommitPlaySession(playStateGame.Id, completedSession); Save(); }
+                await Dispatcher.InvokeAsync(() => { GameList.ScrollIntoView(playStateGame); GameList.UpdateLayout(); }, DispatcherPriority.Render);
+                playStateContainer = GameList.ItemContainerGenerator.ContainerFromItem(playStateGame);
+                playButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "PlayGame");
+                exitButton = FindVisual<Button>(playStateContainer, candidate => System.Windows.Automation.AutomationProperties.GetAutomationId(candidate) == "ForceExitGameAndWand");
+                Check("A finished real process restores Play and hides the force-exit control", playButton?.Content?.ToString()?.Contains("Playing", StringComparison.Ordinal) != true && exitButton?.Visibility == Visibility.Collapsed);
+            }
+            finally
+            {
+                try
+                {
+                    if (!trackedFixture.HasExited) RequestImmediateProcessTreeExit(trackedFixture);
+                    trackedFixture.WaitForExit(5000);
+                }
+                catch (InvalidOperationException) { }
+            }
+            using (var exitedFixture = Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ping.exe"), "127.0.0.1 -n 1") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })
+                ?? throw new InvalidOperationException("Could not start the exited-process UI fixture."))
+            {
+                exitedFixture.WaitForExit(5000);
+                Check("A process that exits during Wand confirmation is ignored without stale tracking", !TrackPlayProcess(playStateGame, exitedFixture, usesWand: true, ownsProcess: false) && !activePlays.ContainsKey(playStateGame.Id));
+            }
+            int ownedWindowsBeforeFailure = OwnedWindows.Count;
+            ReportUiFailure("Non-modal failure proof", new InvalidOperationException("fixture process exited"));
+            Check("Recoverable operation failures stay non-modal and leave the library interactive", OwnedWindows.Count == ownedWindowsBeforeFailure && StatusText.Text.Contains("fixture process exited", StringComparison.Ordinal));
             SearchBox.Text = "STAR OCEAN"; ApplyFilter();
             Check("Search filters native list", filtered.Count > 0 && filtered.All(g => g.Name.Contains("STAR OCEAN", StringComparison.OrdinalIgnoreCase) || g.Id.Contains("STAR OCEAN", StringComparison.OrdinalIgnoreCase)));
             SelectAll(this, new()); Check("Select all operates on filtered items", filtered.All(g => g.Selected));
@@ -641,7 +1038,7 @@ public partial class MainWindow
             {
                 Games = new()
                 {
-                    new() { Id = "filter-alpha", Name = "Filter Alpha", Category = "new", CategoryName = "New", Rating = 5, Installed = true, Time = 10, DockerImageUrl = "https://hub.docker.com/r/proof/repo/tags?name=filter-alpha" },
+                    new() { Id = "filter-alpha", Name = "Filter Alpha", Category = "new", CategoryName = "New", Rating = 5, Installed = true, CanPlayWithWand = true, Time = 10, DockerImageUrl = "https://hub.docker.com/r/proof/repo/tags?name=filter-alpha" },
                     new() { Id = "filter-beta", Name = "Filter Beta", Category = "rpg", CategoryName = "RPG", Rating = 1, Time = 20 },
                     new() { Id = "filter-zero", Name = "Filter Zero", Category = "new", CategoryName = "New", Rating = 0 },
                     new() { Id = "filter-hidden", Name = "Filter Hidden", Category = "not_for_me", CategoryName = "Private", Rating = 3 }
@@ -656,10 +1053,44 @@ public partial class MainWindow
                 SearchBox.Text = "Filter"; tab = "installed"; ApplyFilter(); Check("Installed view remains limited during global search", filtered.Count == 1 && filtered[0].Installed);
                 tab = "all"; InstalledOnlyFilter.IsChecked = true; ApplyFilter(); Check("Installed-only control composes with global search", filtered.Count == 1 && filtered[0].Installed);
                 WithoutInstalledFilter.IsChecked = true; ApplyFilter(); Check("Without-installed control excludes installed games", filtered.Count == 2 && filtered.All(g => !g.Installed));
-                ResetFilters(this, new()); Check("Reset clears installed filters", InstalledOnlyFilter.IsChecked == false && WithoutInstalledFilter.IsChecked == false);
+                Games.Single(g => g.Id == "filter-hidden").Installed = true;
+                Games.Single(g => g.Id == "filter-hidden").CanPlayWithWand = true;
+                WandIncludedFilter.IsChecked = true; ApplyFilter(); Check("Wand-included control shows the complete registered set across category privacy", filtered.Count == 2 && filtered.All(g => g.Installed && g.CanPlayWithWand) && filtered.Any(g => g.Id == "filter-alpha") && filtered.Any(g => g.Id == "filter-hidden"));
+                ResetFilters(this, new()); Check("Reset clears installed filters", InstalledOnlyFilter.IsChecked == false && WithoutInstalledFilter.IsChecked == false && WandIncludedFilter.IsChecked == false);
                 SortBox.SelectedItem = "Rating (Low–High)"; ApplyFilter(); Check("Lowest rating sort uses ascending scores with unrated games last", filtered.Select(g => g.Rating).SequenceEqual(new[] { 1, 5, 0 }));
             }
-            finally { SearchBox.Text = ""; InstalledOnlyFilter.IsChecked = false; WithoutInstalledFilter.IsChecked = false; RestoreImportedState(originalState); }
+            finally { SearchBox.Text = ""; InstalledOnlyFilter.IsChecked = false; WithoutInstalledFilter.IsChecked = false; WandIncludedFilter.IsChecked = false; RestoreImportedState(originalState); }
+            var gamesBeforeCoverProof = Games;
+            var tabBeforeCoverProof = tab;
+            string searchBeforeCoverProof = SearchBox.Text;
+            object? sortBeforeCoverProof = SortBox.SelectedItem;
+            object? tagBeforeCoverProof = TagBox.SelectedItem;
+            int ratingBeforeCoverProof = RatingBox.SelectedIndex;
+            bool? installedOnlyBeforeCoverProof = InstalledOnlyFilter.IsChecked;
+            bool? withoutInstalledBeforeCoverProof = WithoutInstalledFilter.IsChecked;
+            bool? wandIncludedBeforeCoverProof = WandIncludedFilter.IsChecked;
+            bool statsDirtyBeforeCoverProof = catalogStatsDirty;
+            try
+            {
+                string cachedCover = Directory.EnumerateFiles(Path.Combine(Store.Assets, "images"), "*.jpg", SearchOption.AllDirectories).First();
+                var noCover = new Game { Id = "no-cover-proof", Name = "No Cover Proof", Category = "new", CategoryName = "New", Cover = "" };
+                var covered = new Game { Id = "covered-proof", Name = "Covered Proof", Category = "new", CategoryName = "New", Cover = cachedCover };
+                Games = new() { noCover, covered };
+                tab = "all"; SearchBox.Text = ""; SortBox.SelectedItem = "Name A–Z"; TagBox.SelectedItem = "All tags"; RatingBox.SelectedIndex = 0;
+                InstalledOnlyFilter.IsChecked = false; WithoutInstalledFilter.IsChecked = false; WandIncludedFilter.IsChecked = false;
+                catalogStatsDirty = true; ApplyFilter(); GameList.ScrollIntoView(noCover);
+                await Dispatcher.InvokeAsync(() => GameList.UpdateLayout(), DispatcherPriority.Render);
+                var noCoverContainer = GameList.ItemContainerGenerator.ContainerFromItem(noCover);
+                var fallback = FindVisual<TextBlock>(noCoverContainer, candidate => candidate.Text == noCover.Initial);
+                Check("No-cover cards render a deterministic nonblank initial fallback", noCoverContainer != null && fallback != null && fallback.Text == noCover.Initial && !string.IsNullOrWhiteSpace(fallback.Text) && fallback.IsVisible && fallback.ActualWidth > 0 && fallback.ActualHeight > 0);
+                Check("Cover statistics count cached artwork but exclude fallback cards", CoverCount.Text == "1");
+            }
+            finally
+            {
+                Games = gamesBeforeCoverProof; tab = tabBeforeCoverProof; SearchBox.Text = searchBeforeCoverProof; SortBox.SelectedItem = sortBeforeCoverProof; TagBox.SelectedItem = tagBeforeCoverProof; RatingBox.SelectedIndex = ratingBeforeCoverProof;
+                InstalledOnlyFilter.IsChecked = installedOnlyBeforeCoverProof; WithoutInstalledFilter.IsChecked = withoutInstalledBeforeCoverProof; WandIncludedFilter.IsChecked = wandIncludedBeforeCoverProof;
+                catalogStatsDirty = true; ApplyFilter(); catalogStatsDirty = statsDirtyBeforeCoverProof;
+            }
             var before = State.Settings.Theme; ToggleTheme(this, new()); Check("Theme switches", State.Settings.Theme != before); ToggleTheme(this, new());
             HideToTray(); Check("Minimize / hide retains tray", !IsVisible && tray!.Visible); RestoreWindow(); Check("Restore returns window", IsVisible && WindowState == WindowState.Normal);
             var job = new JobWindow(Store, "Write-Output 'native-progress-proof'; exit 7", Array.Empty<string>());
@@ -701,8 +1132,15 @@ public partial class MainWindow
                 async Task<EditorWindow> CategoriesDialog()
                 {
                     _ = Dispatcher.BeginInvoke(new Action(() => ManageCategories(this, new())));
-                    await Task.Delay(120);
-                    return System.Windows.Application.Current.Windows.OfType<EditorWindow>().Single(w => w.Title == "Manage categories");
+                    var deadline = DateTime.UtcNow.AddSeconds(3);
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        var visible = System.Windows.Application.Current.Windows.OfType<EditorWindow>()
+                            .Where(w => w.Title == "Manage categories" && w.IsVisible).ToArray();
+                        if (visible.Length == 1) return visible[0];
+                        await Task.Delay(50);
+                    }
+                    throw new InvalidOperationException("The Manage categories dialog did not settle to one visible window.");
                 }
                 void Click(EditorWindow dialog, string name) => dialog.Fields.Children.OfType<System.Windows.Controls.Button>().Single(b => (string)b.Content == name).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 var categoryDialog = await CategoriesDialog();

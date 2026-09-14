@@ -183,7 +183,8 @@ public partial class MainWindow
         });
         dialog.ActionAsync("Play", async () => { await PlayGame(game); if (!dialog.IsClosed && !closing) dialog.Close(); }, "PlayGame");
         dialog.Action("Open Wand", OpenWand, "OpenWand");
-        dialog.ActionAsync("Play with Wand mods", async () => { await PlayWithWand(game, dialog.ClosedToken); if (!dialog.IsClosed && !closing) dialog.Close(); }, "PlayWithWand");
+        if (CanLaunchWithExistingWand(game, out _))
+            dialog.ActionAsync("Play with Wand mods", async () => { await PlayWithWand(game, dialog.ClosedToken); if (!dialog.IsClosed && !closing) dialog.Close(); }, "PlayWithWand");
         dialog.Action("Open installation folder", () => OpenFolder(ResolveInstallationFolder(game)));
         if (!game.IsLocal)
         {
@@ -204,12 +205,16 @@ public partial class MainWindow
             var running = WandIntegration.FindRunningExactProcess(exe);
             if (running != null)
             {
-                TrackPlayProcess(game, running, ownsProcess: false);
-                ActivateProcess(running);
-                StatusText.Text = game.Name + " is already running.";
+                if (TrackPlayProcess(game, running, ownsProcess: false))
+                {
+                    ActivateProcess(running);
+                    StatusText.Text = game.Name + " is already running.";
+                }
+                else StatusText.Text = game.Name + " closed before it could be tracked.";
                 return;
             }
-            StartPlaySession(game, () => Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe), UseShellExecute = true }) ?? throw new InvalidOperationException("The game process could not be started."));
+            bool started = StartPlaySession(game, () => Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe), UseShellExecute = true }) ?? throw new InvalidOperationException("The game process could not be started."));
+            if (!started) { StatusText.Text = game.Name + " closed before it could be tracked."; return; }
             StatusText.Text = "Playing " + game.Name + " · tracking time";
         }
         finally { playLaunchGate.Release(); }
@@ -229,43 +234,91 @@ public partial class MainWindow
         try
         {
             if (closing || cancellation.IsCancellationRequested) return;
-            if (!TryGetLauncher(game, out var exe)) throw new FileNotFoundException("No game executable was found. Scan the installation folder or choose the game's executable.");
-            if (!Path.GetExtension(exe).Equals(".exe", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The launcher must be a Windows executable.");
-            var wandPath = ResolveWandPath();
+            if (!State.LaunchPaths.TryGetValue(game.Id, out var savedLauncher) || string.IsNullOrWhiteSpace(savedLauncher))
+                throw new FileNotFoundException("No exact Wand launcher is saved for this game.");
+            string configuredWandPath = State.Settings.WandPath;
+            var launch = await Task.Run(() =>
+            {
+                string exe = Path.GetFullPath(savedLauncher);
+                if (!File.Exists(exe)) throw new FileNotFoundException("The exact Wand launcher is unavailable.", exe);
+                string extension = Path.GetExtension(exe);
+                if (!extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) &&
+                    !extension.Equals(".bat", StringComparison.OrdinalIgnoreCase) &&
+                    !extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("The Wand launcher must be an exact Windows executable or registered command script.");
+                string wandPath = !string.IsNullOrWhiteSpace(configuredWandPath) && File.Exists(configuredWandPath)
+                    ? configuredWandPath
+                    : DetectWandPath() ?? "";
+                if (wandPath.Length == 0) throw new FileNotFoundException("Wand was not found. Set Wand.exe in Settings & backups first.");
+                if (!WandIntegration.CanLaunchExistingWandInstall(game, exe, Store, out var reason)) throw new InvalidOperationException(reason);
+                return (Executable: exe, WandPath: wandPath);
+            }, cancellation);
+            string exe = launch.Executable;
+            string wandPath = launch.WandPath;
             if (TryActivateExistingPlay(game))
             {
                 if (activePlays.TryGetValue(game.Id, out var active) && !active.UsesWand)
                     StatusText.Text = game.Name + " is already running without Wand mods. Close it before using Play with Wand.";
                 return;
             }
-            var result = await WandIntegration.LaunchAsync(game, exe, wandPath, Store, cancellation);
+            using var observationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            var observation = ObserveWandGameProcess(game, exe, observationCancellation.Token);
+            WandLaunchResult result;
+            try
+            {
+                // The Wand/catalog/process/storage workflow is intentionally kept
+                // off the WPF dispatcher. A blocked game drive or profile volume
+                // cannot stop window painting, filtering, or the Exit control.
+                result = await Task.Run(() => WandIntegration.LaunchAsync(game, exe, wandPath, Store, cancellation), cancellation);
+            }
+            finally
+            {
+                observationCancellation.Cancel();
+                try { await observation; }
+                catch (OperationCanceledException) when (observationCancellation.IsCancellationRequested) { }
+            }
             if (closing || cancellation.IsCancellationRequested)
             {
-                if (result.Process != null)
-                {
-                    if (result.OwnsProcess) StopUntrackedProcess(result.Process, Store);
-                    else { try { result.Process.Dispose(); } catch { } }
-                }
+                // Closing Game Library must never terminate a game or Wand.
+                // Release only this diagnostic handle; the OS process continues.
+                if (result.Process != null) try { result.Process.Dispose(); } catch { }
                 return;
             }
-            if (result.Process != null) TrackPlayProcess(game, result.Process, usesWand: true, ownsProcess: result.OwnsProcess);
+            if (result.Process != null)
+            {
+                if (activePlays.TryGetValue(game.Id, out var tracked))
+                {
+                    if (!ReferenceEquals(tracked.Process, result.Process)) try { result.Process.Dispose(); } catch { }
+                }
+                else if (!TrackPlayProcess(game, result.Process, usesWand: true, ownsProcess: result.OwnsProcess))
+                    result = result with { Process = null, OwnsProcess = false, Message = game.Name + " closed before Wand launch confirmation. Game Library did not terminate it." };
+            }
             StatusText.Text = result.Message;
             Store.Log("Wand launch for " + game.Id + "; protocol=" + result.UsedProtocol.ToString().ToLowerInvariant() + "; started=" + (result.Process != null).ToString().ToLowerInvariant());
         }
         finally { playLaunchGate.Release(); }
     }
 
-    private static void StopUntrackedProcess(Process process, LibraryStore store)
+    private async Task ObserveWandGameProcess(Game game, string executable, CancellationToken cancellation)
     {
         try
         {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            while (!cancellation.IsCancellationRequested && !closing)
+            {
+                var process = WandIntegration.FindRunningExactProcess(executable);
+                if (process != null)
+                {
+                    if (activePlays.ContainsKey(game.Id)) { process.Dispose(); return; }
+                    else if (TrackPlayProcess(game, process, usesWand: true, ownsProcess: false)) return;
+                }
+                await Task.Delay(200, cancellation);
+            }
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            try { store.Log("Could not stop the untracked Wand process after shutdown: " + ex.Message); } catch { }
+            try { Store.Log("Early Wand game observation failed; final launch tracking will retry: " + ex.Message); } catch { }
         }
-        finally { try { process.Dispose(); } catch { } }
     }
     private bool TryGetLauncher(Game game, out string executable)
     {
@@ -603,8 +656,9 @@ public static class InstalledScanner
             foreach (var folder in Directory.EnumerateDirectories(root, "*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }))
             {
                 string folderName = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
-                bool friendlyName = !string.IsNullOrWhiteSpace(name) && string.Equals(Normalize(folderName), Normalize(name), StringComparison.Ordinal);
-                if (folderName.StartsWith(id + "-", StringComparison.OrdinalIgnoreCase) || friendlyName) Add(folder);
+                bool friendlyName = !string.IsNullOrWhiteSpace(name) && FolderIdentityMatches(folderName, name);
+                bool idAlias = FolderIdentityMatches(folderName, id);
+                if (folderName.StartsWith(id + "-", StringComparison.OrdinalIgnoreCase) || idAlias || friendlyName) Add(folder);
             }
         }
         catch (IOException) { }
@@ -656,11 +710,56 @@ public static class InstalledScanner
         return candidates;
     }
 
+    internal static bool IsPlayableExecutable(string folder, string path)
+    {
+        try
+        {
+            if (!File.Exists(path) || !Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase)) return false;
+            string fullFolder = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string fullPath = Path.GetFullPath(path);
+            if (!fullPath.StartsWith(fullFolder, StringComparison.OrdinalIgnoreCase)) return false;
+            return IsGameExecutable(Path.GetFullPath(folder), fullPath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
     private static string Normalize(string value) => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
     private static Dictionary<string, (string Id, string Name)[]> Lookups(IEnumerable<(string Id, string Name)> games) =>
-        games.SelectMany(g => new[] { (Key: Normalize(g.Id), Game: g), (Key: Normalize(g.Name), Game: g), (Key: Normalize(DockerScripts.InstallFolder(g.Id)), Game: g) })
+        games.SelectMany(game => LookupKeys(game).Select(key => (Key: key, Game: game)))
             .Where(g => g.Key.Length > 0).GroupBy(g => g.Key)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Game).DistinctBy(x => x.Id, StringComparer.Ordinal).ToArray());
+
+    private static IEnumerable<string> LookupKeys((string Id, string Name) game)
+    {
+        foreach (var value in new[] { game.Id, game.Name, DockerScripts.InstallFolder(game.Id) })
+        {
+            string key = Normalize(value);
+            if (key.Length == 0) continue;
+            yield return key;
+            // Some older folders omit an initial article (for example the
+            // catalog's "thelegendoftianding" versus "legendoftianding").
+            // Keeping both keys lets a unique catalog identity recover its
+            // real game executable without treating the folder as local.
+            if (key.StartsWith("the", StringComparison.Ordinal) && key.Length > 3) yield return key[3..];
+        }
+    }
+
+    private static bool FolderIdentityMatches(string left, string right)
+    {
+        var leftKeys = LookupNameKeys(left).ToHashSet(StringComparer.Ordinal);
+        return LookupNameKeys(right).Any(leftKeys.Contains);
+    }
+
+    private static IEnumerable<string> LookupNameKeys(string value)
+    {
+        string key = Normalize(value);
+        if (key.Length == 0) yield break;
+        yield return key;
+        if (key.StartsWith("the", StringComparison.Ordinal) && key.Length > 3) yield return key[3..];
+    }
 
     private static void AddCatalogFolderLookups(Dictionary<string, (string Id, string Name)[]> lookups, string folder, IEnumerable<(string Id, string Name)> games)
     {
@@ -671,8 +770,10 @@ public static class InstalledScanner
     private static void AddCatalogFolderLookup(Dictionary<string, (string Id, string Name)[]> lookups, string folder, (string Id, string Name) game)
     {
         string label = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
-        bool idFolder = label.Equals(game.Id, StringComparison.OrdinalIgnoreCase) || label.StartsWith(game.Id + "-", StringComparison.OrdinalIgnoreCase);
-        bool friendlyFolder = string.Equals(Normalize(label), Normalize(game.Name), StringComparison.Ordinal);
+        bool idFolder = label.Equals(game.Id, StringComparison.OrdinalIgnoreCase)
+            || label.StartsWith(game.Id + "-", StringComparison.OrdinalIgnoreCase)
+            || FolderIdentityMatches(label, game.Id);
+        bool friendlyFolder = FolderIdentityMatches(label, game.Name);
         if (!idFolder && !friendlyFolder) return;
         string key = Normalize(label);
         if (key.Length == 0) return;
@@ -685,13 +786,72 @@ public static class InstalledScanner
         "support", "redist", "redistributables", "redistributable", "commonredist", "prerequisites", "directx", "vcredist", "dotnet", "installers", "installer", "crashreporter", "crashreportclient",
         "trainer", "wemod", "fling", "flingtrainer", "thirdpartylibs", "imageioffmpeg", "emulators", "modding"
     };
+
+    private static string? ChooseCatalogLauncher(string folder, IReadOnlyList<string> candidates, IReadOnlyCollection<string> aliases)
+    {
+        if (candidates.Count == 0) return null;
+        if (candidates.Count == 1) return candidates[0];
+
+        var ranked = candidates.Select(path =>
+        {
+            string stem = Normalize(Path.GetFileNameWithoutExtension(path));
+            string relative = Path.GetRelativePath(folder, path).Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+            string relativeLower = relative.ToLowerInvariant();
+            int depth = relative.Count(c => c == '/') + 1;
+            int score = aliases.Sum(alias => alias == stem
+                ? 2600
+                : alias.Length >= 6 && (stem.Contains(alias, StringComparison.Ordinal) || alias.Contains(stem, StringComparison.Ordinal)) ? 500
+                : 0);
+
+            // A root binary is usually the real executable for older/small
+            // games, while an Unreal-style Binaries\Win64 shipping binary is
+            // normally the playable payload behind a tiny root bootstrap.
+            if (depth == 1) score += 900;
+            if (relativeLower.Contains("/binaries/win64/", StringComparison.Ordinal)
+                || relativeLower.Contains("/binaries/win32/", StringComparison.Ordinal)) score += 1800;
+            if (stem.Contains("shipping", StringComparison.Ordinal)) score += 1200;
+            else if (stem.Contains("client", StringComparison.Ordinal)) score += 500;
+
+            try
+            {
+                long bytes = new FileInfo(path).Length;
+                if (bytes >= 20 * 1024 * 1024) score += 600;
+                else if (bytes >= 4 * 1024 * 1024) score += 400;
+                else if (bytes < 512 * 1024) score -= 700;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+
+            string stemLower = stem.ToLowerInvariant();
+            if (stemLower.Contains("launcher", StringComparison.Ordinal)
+                || stemLower.Contains("bootstrap", StringComparison.Ordinal)
+                || stemLower.Contains("updater", StringComparison.Ordinal)
+                || stemLower.Contains("installer", StringComparison.Ordinal)) score -= 2600;
+            if (stemLower.StartsWith("start", StringComparison.Ordinal)
+                || stemLower.StartsWith("setup", StringComparison.Ordinal)
+                || stemLower.StartsWith("config", StringComparison.Ordinal)) score -= 900;
+            score -= Math.Min(depth, 10) * 10;
+            return new { Path = path, Score = score, Depth = depth };
+        }).OrderByDescending(c => c.Score).ThenBy(c => c.Depth).ThenBy(c => c.Path, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var best = ranked[0];
+        var second = ranked[1];
+        // Do not guess when the catalog identity and install layout provide no
+        // useful signal. A Details-level manual choice remains available.
+        if (best.Score <= 0 || best.Score - second.Score < 500) return null;
+        return best.Path;
+    }
+
     private static bool IsGameExecutable(string folder, string path)
     {
         var parts = Path.GetRelativePath(folder, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (parts.Take(parts.Length - 1).Any(p => SupportFolders.Contains(Normalize(p)))) return false;
         string name = Normalize(Path.GetFileNameWithoutExtension(path));
+        if (name.Contains("editor", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("toolkit", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("packager", StringComparison.OrdinalIgnoreCase)) return false;
         return !System.Text.RegularExpressions.Regex.IsMatch(name,
-            @"^(unins|uninstall|setup|install|redist|crashreport|crashhandler|crashpad|reporter|helper|quicksfv|dxsetup|vcredist|ue4prereq|ueprereq|dotnet|unitycrashhandler|qtwebengineprocess|yuzucmd|edencli|edenroom|enbhost|skse|squirrel|inklecate|ffmpeg|editor|toolkit|packager)",
+            @"^(unins|uninstall|setup|install|launcher|gamebootstrapper|eaclauncher|redist|crashreport|crashhandler|crashpad|reporter|helper|quicksfv|dxsetup|vcredist|ue4prereq|ueprereq|dotnet|unitycrashhandler|qtwebengineprocess|yuzu|ryujinx|citron|sudachi|eden|yuzucmd|edencli|edenroom|enbhost|skse|squirrel|inklecate|ffmpeg|editor|toolkit|packager|languageselector|workshop|unrealcefsubprocess)",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
@@ -721,10 +881,20 @@ public static class InstalledScanner
                 if (!local) result.Notices.Add(label + ": no Windows game executable was found; support utilities were excluded.");
                 return;
             }
-            var names = local ? new[] { name } : new[] { name, Normalize(ids![0].Id), Normalize(ids[0].Name) };
+            var names = (local ? new[] { name } : new[] { name, Normalize(ids![0].Id), Normalize(ids[0].Name) })
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
             var exact = candidates.Where(p => names.Contains(Normalize(Path.GetFileNameWithoutExtension(p)), StringComparer.Ordinal)).ToArray();
-            string? chosen = candidates.Count <= 100 && exact.Length == 1 ? exact[0] : candidates.Count == 1 ? candidates[0] : null;
+            // Local folders have no catalog identity to guide a safe choice, so
+            // retain the explicit-choice behavior. Catalog installs do have a
+            // stable title/id and common build layouts, which lets us choose a
+            // real game binary over a tiny bootstrap or a duplicated payload.
+            string? chosen = local
+                ? candidates.Count <= 100 && exact.Length == 1 ? exact[0] : candidates.Count == 1 ? candidates[0] : null
+                : ChooseCatalogLauncher(folder, candidates, names);
             string id = local ? LocalGame.Identity(folder) : ids![0].Id;
+            if (!local) result.CatalogGamesWithExecutable.Add(id);
             if (result.AmbiguousIdentities.Contains(id)) return;
             if (result.Games.Any(g => g.Id == id))
             {

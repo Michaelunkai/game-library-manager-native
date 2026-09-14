@@ -50,7 +50,22 @@ public sealed class JobWindow : Window
     internal static ProcessStartInfo BuildDefaultTerminalStartInfo(string path)
     {
         if (!Path.GetExtension(path).Equals(".bat", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The default Windows terminal launcher requires a BAT script.", nameof(path));
-        return new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(path))! };
+        string fullPath = Path.GetFullPath(path);
+        string directory = Path.GetDirectoryName(fullPath)!;
+        string command = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+        // Do not delegate a .BAT to the file association. On this host that
+        // ShellExecute route can return Access Denied (and on other hosts it can
+        // return the Windows Terminal broker rather than the script process), so
+        // JobWindow cannot observe the install's real exit code. Start cmd.exe
+        // explicitly and use CALL so exit /b from the generated payload is
+        // propagated to the waitable process we own.
+        return new ProcessStartInfo(command)
+        {
+            Arguments = "/d /c call \"" + fullPath + "\"",
+            UseShellExecute = true,
+            WorkingDirectory = directory,
+                WindowStyle = ProcessWindowStyle.Normal
+        };
     }
     internal static string BuildJobLogPath(string root, DateTime timestamp, Guid operationId)
     {
@@ -177,10 +192,9 @@ public sealed class JobWindow : Window
             ProcessStartInfo start;
             if (openInDefaultTerminal)
             {
-                // Launch the script exactly as the website does. UseShellExecute lets
-                // Windows hand the .BAT to the user's configured default terminal
-                // (Windows Terminal or the legacy console host) instead of hiding a
-                // PowerShell child inside the WPF process.
+                // Run cmd.exe in the user's default console host, but own the
+                // process that executes the BAT so WaitForExitAsync observes its
+                // real completion and exit code.
                 start = BuildDefaultTerminalStartInfo(path);
             }
             else if (wsl2)

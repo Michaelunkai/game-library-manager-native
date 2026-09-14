@@ -16,11 +16,14 @@ namespace GameLibrary.Native;
 internal sealed record WandTarget(string TitleId, string GameId, string TitleName, string Platform, string VersionPath);
 internal sealed record WandCustomInstallationRequest(string GameId, string ExecutablePath, string WorkingDirectory, string Sku, string CorrelationId);
 internal sealed record WandLaunchResult(Process? Process, bool UsedProtocol, string Message, bool OwnsProcess = false);
+internal sealed record WandRegisteredInstallation(string TitleId, string GameId, string ExecutablePath);
+internal sealed record WandSupportedGame(string Folder, string TitleId, string GameId, string Name, string Path);
 
 internal static class WandIntegration
 {
     private const string CatalogUrl = "https://storage-cdn.wemod.com/catalog.json";
     private const long MaxCatalogBytes = 24 * 1024 * 1024;
+    internal static readonly TimeSpan WandStartupWindow = TimeSpan.FromMinutes(3);
     private sealed class CatalogIndex
     {
         private readonly Dictionary<string, List<(string Key, JsonObject Title)>> byAlias = new(StringComparer.Ordinal);
@@ -203,6 +206,221 @@ internal static class WandIntegration
         }
     }
 
+    /// <summary>
+    /// The Wand button is intentionally stricter than catalog support: a game is
+    /// eligible only when its exact executable is one of the registrations that
+    /// the local Mods/Wand sync maintains.  Missing or unreadable registration
+    /// evidence hides the button instead of trying to create a new registration.
+    /// </summary>
+    internal static bool CanLaunchExistingWandInstall(Game game, string executable, LibraryStore store, out string message) =>
+        CanLaunchExistingWandInstall(game, executable, store, RegisteredInstallationManifestPaths(), out message);
+
+    internal static bool CanLaunchExistingWandInstall(Game game, string executable, LibraryStore store, IEnumerable<string> manifestPaths, out string message)
+    {
+        message = "Play with Wand is available only for an exact executable that is already registered in Wand.";
+        if (!TryGetExistingWandInstallation(executable, manifestPaths, out var registration)) return false;
+
+        JsonObject catalog;
+        try
+        {
+            string cachePath = LibraryStore.SafeChild(store.Cache, "wand-catalog.json");
+            if (!TryRead(cachePath, out catalog))
+            {
+                message = "Wand's local catalog is unavailable, so Play with Wand stays hidden until it can be verified.";
+                return false;
+            }
+        }
+        catch (ArgumentException)
+        {
+            message = "Wand's local catalog path is invalid, so Play with Wand stays hidden.";
+            return false;
+        }
+
+        if (!TryResolveRegisteredTarget(catalog, registration, out _))
+        {
+            message = "Wand's saved registration does not match a current exact catalog title/game pair, so no mod launch was offered.";
+            return false;
+        }
+        message = string.Empty;
+        return true;
+    }
+
+    internal static bool TryResolveRegisteredTarget(JsonObject catalog, WandRegisteredInstallation registration, out WandTarget target)
+    {
+        target = null!;
+        if (catalog["titles"] is not JsonObject titles || catalog["games"] is not JsonObject games ||
+            games[registration.GameId] is not JsonObject game) return false;
+        string gameTitleId = DataJson.Text(game["titleId"]);
+        if (!string.Equals(gameTitleId, registration.TitleId, StringComparison.Ordinal)) return false;
+        JsonObject? title = titles[registration.TitleId] as JsonObject;
+        if (title == null)
+            title = titles.Select(entry => entry.Value as JsonObject)
+                .FirstOrDefault(candidate => candidate != null && string.Equals(DataJson.Text(candidate["id"]), registration.TitleId, StringComparison.Ordinal));
+        if (title == null) return false;
+        if (title["gameIds"] is JsonArray ids && !ids.Any(id => string.Equals(DataJson.Text(id), registration.GameId, StringComparison.Ordinal))) return false;
+        target = new WandTarget(
+            registration.TitleId,
+            registration.GameId,
+            DataJson.Text(title["name"], registration.TitleId),
+            DataJson.Text(game["platformId"]),
+            DataJson.Text(game["versionPath"]));
+        return true;
+    }
+
+    internal static bool TryGetExistingWandInstallation(string executable, out WandRegisteredInstallation installation) =>
+        TryGetExistingWandInstallation(executable, RegisteredInstallationManifestPaths(), out installation);
+
+    // The overload keeps the format testable without reading a real user's Wand
+    // data. The production caller only supplies the locally maintained manifest.
+    internal static bool TryGetExistingWandInstallation(string executable, IEnumerable<string> manifestPaths, out WandRegisteredInstallation installation)
+    {
+        installation = null!;
+        string fullPath;
+        try { fullPath = Path.GetFullPath(executable); }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return false; }
+        if (!File.Exists(fullPath)) return false;
+
+        foreach (var manifestPath in manifestPaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (!File.Exists(manifestPath)) continue;
+                if (JsonNode.Parse(File.ReadAllText(manifestPath)) is not JsonArray rows) continue;
+                foreach (var node in rows)
+                {
+                    if (node is not JsonObject row) continue;
+                    string registeredPath = DataJson.Text(row["path"]);
+                    string titleId = DataJson.Text(row["titleId"]);
+                    string gameId = DataJson.Text(row["gameId"]);
+                    if (titleId.Length == 0 || gameId.Length == 0 || !SameExecutablePath(fullPath, registeredPath)) continue;
+                    installation = new WandRegisteredInstallation(titleId, gameId, fullPath);
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException) { }
+        }
+        return false;
+    }
+
+    private static bool RegistrationMatches(WandRegisteredInstallation registration, WandTarget target) =>
+        string.Equals(registration.TitleId, target.TitleId, StringComparison.Ordinal)
+        && string.Equals(registration.GameId, target.GameId, StringComparison.Ordinal);
+
+    private static bool SameExecutablePath(string left, string right)
+    {
+        try { return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase); }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return false; }
+    }
+
+    private static IEnumerable<string> RegisteredInstallationManifestPaths()
+    {
+        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(userProfile)) yield break;
+        yield return Path.Combine(userProfile, ".codex", "plugins", "mods", "scripts", "supported-games.json");
+        yield return Path.Combine(userProfile, ".codex", "skills", "mods", "scripts", "supported-games.json");
+        yield return Path.Combine(AppContext.BaseDirectory, "tools", "wand-supported-games.json");
+    }
+
+    internal static IReadOnlyList<WandSupportedGame> LoadSupportedGames() => LoadSupportedGames(RegisteredInstallationManifestPaths());
+
+    internal static IReadOnlyList<WandSupportedGame> LoadSupportedGames(IEnumerable<string> manifestPaths)
+    {
+        var candidates = manifestPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(path =>
+            {
+                try { return new { Path = path, Exists = File.Exists(path), Modified = File.GetLastWriteTimeUtc(path) }; }
+                catch { return new { Path = path, Exists = false, Modified = DateTime.MinValue }; }
+            })
+            .Where(candidate => candidate.Exists)
+            .OrderByDescending(candidate => candidate.Modified)
+            .ToArray();
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                if (JsonNode.Parse(File.ReadAllText(candidate.Path)) is not JsonArray rows) continue;
+                var games = new List<WandSupportedGame>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var node in rows)
+                {
+                    if (node is not JsonObject row) continue;
+                    string folder = DataJson.Text(row["folder"]);
+                    string titleId = DataJson.Text(row["titleId"]);
+                    string gameId = DataJson.Text(row["gameId"]);
+                    string name = DataJson.Text(row["name"]);
+                    string path = DataJson.Text(row["path"]);
+                    if (folder.Length == 0 || titleId.Length == 0 || gameId.Length == 0 || name.Length == 0 ||
+                        !Path.IsPathFullyQualified(path) || !seen.Add(gameId)) continue;
+                    games.Add(new WandSupportedGame(folder, titleId, gameId, name, Path.GetFullPath(path)));
+                }
+                if (games.Count > 0) return games;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException) { }
+        }
+        return Array.Empty<WandSupportedGame>();
+    }
+
+    internal static string ResolveTrackedExecutable(string launcher)
+    {
+        string fullPath;
+        try { fullPath = Path.GetFullPath(launcher); }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return launcher; }
+        string extension = Path.GetExtension(fullPath);
+        if (!extension.Equals(".bat", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase)) return fullPath;
+        string? root = Path.GetDirectoryName(fullPath);
+        if (root == null || !File.Exists(fullPath)) return fullPath;
+        string current = root;
+        try
+        {
+            foreach (var raw in File.ReadLines(fullPath))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("@echo", StringComparison.OrdinalIgnoreCase) || line.StartsWith("rem ", StringComparison.OrdinalIgnoreCase) || line.StartsWith("::", StringComparison.Ordinal)) continue;
+                var cd = Regex.Match(line, @"^(?:cd|pushd)\s+(?:/d\s+)?(?<path>[^&|<>]+)$", RegexOptions.IgnoreCase);
+                if (cd.Success)
+                {
+                    string relative = cd.Groups["path"].Value.Trim().Trim('"');
+                    string changed = Path.GetFullPath(Path.IsPathFullyQualified(relative) ? relative : Path.Combine(current, relative));
+                    string changedBoundary = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
+                    if (changed.Equals(root, StringComparison.OrdinalIgnoreCase) || changed.StartsWith(changedBoundary, StringComparison.OrdinalIgnoreCase)) current = changed;
+                    continue;
+                }
+                var executable = Regex.Match(line, @"^(?:call\s+)?(?:(""(?<quoted>[^""]+\.exe)"")|(?<plain>[^\s&|<>]+\.exe))(?:\s|$)", RegexOptions.IgnoreCase);
+                if (!executable.Success) continue;
+                string token = executable.Groups["quoted"].Success ? executable.Groups["quoted"].Value : executable.Groups["plain"].Value;
+                string candidate = Path.GetFullPath(Path.IsPathFullyQualified(token) ? token : Path.Combine(current, token));
+                string candidateBoundary = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
+                if ((candidate.Equals(root, StringComparison.OrdinalIgnoreCase) || candidate.StartsWith(candidateBoundary, StringComparison.OrdinalIgnoreCase)) && File.Exists(candidate)) return candidate;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
+        return fullPath;
+    }
+
+    internal static string ResolveTrackedExecutable(string launcher, string versionPath)
+    {
+        string commandTarget = ResolveTrackedExecutable(launcher);
+        if (!SameExecutablePath(commandTarget, launcher)) return commandTarget;
+        string relative = versionPath.Trim().Replace('/', '\\').TrimStart('\\');
+        if (!Path.GetExtension(relative).Equals(".exe", StringComparison.OrdinalIgnoreCase)) return commandTarget;
+        if (relative.Length == 0 || relative.Contains(':', StringComparison.Ordinal)) return commandTarget;
+        string? current;
+        try { current = Path.GetDirectoryName(Path.GetFullPath(launcher)); }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return commandTarget; }
+        for (var depth = 0; current != null && depth < 6; depth++, current = Path.GetDirectoryName(current))
+        {
+            try
+            {
+                string candidate = Path.GetFullPath(Path.Combine(current, relative));
+                if (File.Exists(candidate)) return candidate;
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException) { }
+        }
+        return commandTarget;
+    }
+
     internal static string? ResolveInstalledExecutable(Game game, string folder, LibraryStore store)
     {
         if (!Directory.Exists(folder)) return null;
@@ -241,6 +459,7 @@ internal static class WandIntegration
             {
                 long bytes = new FileInfo(path).Length;
                 if (bytes >= 20 * 1024 * 1024) score += 600;
+                else if (bytes >= 4 * 1024 * 1024) score += 400;
                 else if (bytes < 512 * 1024) score -= 700;
             }
             catch (IOException) { }
@@ -269,6 +488,10 @@ internal static class WandIntegration
         var second = ranked[1];
         if (best.Score < 2000)
         {
+            // A unique, materially stronger executable is safer than the old
+            // shortest-prefix fallback. Legacy folders such as Deus Ex can
+            // contain a tiny DX2 bootstrap beside the real DX2Main binary.
+            if (best.Score > 0 && best.Score - second.Score >= 500) return best.Path;
             // Some older games expose a short primary executable beside a longer helper
             // (for example DX2.exe and DX2Main.exe) and have no Wand catalog entry. Prefer
             // the unique shortest-prefix executable only when every competing candidate is
@@ -306,58 +529,49 @@ internal static class WandIntegration
         if (catalog == null)
             return new WandLaunchResult(null, false, "Wand catalog is unavailable. No unmodified game was started; retry after Wand is online.");
         string selectedExecutable = executable;
-        if (!TryResolve(catalog, game, selectedExecutable, out var target))
-        {
-            // The saved launcher may be a stale root stub or may have been
-            // selected before the fresh catalog was loaded. Re-rank the same
-            // install folder against the freshly cached catalog once, then
-            // fail closed if the resulting path still is not exact.
-            string? folder = null;
-            try { folder = Path.GetDirectoryName(Path.GetFullPath(executable)); }
-            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { }
-            string? corrected = folder == null ? null : ResolveInstalledExecutable(game, folder, store);
-            if (string.IsNullOrWhiteSpace(corrected) || !TryResolve(catalog, game, corrected, out target))
-                return new WandLaunchResult(null, false, "Wand has no exact title/executable match for this game. No unmodified game was started; choose the exact executable or retry after the catalog refresh.");
-            selectedExecutable = corrected;
-            store.Log("Corrected the Wand launch path after catalog refresh: " + selectedExecutable);
-        }
+        if (!TryGetExistingWandInstallation(selectedExecutable, out var registration))
+            return new WandLaunchResult(null, false, "This exact executable is not already registered in Wand. No unmodified game was started and no new Wand registration was created.");
+        if (!TryResolveRegisteredTarget(catalog, registration, out var target))
+            return new WandLaunchResult(null, false, "Wand's catalog no longer contains the exact saved title and game registration. No unmodified game was started.");
+        string trackedExecutable = ResolveTrackedExecutable(selectedExecutable, target.VersionPath);
 
         Process? ownedBootstrap = null;
         Process? existing = null;
         Process? ownedProtocolGame = null;
         bool ownedBootstrapGame = false;
         bool bootstrapContextObserved = false;
-        void CleanupOwnedProcesses(string reason)
+        void ReleaseLaunchHandles(string reason)
         {
             if (ownedProtocolGame != null)
             {
-                StopOwnedProcess(ownedProtocolGame, reason + " Wand exact game", store, false);
+                ReleaseProcessHandleWithoutTermination(ownedProtocolGame);
                 ownedProtocolGame = null;
             }
-            if (ownedBootstrapGame && existing != null)
+            if (existing != null)
             {
-                StopOwnedProcess(existing, reason + " bootstrapped exact game", store, false);
+                ReleaseProcessHandleWithoutTermination(existing);
                 existing = null;
             }
             if (ownedBootstrap != null)
             {
-                StopOwnedProcess(ownedBootstrap, reason + " root bootstrap", store, true);
+                ReleaseProcessHandleWithoutTermination(ownedBootstrap);
                 ownedBootstrap = null;
             }
+            store.Log("Released Wand launch process handles after " + reason + "; no game or Wand process was terminated.");
         }
         try
         {
-            string? registrationError = await EnsureCustomInstallationAsync(target, selectedExecutable, store, cancellation);
-            if (registrationError != null)
-                return new WandLaunchResult(null, false, "Wand exact-install registration failed: " + registrationError + " No unmodified game was started.");
+            store.Log("Wand's pre-existing exact mapping was confirmed for gameId=" + registration.GameId + "; executable=" + registration.ExecutablePath + ".");
 
-            existing = FindExactProcess(selectedExecutable);
+            existing = FindExactProcess(trackedExecutable);
             if (existing == null)
             {
-                string? bootstrap = ResolveBootstrapExecutable(selectedExecutable, target.VersionPath);
+                string? bootstrap = Path.GetExtension(selectedExecutable).Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? ResolveBootstrapExecutable(selectedExecutable, target.VersionPath)
+                    : null;
                 if (bootstrap != null)
                 {
-                    var bootstrapObserved = ExistingProcessIds(selectedExecutable);
+                    var bootstrapObserved = ExistingProcessIds(trackedExecutable);
                     var runningBootstrap = FindExactProcess(bootstrap);
                     if (runningBootstrap != null)
                     {
@@ -384,7 +598,7 @@ internal static class WandIntegration
                         }
                     }
 
-                    var bootstrappedGame = await WaitForNewGameAsync(selectedExecutable, bootstrapObserved, TimeSpan.FromSeconds(20), cancellation);
+                    var bootstrappedGame = await WaitForNewGameAsync(trackedExecutable, bootstrapObserved, TimeSpan.FromSeconds(20), cancellation);
                     if (bootstrappedGame != null)
                     {
                         existing = bootstrappedGame;
@@ -397,7 +611,7 @@ internal static class WandIntegration
                     }
                     else
                     {
-                        existing = FindExactProcess(selectedExecutable);
+                        existing = FindExactProcess(trackedExecutable);
                         if (existing != null)
                         {
                             bootstrapContextObserved = true;
@@ -406,7 +620,10 @@ internal static class WandIntegration
                         }
                         else if (ownedBootstrap != null)
                         {
-                            StopOwnedProcess(ownedBootstrap, "root bootstrap", store, true);
+                            // A launcher may still be completing work after the
+                            // exact process observation window. Release our
+                            // handle, but never terminate it automatically.
+                            ReleaseProcessHandleWithoutTermination(ownedBootstrap);
                             ownedBootstrap = null;
                         }
                     }
@@ -426,9 +643,10 @@ internal static class WandIntegration
             bool wandReady = await EnsureWandStartedAsync(wandPath, store, cancellation);
             if (!wandReady)
             {
-                if (ownedBootstrapGame && existing != null) StopOwnedProcess(existing, "unconnected exact game", store, false);
-                if (ownedBootstrap != null) StopOwnedProcess(ownedBootstrap, "root bootstrap", store, true);
-                return new WandLaunchResult(null, false, "Wand could not be verified as running. No unmodified game was started.");
+                if (ownedBootstrap != null) { ReleaseProcessHandleWithoutTermination(ownedBootstrap); ownedBootstrap = null; }
+                if (existing != null)
+                    return new WandLaunchResult(existing, false, "The game is running, but Wand could not be verified as ready. The game was left running and is being tracked; only Exit will close it.", OwnsProcess: ownedBootstrapGame);
+                return new WandLaunchResult(null, false, "Wand could not be verified as running. No game process was found, and no process was terminated.");
             }
             string label = target.TitleName + " (" + target.Platform + ")";
             store.Log("Wand readiness confirmed for " + label + "; titleId=" + target.TitleId + "; gameId=" + target.GameId + ".");
@@ -444,31 +662,23 @@ internal static class WandIntegration
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
             }
 
-            const int maxAttempts = 2;
             if (existing != null)
             {
-                for (var attempt = 1; attempt <= maxAttempts; attempt++)
+                var handoffStarted = DateTime.UtcNow;
+                store.Log("Sending one Wand protocol handoff to the already running exact process " + selectedExecutable + ".");
+                Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true });
+                if (await WaitForConnectionEvidenceAsync(trackedExecutable, existing.Id, handoffStarted, TimeSpan.FromSeconds(30), cancellation))
                 {
-                    var handoffStarted = DateTime.UtcNow;
-                    store.Log("Sending Wand protocol to the already running exact process " + selectedExecutable + " (attempt " + attempt + "/" + maxAttempts + ").");
-                    Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true });
-                    if (await WaitForConnectionEvidenceAsync(selectedExecutable, existing.Id, handoffStarted, TimeSpan.FromSeconds(30), cancellation))
-                    {
-                        ownedBootstrap?.Dispose();
-                        return new WandLaunchResult(existing, true, "Wand connected to the already running " + label + " game.", OwnsProcess: ownedBootstrapGame);
-                    }
-                    if (attempt < maxAttempts)
-                    {
-                        store.Log("Wand did not confirm the already running exact process; retrying the same PID.");
-                        await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
-                        if (!await EnsureWandStartedAsync(wandPath, store, cancellation)) break;
-                    }
+                    ReleaseProcessHandleWithoutTermination(ownedBootstrap);
+                    ownedBootstrap = null;
+                    return new WandLaunchResult(existing, true, "Wand connected to the already running " + label + " game.", OwnsProcess: ownedBootstrapGame);
                 }
-                if (ownedBootstrapGame) StopOwnedProcess(existing, "unconnected exact game", store, false);
-                else existing.Dispose();
-                if (ownedBootstrap != null) StopOwnedProcess(ownedBootstrap, "root bootstrap", store, true);
-                return new WandLaunchResult(null, false, "Wand could not verify a connection to the already running game. No Wand session was tracked; use direct Play or retry.");
+                ReleaseProcessHandleWithoutTermination(ownedBootstrap);
+                ownedBootstrap = null;
+                store.Log("Wand connection evidence was not confirmed for PID " + existing.Id + "; the game was deliberately left running and will remain tracked.");
+                return new WandLaunchResult(existing, true, "The game is running. Wand connection evidence was not confirmed yet, so the game was left running and is being tracked; only Exit will close it.", OwnsProcess: ownedBootstrapGame);
             }
+            const int maxAttempts = 2;
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 if (attempt > 1)
@@ -477,46 +687,84 @@ internal static class WandIntegration
                     await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
                     if (!await EnsureWandStartedAsync(wandPath, store, cancellation)) break;
                 }
-                var observed = ExistingProcessIds(selectedExecutable);
+                var observed = ExistingProcessIds(trackedExecutable);
                 var launchStarted = DateTime.UtcNow;
                 store.Log("Sending Wand protocol for exact executable " + selectedExecutable + " (attempt " + attempt + "/" + maxAttempts + ").");
                 Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true });
                 // The URI is the only launch route for Play with Wand. Wait for the exact
                 // executable; never start a second unmodified copy when the handoff fails.
-                var process = await WaitForNewGameAsync(selectedExecutable, observed, TimeSpan.FromSeconds(20), cancellation);
+                var process = await WaitForNewGameAsync(trackedExecutable, observed, TimeSpan.FromSeconds(20), cancellation);
+                if (process == null && attempt == 1 && await TryLaunchViaCdpAsync(target, store, cancellation))
+                {
+                    // Re-sending the same wemod:// route can be a no-op when
+                    // Wand is already displaying this title. A unique in-app
+                    // route makes autoLaunch run again without starting an
+                    // unmodified fallback or touching another process.
+                    observed = ExistingProcessIds(trackedExecutable);
+                    launchStarted = DateTime.UtcNow;
+                    store.Log("Wand protocol was a no-op; a unique local CDP auto-launch was dispatched for " + selectedExecutable + ".");
+                    process = await WaitForNewGameAsync(trackedExecutable, observed, TimeSpan.FromSeconds(20), cancellation);
+                }
                 ownedProtocolGame = process;
                 store.Log(process == null
                     ? "Wand protocol did not yield a new exact executable within the launch window."
                     : "Wand protocol yielded exact executable PID " + process.Id + ".");
-                if (process != null && await WaitForConnectionEvidenceAsync(selectedExecutable, process.Id, launchStarted, TimeSpan.FromSeconds(30), cancellation))
+                if (process != null && await WaitForConnectionEvidenceAsync(trackedExecutable, process.Id, launchStarted, TimeSpan.FromSeconds(30), cancellation))
                 {
                     ownedProtocolGame = null;
                     return new WandLaunchResult(process, true, "Wand connected to " + label + ". Tracking the exact game process.", OwnsProcess: true);
                 }
                 if (process != null)
                 {
-                    try { if (!process.HasExited) process.Kill(); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
-                    process.Dispose();
                     ownedProtocolGame = null;
-                    store.Log("Wand protocol started " + selectedExecutable + " without fresh connection evidence; the exact process was stopped.");
+                    store.Log("Wand protocol started " + selectedExecutable + " without fresh connection evidence; the exact process was deliberately left running and will remain tracked.");
+                    return new WandLaunchResult(process, true, "The game started through Wand. Connection evidence was not confirmed yet, so the game was left running and is being tracked; only Exit will close it.", OwnsProcess: true);
                 }
                 if (attempt < maxAttempts) continue;
             }
-            store.Log("Wand protocol returned without starting " + selectedExecutable + "; no unmodified fallback was launched.");
-            return new WandLaunchResult(null, false, "Wand did not verify a connection to the exact game after bounded retries. The unconnected process was stopped; open Wand and retry.");
+            store.Log("Wand protocol returned without observing " + selectedExecutable + "; no fallback process was started or terminated.");
+            return new WandLaunchResult(null, false, "Wand did not start the exact game after bounded retries. No fallback process was started, and nothing was terminated.");
         }
         catch (OperationCanceledException)
         {
-            CleanupOwnedProcesses("cancelled");
-            store.Log("Wand launch cancelled; owned processes were cleaned up.");
+            ReleaseLaunchHandles("cancellation");
+            store.Log("Wand launch cancelled; running processes were left untouched.");
             throw;
         }
         catch (Exception ex)
         {
-            CleanupOwnedProcesses("failed");
-            store.Log("Wand protocol launch failed; no unmodified fallback was launched: " + ex.Message);
-            return new WandLaunchResult(null, false, "Wand protocol could not be sent. No unmodified game was started; open Wand and retry.");
+            if (IsProcessRunning(ownedProtocolGame))
+            {
+                var process = ownedProtocolGame!;
+                ownedProtocolGame = null;
+                if (existing != null) { ReleaseProcessHandleWithoutTermination(existing); existing = null; }
+                if (ownedBootstrap != null) { ReleaseProcessHandleWithoutTermination(ownedBootstrap); ownedBootstrap = null; }
+                store.Log("Wand protocol launch reported an error after the exact game started; the game was left running: " + ex.Message);
+                return new WandLaunchResult(process, true, "The game is running even though Wand reported an error. It was left running and is being tracked; only Exit will close it.", OwnsProcess: true);
+            }
+            if (IsProcessRunning(existing))
+            {
+                var process = existing!;
+                existing = null;
+                if (ownedBootstrap != null) { ReleaseProcessHandleWithoutTermination(ownedBootstrap); ownedBootstrap = null; }
+                store.Log("Wand protocol launch reported an error while the exact game was running; the game was left running: " + ex.Message);
+                return new WandLaunchResult(process, true, "The game is running even though Wand reported an error. It was left running and is being tracked; only Exit will close it.", OwnsProcess: ownedBootstrapGame);
+            }
+            ReleaseLaunchHandles("a failed handoff");
+            store.Log("Wand protocol launch failed before an exact game process was observed: " + ex.Message);
+            return new WandLaunchResult(null, false, "Wand protocol could not be sent and no exact game process was found. Nothing was terminated; open Wand and retry.");
         }
+    }
+
+    private static bool IsProcessRunning(Process? process)
+    {
+        try { return process != null && !process.HasExited; }
+        catch { return false; }
+    }
+
+    internal static void ReleaseProcessHandleWithoutTermination(Process? process)
+    {
+        try { process?.Dispose(); } catch { }
     }
 
     internal static string? ResolveBootstrapExecutable(string executable, string versionPath)
@@ -546,26 +794,6 @@ internal static class WandIntegration
         catch (IOException) { return null; }
         catch (UnauthorizedAccessException) { return null; }
         return candidate;
-    }
-
-    private static void StopOwnedProcess(Process process, string description, LibraryStore store, bool entireTree)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                if (entireTree) process.Kill(entireProcessTree: true);
-                else process.Kill();
-            }
-        }
-        catch (Exception ex)
-        {
-            try { store.Log("Could not stop the " + description + ": " + ex.Message); } catch { }
-        }
-        finally
-        {
-            try { process.Dispose(); } catch { }
-        }
     }
 
     private static async Task<string?> EnsureCustomInstallationAsync(WandTarget target, string executable, LibraryStore store, CancellationToken cancellation)
@@ -649,6 +877,60 @@ internal static class WandIntegration
         return candidates.FirstOrDefault(path => path.Length > 0 && File.Exists(path));
     }
 
+    private static async Task<bool> TryLaunchViaCdpAsync(WandTarget target, LibraryStore store, CancellationToken cancellation)
+    {
+        string bridge = Path.Combine(AppContext.BaseDirectory, "tools", "wand_cdp_launch.js");
+        if (!File.Exists(bridge))
+        {
+            store.Log("Bundled Wand CDP launch helper is unavailable; continuing with the bounded protocol retry.");
+            return false;
+        }
+        var startInfo = new ProcessStartInfo(FindNodeExecutable())
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = Path.GetDirectoryName(bridge)!
+        };
+        startInfo.ArgumentList.Add(bridge);
+        startInfo.ArgumentList.Add(target.TitleId);
+        startInfo.ArgumentList.Add(target.GameId);
+        try
+        {
+            using var helper = Process.Start(startInfo);
+            if (helper == null) return false;
+            var standardOutput = helper.StandardOutput.ReadToEndAsync();
+            var standardError = helper.StandardError.ReadToEndAsync();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            timeout.CancelAfter(TimeSpan.FromSeconds(8));
+            try { await helper.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+            {
+                try { if (!helper.HasExited) helper.Kill(entireProcessTree: true); } catch { }
+                store.Log("Wand CDP launch helper timed out; continuing with the bounded protocol retry.");
+                return false;
+            }
+            catch (OperationCanceledException)
+            {
+                try { if (!helper.HasExited) helper.Kill(entireProcessTree: true); } catch { }
+                throw;
+            }
+            string output = await standardOutput;
+            string error = await standardError;
+            bool navigated = helper.ExitCode == 0 && output.Contains("\"navigated\":true", StringComparison.Ordinal);
+            store.Log(navigated
+                ? "Wand local CDP route accepted the unique auto-launch request."
+                : "Wand local CDP route was unavailable" + (error.Length == 0 ? "." : ": " + error.Trim()));
+            return navigated;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            store.Log("Wand local CDP launch could not run; continuing with the bounded protocol retry: " + ex.Message);
+            return false;
+        }
+    }
+
     private static string FindNodeExecutable()
     {
         var candidates = new[]
@@ -681,7 +963,32 @@ internal static class WandIntegration
         return null;
     }
 
-    internal static Process? FindRunningExactProcess(string executable) => FindExactProcess(executable);
+    internal static Process? FindRunningExactProcess(string executable) => FindExactProcess(ResolveTrackedExecutable(executable));
+
+    // Called only by the user's explicit "Exit game + Wand" button. Normal
+    // launch, recovery, and play-session tracking never use this method.
+    internal static int ForceCloseRunningClient(LibraryStore store)
+    {
+        int stopped = 0;
+        Process[] processes;
+        try { processes = Process.GetProcessesByName("Wand"); }
+        catch { return 0; }
+        foreach (var process in processes)
+        {
+            try
+            {
+                if (process.HasExited) continue;
+                process.Kill(entireProcessTree: true);
+                stopped++;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+            {
+                try { store.Log("Could not force-close a Wand process after the user requested exit: " + ex.Message); } catch { }
+            }
+            finally { try { process.Dispose(); } catch { } }
+        }
+        return stopped;
+    }
 
     private static async Task<bool> EnsureWandStartedAsync(string wandPath, LibraryStore store, CancellationToken cancellation)
     {
@@ -704,9 +1011,13 @@ internal static class WandIntegration
         }
         try
         {
-            store.Log("Starting Wand client " + wandPath + ".");
-            Process.Start(new ProcessStartInfo(wandPath) { WorkingDirectory = Path.GetDirectoryName(wandPath), UseShellExecute = true });
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            store.Log("Starting Wand client " + wandPath + " with a loopback-only recovery endpoint.");
+            var startInfo = new ProcessStartInfo(wandPath) { WorkingDirectory = Path.GetDirectoryName(wandPath), UseShellExecute = true };
+            startInfo.ArgumentList.Add("--remote-debugging-port=9222");
+            startInfo.ArgumentList.Add("--remote-debugging-address=127.0.0.1");
+            Process.Start(startInfo);
+            var deadline = DateTime.UtcNow + WandStartupWindow;
+            var nextProgressLog = DateTime.UtcNow + TimeSpan.FromSeconds(30);
             while (DateTime.UtcNow < deadline)
             {
                 if (IsWandRunning())
@@ -720,8 +1031,14 @@ internal static class WandIntegration
                     store.Log("Freshly-started Wand readiness=" + ready);
                     return ready;
                 }
+                if (DateTime.UtcNow >= nextProgressLog)
+                {
+                    store.Log("Wand startup is still pending; Game Library remains responsive while it waits.");
+                    nextProgressLog = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+                }
                 await Task.Delay(250, cancellation);
             }
+            store.Log("Wand did not expose a responsive client within the three-minute startup window.");
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or UriFormatException)
         {
@@ -949,50 +1266,82 @@ internal static class WandAudit
         var store = new LibraryStore(dataRoot);
         store.EnsureAssets();
         var state = store.LoadState();
-        var games = store.LoadGames(state, store.ReadConfig()).Where(g => state.InstalledGames.Contains(g.Id)).ToArray();
+        var games = store.LoadGames(state, store.ReadConfig()).ToArray();
+        var registrations = WandIntegration.LoadSupportedGames();
         JsonObject? catalog = null;
         string cachedCatalog = LibraryStore.SafeChild(store.Cache, "wand-catalog.json");
         if (WandIntegration.TryRead(cachedCatalog, out var loaded)) catalog = loaded;
         var rows = new List<object>();
-        int resolved = 0, protocolCandidates = 0, manualFallback = 0;
-        foreach (var game in games)
+        int launcherCount = 0, trackedCount = 0, registrationMatches = 0, protocolCandidates = 0;
+        foreach (var registration in registrations)
         {
-            string? executable = state.LaunchPaths.GetValueOrDefault(game.Id);
-            string source = "saved";
-            if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
+            var game = games
+                .Select(candidate => new { Game = candidate, Score = MainWindow.WandLibraryMatchScore(candidate, registration, state.LaunchPaths.GetValueOrDefault(candidate.Id)) })
+                .Where(candidate => candidate.Score > 0)
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.Game.Id, StringComparer.Ordinal)
+                .Select(candidate => candidate.Game)
+                .FirstOrDefault()
+                ?? new Game { Id = "wand:" + registration.GameId, Name = registration.Name, IsLocal = true };
+            // Production normalizes the selected card to the manifest title.
+            // Mirror that exact launch input here without changing persisted data.
+            game.Name = registration.Name;
+            string launcher = registration.Path;
+            bool launcherExists = File.Exists(launcher);
+            bool registered = WandIntegration.TryGetExistingWandInstallation(launcher, out var savedRegistration)
+                && string.Equals(savedRegistration.TitleId, registration.TitleId, StringComparison.Ordinal)
+                && string.Equals(savedRegistration.GameId, registration.GameId, StringComparison.Ordinal);
+            WandTarget target = null!;
+            bool targetResolved = registered && catalog != null && WandIntegration.TryResolveRegisteredTarget(catalog, savedRegistration, out target);
+            string trackedExecutable = targetResolved
+                ? WandIntegration.ResolveTrackedExecutable(launcher, target.VersionPath)
+                : WandIntegration.ResolveTrackedExecutable(launcher);
+            bool trackedExists = File.Exists(trackedExecutable);
+            bool protocol = registered && targetResolved && trackedExists;
+            if (launcherExists) launcherCount++;
+            if (trackedExists) trackedCount++;
+            if (registered) registrationMatches++;
+            if (protocol) protocolCandidates++;
+            rows.Add(new
             {
-                var folders = game.IsLocal && state.LocalGames.TryGetValue(game.Id, out var local)
-                    ? new[] { local.Folder }
-                    : InstalledScanner.FindCatalogFolders(state.Settings.MountPath, game.Id, game.Name).ToArray();
-                executable = folders.Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Select(folder => WandIntegration.ResolveInstalledExecutable(game, folder, store))
-                    .FirstOrDefault(path => path != null);
-                source = "cached-wand-resolution";
-            }
-            bool exists = executable != null && File.Exists(executable);
-            bool protocol = exists && catalog != null && WandIntegration.TryResolve(catalog, game, executable!, out _);
-            if (exists) resolved++;
-            if (protocol) protocolCandidates++; else if (exists) manualFallback++;
-            rows.Add(new { id = game.Id, name = game.Name, executable, source, exists, protocolCandidate = protocol });
+                folder = registration.Folder,
+                id = game.Id,
+                name = registration.Name,
+                launcher,
+                trackedExecutable,
+                launcherExists,
+                trackedExists,
+                registrationMatches = registered,
+                protocolCandidate = protocol
+            });
         }
         bool wand = File.Exists(MainWindow.DetectWandPath() ?? "");
-        bool passed = games.Length > 0 && resolved == games.Length && protocolCandidates == games.Length && wand;
+        bool passed = registrations.Count >= 39
+            && registrations.Select(registration => registration.GameId).Distinct(StringComparer.Ordinal).Count() == registrations.Count
+            && launcherCount == registrations.Count
+            && trackedCount == registrations.Count
+            && registrationMatches == registrations.Count
+            && protocolCandidates == registrations.Count
+            && wand;
         var payload = new
         {
             at = DateTime.UtcNow,
             passed,
             launchVerified = false,
-            executableCount = games.Length,
-            resolvedCount = resolved,
+            supportedRegistrationCount = registrations.Count,
+            filterIncludedCount = registrations.Count,
+            executableCount = registrations.Count,
+            resolvedCount = launcherCount,
+            trackedExecutableCount = trackedCount,
+            registrationMatchCount = registrationMatches,
             protocolCandidateCount = protocolCandidates,
-            manualFallbackCount = manualFallback,
             wandExecutable = MainWindow.DetectWandPath(),
             cachedCatalog = catalog != null,
             games = rows
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(report))!);
         File.WriteAllText(Path.GetFullPath(report), System.Text.Json.JsonSerializer.Serialize(payload, DataJson.Options));
-        Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: installed Wand audit; {resolved}/{games.Length} exact executables; protocol candidates {protocolCandidates}; report={Path.GetFullPath(report)}");
+        Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: latest Wand audit; filter {registrations.Count}; launchers {launcherCount}; tracked executables {trackedCount}; exact registrations {registrationMatches}; protocol candidates {protocolCandidates}; report={Path.GetFullPath(report)}");
         return passed ? 0 : 1;
     }
 }

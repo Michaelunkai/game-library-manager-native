@@ -66,7 +66,12 @@ public static class Program
         app.DispatcherUnhandledException += (_, e) =>
         {
             LogProcessFailure("Unhandled UI failure", e.Exception);
-            try { System.Windows.MessageBox.Show("The operation could not finish. Your saved library is preserved.\n\n" + e.Exception.Message, "Game Library", MessageBoxButton.OK, MessageBoxImage.Error); } catch { }
+            try
+            {
+                if (app.MainWindow is MainWindow window)
+                    window.ReportUiFailure("The operation could not finish", e.Exception);
+            }
+            catch { }
             e.Handled = true;
         };
         try

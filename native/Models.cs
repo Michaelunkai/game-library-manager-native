@@ -28,8 +28,14 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public string CategoryName { get; set; } = "";
     [JsonIgnore] public string TagsLabel { get; set; } = "";
     [JsonIgnore] public double PlayedHours { get; set; }
+    [JsonIgnore] public DateTime LastPlayedUtc { get; set; }
     [JsonIgnore] public bool IsPlaying { get; set; }
     [JsonIgnore] public bool IsPlayPaused { get; set; }
+    // This is deliberately an exact, locally verified Wand registration rather
+    // than a broad catalog match. The UI must never advertise a mod launch for
+    // a game that Wand does not already know at this executable path.
+    [JsonIgnore] public bool CanPlayWithWand { get; set; }
+    [JsonIgnore] public string PlayLabel => IsPlaying ? "●  Playing" : "▶  Play";
     [JsonIgnore] public string PlayedMeta => IsPlaying
         ? (IsPlayPaused ? $"Paused · {PlayedHours:0.0} h · timing held" : $"Playing · {PlayedHours:0.0} h")
         : PlayedHours > 0 ? $"Played {PlayedHours:0.0} h" : "Not played";
@@ -91,6 +97,7 @@ public sealed class UserState
     public Dictionary<string, List<string>> GameTags { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, string> LaunchPaths { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PlayTimeSeconds { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, DateTime> LastPlayedUtc { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LocalGame> LocalGames { get; set; } = new(StringComparer.Ordinal);
     public List<PendingEdit> Pending { get; set; } = new();
 }
