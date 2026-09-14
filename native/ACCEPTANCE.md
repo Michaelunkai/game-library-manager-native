@@ -23,8 +23,17 @@ This record covers release 1.1.0 of the native WPF application and its reviewed 
 | Browser queue/integration logic | 10 passed |
 | Official Netlify function bundling | 15 passed; four ZIPs, Node 24, Blobs SDK 10.7.13, exact fallback data, safe-fetch guard |
 | Staged deployment source | 2,048 files hashed, including 2,028 images and the explicit package lock |
+| Live production conditional concurrency | Two same-revision writes produced exactly one 200 winner and one 409 conflict; original field and unrelated data restored |
+| Exact root EXE live synchronization | 7 passed; native-to-website, independent website API-to-native, restart persistence, conditional capability, and restoration |
+| Visible production Chrome UI | 1,179 games hydrated, 600 cards rendered, no console errors, keyboard search and reset passed |
 
-The final clean build is re-run after all source commits. Its SHA-256, size, exact root path, release tag, GitHub download, and live production result are reported in the release handoff.
+## Released artifacts and production
+
+The exact user-facing executable is `F:\study\repos\game-library-manager-native\dist\GameLibrary.exe`, version `1.1.0+b90fb7d6bd6ecb739cf834e4db89fb7b2aac63cd`, 460,501,824 bytes, SHA-256 `346F6DC4E7830013EC93EC85BC52A8DD45ED674BC6C34E3E5C790F9824E461BD`. All 72 release files were checksum-matched after copying, and this root executable passed 92/92 self-tests before a responding normal launch on the pointer's monitor.
+
+Source was merged through `Michaelunkai/game-library-manager-native` PR 1. GitHub release `v1.1.0` provides the exact EXE, the complete Windows x64 ZIP, and checksums.
+
+The reviewed website source is GitHub commit `06711cc2a2e1d326ffead0bfe75bffb1726482f2`. Netlify production deploy `6aa8358b34e74c69c3295980` replaced rollback point `6a9ef259d6821ac077e32c7c` on the existing `game-library-michaelunkai` site. Fresh production reads report `netlify-blobs`, a non-empty version, and `conditionalWrites: true`.
 
 ## Evidence boundaries
 
