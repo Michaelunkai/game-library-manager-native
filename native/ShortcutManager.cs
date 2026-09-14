@@ -172,6 +172,9 @@ internal static class ShortcutManager
             SetStringProperty(properties, AppUserModelIdKey, Program.AppUserModelId);
             ThrowIfFailed(properties.Commit(), "commit shell link properties");
             ThrowIfFailed(persist.Save(linkPath, true), "save shell link");
+            // Ask Explorer to invalidate the cached icon/AUMID for a pin that
+            // was already materialized before this repair.
+            SHChangeNotify(ShcneUpdateItem, ShcnfPathW, linkPath, IntPtr.Zero);
         }
         finally
         {
@@ -206,6 +209,12 @@ internal static class ShortcutManager
     {
         if (hResult < 0) Marshal.ThrowExceptionForHR(hResult, new IntPtr(-1));
     }
+
+    private const uint ShcneUpdateItem = 0x00002000;
+    private const uint ShcnfPathW = 0x00000005;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern void SHChangeNotify(uint eventId, uint flags, string path, IntPtr item);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PropertyKey
