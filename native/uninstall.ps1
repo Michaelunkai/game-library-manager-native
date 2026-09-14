@@ -11,7 +11,7 @@ if (Test-Path -LiteralPath $targetExe) {
     Remove-Item -LiteralPath $targetExe
 }
 $targetIcon = Join-Path $targetRoot 'GameLibrary.ico'
-if (Test-Path -LiteralPath $targetIcon -PathType Leaf -and $receipt.icon -eq $targetIcon -and $receipt.iconSha256 -eq (Get-FileHash -LiteralPath $targetIcon -Algorithm SHA256).Hash) {
+if ((Test-Path -LiteralPath $targetIcon -PathType Leaf) -and $receipt.icon -eq $targetIcon -and $receipt.iconSha256 -eq (Get-FileHash -LiteralPath $targetIcon -Algorithm SHA256).Hash) {
     Remove-Item -LiteralPath $targetIcon
 }
 $shell = New-Object -ComObject WScript.Shell
