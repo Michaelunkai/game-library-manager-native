@@ -38,6 +38,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify-native.ps1
 
 `build.ps1` accepts `-DotnetPath` for an explicit .NET 10 SDK and isolated output roots. `--self-test` uses temporary fixtures and simulated failures; `--ui-test` runs the packaged WPF window against an explicit data directory and exits. Neither mode mutates production data.
 
-The deployment helpers under `backend` prepare the maintained website source, hash every staged file, run conditional-sync tests, and build all four Netlify function ZIPs with the official bundler. Production deployment and live verification remain separate gates.
+The deployment helpers under `backend` prepare the maintained website source, hash every staged file, run conditional-sync tests, and build all four Netlify function ZIPs with the official bundler. The reviewed candidate is live on the existing Netlify site. Production advertises conditional writes, rejects a stale competing revision, and was read back successfully by both the native client and the visible website.
 
 See [ACCEPTANCE.md](ACCEPTANCE.md) for the current release record. The executable is not code-signed.
