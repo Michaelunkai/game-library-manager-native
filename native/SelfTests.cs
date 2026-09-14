@@ -653,20 +653,36 @@ public static class SelfTests
         Check("Windows installs hand off a reviewed BAT job to the visible default terminal", () =>
         {
             string batPath = Path.Combine(root, "install-games.bat");
+            string transcriptPath = Path.Combine(root, "install-games.terminal.log");
             string bat = DockerScripts.Generate(new[] { new Game { Id = "terminalproof", Name = "Terminal proof" } }, state.Settings, "bat");
-            var start = JobWindow.BuildDefaultTerminalStartInfo(batPath);
+            var buildStart = typeof(JobWindow).GetMethod("BuildDefaultTerminalStartInfo", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, null, new[] { typeof(string), typeof(string) }, null)
+                ?? throw new InvalidOperationException("The visible-terminal transcript launcher is missing.");
+            var start = (ProcessStartInfo)(buildStart.Invoke(null, new object[] { batPath, transcriptPath })
+                ?? throw new InvalidOperationException("The visible-terminal transcript launcher returned no process configuration."));
             const string operationId = "11111111111111111111111111111111";
             string bound = JobWindow.BindJobEnvironment(bat, "bat", operationId, lockHeld: true);
             Require(bat.StartsWith("@echo off\r\n", StringComparison.Ordinal), "The install export is not a BAT job.");
             Require(bat.Contains("# GLM_POWERSHELL_START") && bat.Contains(DockerScripts.CompletionMarkerName), "The BAT job lost its reviewed PowerShell payload or completion proof.");
             Require(bat.Contains("exit /b %GLM_EXIT%\r\n") && !bat.Contains("\r\npause\r\n"), "The BAT job lost its completion exit contract.");
-            string expectedCmd = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
-            Require(start.UseShellExecute && !start.CreateNoWindow
-                && string.Equals(start.FileName, expectedCmd, StringComparison.OrdinalIgnoreCase)
-                && start.Arguments == "/d /c call \"" + Path.GetFullPath(batPath) + "\""
+            string expectedPowerShell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+            Require(!start.UseShellExecute && !start.CreateNoWindow
+                && string.Equals(start.FileName, expectedPowerShell, StringComparison.OrdinalIgnoreCase)
+                && start.Arguments.Contains("-EncodedCommand", StringComparison.Ordinal)
+                && string.Equals(start.Environment["GLM_JOB_SCRIPT"], Path.GetFullPath(batPath), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(start.Environment["GLM_JOB_TRANSCRIPT"], Path.GetFullPath(transcriptPath), StringComparison.OrdinalIgnoreCase)
                 && string.Equals(start.WorkingDirectory, root, StringComparison.OrdinalIgnoreCase), "The BAT job was not handed to the visible default terminal with its working directory.");
             Require(bound.StartsWith("@set \"GLM_INSTALL_OPERATION_ID=" + operationId + "\"\r\n@set \"GLM_NATIVE_INSTALL_LOCK_HELD=1\"\r\n", StringComparison.Ordinal) && bound.EndsWith(bat, StringComparison.Ordinal), "The BAT job did not retain its bound operation identity and payload.");
-            Reject(() => JobWindow.BuildDefaultTerminalStartInfo(Path.Combine(root, "install-games.ps1")));
+            var summarize = typeof(JobWindow).GetMethod("SummarizeFailure", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The install failure summarizer is missing.");
+            string transcript = "2026-09-14 GAME 1/2 · Downloading Alpha\r\n2026-09-14 FAILED alpha: IOException: provider unavailable\r\nInstall batch completed with failures: 1/2 selected operation(s) completed; failed game(s): alpha.";
+            string summary = summarize.Invoke(null, new object[] { transcript, 1 })?.ToString() ?? "";
+            Require(summary.Contains("alpha", StringComparison.OrdinalIgnoreCase) && summary.Contains("provider unavailable", StringComparison.OrdinalIgnoreCase), "The precise per-game failure was reduced to an exit code.");
+            try
+            {
+                buildStart.Invoke(null, new object[] { Path.Combine(root, "install-games.ps1"), transcriptPath });
+                throw new Exception("A non-BAT visible-terminal job was accepted.");
+            }
+            catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is ArgumentException) { }
         });
         Check("Per-game install failures stay bounded and identify the affected game", () =>
         {
