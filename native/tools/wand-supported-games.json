@@ -1,0 +1,275 @@
+[
+  {
+    "folder": "007 First Light",
+    "titleId": "102700",
+    "gameId": "118911",
+    "name": "007 First Light",
+    "path": "E:\\games\\007 First Light\\Retail\\007FirstLight.exe"
+  },
+  {
+    "folder": "Ashen",
+    "titleId": "27595",
+    "gameId": "27643",
+    "name": "Ashen",
+    "path": "E:\\games\\Ashen\\Ashen.exe"
+  },
+  {
+    "folder": "backpackhero",
+    "titleId": "60413",
+    "gameId": "65154",
+    "name": "Backpack Hero",
+    "path": "E:\\games\\backpackhero\\Backpack Hero.exe"
+  },
+  {
+    "folder": "deaths-gambit-afterlife",
+    "titleId": "16356",
+    "gameId": "16356",
+    "name": "Death's Gambit: Afterlife",
+    "path": "E:\\games\\deaths-gambit-afterlife\\deathsgambit397.exe"
+  },
+  {
+    "folder": "dragonquestviireimagined",
+    "titleId": "103066",
+    "gameId": "113464",
+    "name": "DRAGON QUEST VII Reimagined",
+    "path": "E:\\games\\dragonquestviireimagined\\Launcher.exe"
+  },
+  {
+    "folder": "echoesoftheend",
+    "titleId": "97072",
+    "gameId": "105524",
+    "name": "Echoes of the End",
+    "path": "E:\\games\\echoesoftheend\\TheDarken.exe"
+  },
+  {
+    "folder": "EternalStrands",
+    "titleId": "89650",
+    "gameId": "97591",
+    "name": "Eternal Strands",
+    "path": "E:\\games\\EternalStrands\\EternalStrands.exe"
+  },
+  {
+    "folder": "fantasylifei",
+    "titleId": "93836",
+    "gameId": "102038",
+    "name": "FANTASY LIFE i: The Girl Who Steals Time",
+    "path": "E:\\games\\fantasylifei\\GameBootstrapper.exe"
+  },
+  {
+    "folder": "Gothic 1 Remake",
+    "titleId": "105957",
+    "gameId": "115056",
+    "name": "Gothic 1 Remake",
+    "path": "E:\\games\\Gothic 1 Remake\\G1R-Win64-Shipping.exe"
+  },
+  {
+    "folder": "HammerwatchII",
+    "titleId": "89581",
+    "gameId": "97515",
+    "name": "Heroes of Hammerwatch II",
+    "path": "E:\\games\\HammerwatchII\\Hammerwatch.II\\HW2.exe"
+  },
+  {
+    "folder": "Hellpoint",
+    "titleId": "25669",
+    "gameId": "25669",
+    "name": "Hellpoint",
+    "path": "E:\\games\\Hellpoint\\Hellpoint.exe"
+  },
+  {
+    "folder": "Indivisible",
+    "titleId": "28359",
+    "gameId": "28696",
+    "name": "Indivisible",
+    "path": "E:\\games\\Indivisible\\Indivisible.exe"
+  },
+  {
+    "folder": "islets",
+    "titleId": "63578",
+    "gameId": "87809",
+    "name": "Islets",
+    "path": "E:\\games\\islets\\Islets.exe"
+  },
+  {
+    "folder": "kaku",
+    "titleId": "70717",
+    "gameId": "76667",
+    "name": "KAKU: Ancient Seal",
+    "path": "E:\\games\\kaku\\KakuAncientSeal\\Binaries\\Win64\\KakuAncientSeal_protected.exe"
+  },
+  {
+    "folder": "KingsBounty2",
+    "titleId": "52460",
+    "gameId": "56264",
+    "name": "King's Bounty II",
+    "path": "E:\\games\\KingsBounty2\\Ryujinx.bat"
+  },
+  {
+    "folder": "Kristala",
+    "titleId": "82931",
+    "gameId": "90337",
+    "name": "Kristala",
+    "path": "E:\\games\\Kristala\\Kristala.exe"
+  },
+  {
+    "folder": "kunitsugami",
+    "titleId": "82980",
+    "gameId": "91634",
+    "name": "Kunitsu-Gami: Path of the Goddess",
+    "path": "E:\\games\\kunitsugami\\KunitsuGami.exe"
+  },
+  {
+    "folder": "legacyofkainsr12r",
+    "titleId": "88507",
+    "gameId": "96382",
+    "name": "Legacy of Kain Soul Reaver 1&2 Remastered",
+    "path": "E:\\games\\legacyofkainsr12r\\SRX.exe"
+  },
+  {
+    "folder": "megamanxdive",
+    "titleId": "74202",
+    "gameId": "80622",
+    "name": "MEGA MAN X DiVE Offline",
+    "path": "E:\\games\\megamanxdive\\Game.exe"
+  },
+  {
+    "folder": "nobodysavestheworld",
+    "titleId": "56942",
+    "gameId": "61298",
+    "name": "Nobody Saves the World",
+    "path": "E:\\games\\nobodysavestheworld\\NStW_x64.exe"
+  },
+  {
+    "folder": "nocturnal",
+    "titleId": "71665",
+    "gameId": "77733",
+    "name": "Nocturnal",
+    "path": "E:\\games\\nocturnal\\Nocturnal.exe"
+  },
+  {
+    "folder": "PathfinderWrathoftheRighteous",
+    "titleId": "52857",
+    "gameId": "56767",
+    "name": "Pathfinder: Wrath of the Righteous",
+    "path": "E:\\games\\PathfinderWrathoftheRighteous\\Wrath.exe"
+  },
+  {
+    "folder": "REPLACED",
+    "titleId": "107307",
+    "gameId": "116523",
+    "name": "REPLACED",
+    "path": "E:\\games\\REPLACED\\Replaced.exe"
+  },
+  {
+    "folder": "samuraiwarriors5",
+    "titleId": "51909",
+    "gameId": "55656",
+    "name": "SAMURAI WARRIORS 5",
+    "path": "E:\\games\\samuraiwarriors5\\SW5.exe"
+  },
+  {
+    "folder": "SixDaysinFallujah",
+    "titleId": "72136",
+    "gameId": "78272",
+    "name": "Six Days in Fallujah",
+    "path": "E:\\games\\SixDaysinFallujah\\SixDays.exe"
+  },
+  {
+    "folder": "skulheroslayer",
+    "titleId": "37870",
+    "gameId": "63937",
+    "name": "Skul: The Hero Slayer",
+    "path": "E:\\games\\skulheroslayer\\Skul.exe"
+  },
+  {
+    "folder": "sonicfrontiers",
+    "titleId": "65672",
+    "gameId": "71029",
+    "name": "Sonic Frontiers",
+    "path": "E:\\games\\sonicfrontiers\\SonicFrontiers.exe"
+  },
+  {
+    "folder": "sonicmania-ac6e7f01",
+    "titleId": "18265",
+    "gameId": "18265",
+    "name": "Sonic Mania",
+    "path": "E:\\games\\sonicmania-ac6e7f01\\SonicMania.exe"
+  },
+  {
+    "folder": "SouthofMidnight",
+    "titleId": "89873",
+    "gameId": "100324",
+    "name": "South of Midnight",
+    "path": "E:\\games\\SouthofMidnight\\Midnight\\Binaries\\Win64\\SouthOfMidnight.exe"
+  },
+  {
+    "folder": "Star Wars Outlaws",
+    "titleId": "85737",
+    "gameId": "112532",
+    "name": "Star Wars Outlaws",
+    "path": "E:\\games\\Star Wars Outlaws\\Outlaws.exe"
+  },
+  {
+    "folder": "stillwakesthedeep",
+    "titleId": "82871",
+    "gameId": "90707",
+    "name": "Still Wakes the Deep",
+    "path": "E:\\games\\stillwakesthedeep\\StillWakesTheDeep.exe"
+  },
+  {
+    "folder": "SunlessSea",
+    "titleId": "6574",
+    "gameId": "51582",
+    "name": "SUNLESS SEA",
+    "path": "E:\\games\\SunlessSea\\Sunless Sea.exe"
+  },
+  {
+    "folder": "swordofthesea",
+    "titleId": "97363",
+    "gameId": "105832",
+    "name": "Sword of the Sea",
+    "path": "E:\\games\\swordofthesea\\SwordOfTheSea.exe"
+  },
+  {
+    "folder": "tailsofiron",
+    "titleId": "53336",
+    "gameId": "57242",
+    "name": "Tails of Iron",
+    "path": "E:\\games\\tailsofiron\\TOI.exe"
+  },
+  {
+    "folder": "talesoftheshire",
+    "titleId": "95759",
+    "gameId": "104128",
+    "name": "Tales of the Shire: A The Lord of The Rings Game",
+    "path": "E:\\games\\talesoftheshire\\TotS.exe"
+  },
+  {
+    "folder": "theelderscrollsivoblivionremastered",
+    "titleId": "92923",
+    "gameId": "101083",
+    "name": "The Elder Scrolls IV: Oblivion Remastered",
+    "path": "E:\\games\\theelderscrollsivoblivionremastered\\OblivionRemastered.exe"
+  },
+  {
+    "folder": "TheEscapists2",
+    "titleId": "18013",
+    "gameId": "45938",
+    "name": "The Escapists 2",
+    "path": "E:\\games\\TheEscapists2\\TheEscapists2.exe"
+  },
+  {
+    "folder": "warhammer40000roguetrader",
+    "titleId": "66440",
+    "gameId": "98778",
+    "name": "Warhammer 40,000: Rogue Trader",
+    "path": "E:\\games\\warhammer40000roguetrader\\WH40KRT.exe"
+  },
+  {
+    "folder": "WizardwithaGun",
+    "titleId": "75407",
+    "gameId": "81975",
+    "name": "Wizard with a Gun",
+    "path": "E:\\games\\WizardwithaGun\\wizardwithagun.exe"
+  }
+]

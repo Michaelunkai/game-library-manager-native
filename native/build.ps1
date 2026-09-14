@@ -1,9 +1,18 @@
-param([switch]$FrameworkDependent, [switch]$SkipAssets, [string]$DotnetPath)
+param(
+    [switch]$FrameworkDependent,
+    [switch]$SkipAssets,
+    [string]$DotnetPath,
+    [string]$DistributionRoot,
+    [string]$BuildOutputRoot
+)
 $ErrorActionPreference = 'Stop'
 $nativeRoot = $PSScriptRoot
 $sourceRoot = Split-Path $nativeRoot -Parent
 $buildDrive = [IO.Path]::GetPathRoot($nativeRoot)
 $buildRuntime = Join-Path $buildDrive 'study\temp\glm-native-build'
+if ([string]::IsNullOrWhiteSpace($BuildOutputRoot)) { $BuildOutputRoot = Join-Path $buildRuntime 'output' }
+$BuildOutputRoot = [IO.Path]::GetFullPath($BuildOutputRoot)
+if (-not $BuildOutputRoot.EndsWith('\')) { $BuildOutputRoot += '\' }
 $buildEnvironment = @{
     TEMP = Join-Path $buildRuntime 'temp'
     TMP = Join-Path $buildRuntime 'tmp'
@@ -52,17 +61,22 @@ try {
     (Get-FileHash -LiteralPath (Join-Path $nativeRoot 'Assets\catalog.zip') -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -LiteralPath (Join-Path $nativeRoot 'Assets\catalog.sha256') -Encoding ASCII
     $selfContained = 'true'
     if ($FrameworkDependent) { $selfContained = 'false' }
-    $distributionRoot = Join-Path $nativeRoot 'dist'
-    if (Test-Path -LiteralPath $distributionRoot) { Remove-Item -LiteralPath $distributionRoot -Recurse -Force }
+    $usingDefaultDistributionRoot = [string]::IsNullOrWhiteSpace($DistributionRoot)
+    if ($usingDefaultDistributionRoot) { $distributionRoot = Join-Path $nativeRoot 'dist' }
+    else {
+        $distributionRoot = [IO.Path]::GetFullPath($DistributionRoot)
+        if (Test-Path -LiteralPath $distributionRoot) { throw 'The requested distribution output already exists. Choose a new empty path so an existing package cannot be overwritten.' }
+    }
+    if ($usingDefaultDistributionRoot -and (Test-Path -LiteralPath $distributionRoot)) { Remove-Item -LiteralPath $distributionRoot -Recurse -Force }
     [void][IO.Directory]::CreateDirectory($distributionRoot)
-    & $dotnetPath publish GameLibrary.Native.csproj -c Release -r win-x64 --self-contained $selfContained -o $distributionRoot
+    & $dotnetPath publish GameLibrary.Native.csproj -c Release -r win-x64 --self-contained $selfContained -o $distributionRoot "-p:BaseOutputPath=$BuildOutputRoot"
     if ($LASTEXITCODE -ne 0) { throw ('Publish failed: exit ' + $LASTEXITCODE) }
     # The single-file publisher carries the managed payload into the EXE but may
     # omit native Node addons from the publish directory. Copy the exact bundled
     # Wand bridge runtime from the RID-specific build output so the installed EXE
     # remains self-contained and never falls back to a developer profile path.
-    $builtTools = Join-Path $nativeRoot 'bin\Release\net10.0-windows\win-x64\tools'
-    $publishedTools = Join-Path $nativeRoot 'dist\tools'
+    $builtTools = Join-Path $BuildOutputRoot 'Release\net10.0-windows\win-x64\tools'
+    $publishedTools = Join-Path $distributionRoot 'tools'
     if (-not (Test-Path -LiteralPath $builtTools -PathType Container)) { throw 'The bundled Wand tools were not produced; refusing a stale or incomplete package.' }
     foreach ($file in @(Get-ChildItem -LiteralPath $builtTools -File -Recurse)) {
         $relative = $file.FullName.Substring($builtTools.Length + 1)
@@ -72,13 +86,15 @@ try {
     }
     $requiredTools = @(
         (Join-Path $publishedTools 'wemod_add_custom_install.js'),
+        (Join-Path $publishedTools 'wand_cdp_launch.js'),
+        (Join-Path $publishedTools 'wand-supported-games.json'),
         (Join-Path $publishedTools 'wand-runtime\classic-level\prebuilds\win32-x64\classic-level.node'),
         (Join-Path $publishedTools 'node\node.exe')
     )
     foreach ($required in $requiredTools) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw ('Required bundled runtime file is missing: ' + $required) }
     }
-    $exe = Join-Path $nativeRoot 'dist\GameLibrary.exe'
+    $exe = Join-Path $distributionRoot 'GameLibrary.exe'
     Get-Item -LiteralPath $exe | Select-Object FullName,Length,LastWriteTime
     Write-Output ('SHA256: ' + (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash)
 } finally
