@@ -186,6 +186,41 @@ public static class SelfTests
             var games = new List<Game>(); LibraryStore.MergeTags(games, JsonNode.Parse("{\"tags\":[{\"name\":\"NewGame\",\"full_size\":1000000000,\"last_updated\":\"2026-09-08T00:00:00Z\"}]}")!, state.Settings);
             Require(games.Single().Time == 0 && games.Single().Discovered && games.Single().SizeGb == 1 && games.Single().Added.Year == 2026, "Unknown playtime was fabricated or verified metadata lost.");
         });
+        Check("Installed size is measured and persisted separately from Docker download size", () =>
+        {
+            string folder = Path.Combine(root, "installed-size-proof");
+            Directory.CreateDirectory(Path.Combine(folder, "nested"));
+            File.WriteAllBytes(Path.Combine(folder, "game.exe"), new byte[1536]);
+            File.WriteAllBytes(Path.Combine(folder, "nested", "payload.bin"), new byte[2560]);
+            var measureType = typeof(MainWindow).Assembly.GetType("GameLibrary.Native.InstalledSize")
+                ?? throw new InvalidOperationException("InstalledSize is missing.");
+            var measure = measureType.GetMethod("Measure", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("InstalledSize.Measure is missing.");
+            long bytes = (long)(measure.Invoke(null, new object?[] { folder, CancellationToken.None }) ?? -1L);
+            Require(bytes == 4096, "Installed byte measurement was not exact.");
+
+            var installedBytesProperty = typeof(UserState).GetProperty("InstalledBytes")
+                ?? throw new InvalidOperationException("UserState.InstalledBytes is missing.");
+            var measuredUtcProperty = typeof(UserState).GetProperty("InstalledSizeMeasuredUtc")
+                ?? throw new InvalidOperationException("UserState.InstalledSizeMeasuredUtc is missing.");
+            installedBytesProperty.SetValue(state, new Dictionary<string, long>(StringComparer.Ordinal) { ["size-proof"] = bytes });
+            measuredUtcProperty.SetValue(state, new Dictionary<string, DateTime>(StringComparer.Ordinal) { ["size-proof"] = DateTime.UtcNow });
+            store.Save(state);
+            var restored = store.LoadState();
+            var restoredBytes = (Dictionary<string, long>)installedBytesProperty.GetValue(restored)!;
+            Require(restoredBytes["size-proof"] == bytes, "Measured installed bytes did not survive restart.");
+
+            var game = new Game { Id = "size-proof", Name = "Size Proof", SizeGb = 1.5, Installed = true };
+            var installedBytesGameProperty = typeof(Game).GetProperty("InstalledBytes")
+                ?? throw new InvalidOperationException("Game.InstalledBytes is missing.");
+            installedBytesGameProperty.SetValue(game, 2_000_000_000L);
+            string label = typeof(Game).GetProperty("SizeLabel")?.GetValue(game)?.ToString() ?? "";
+            Require(label.Contains("installed", StringComparison.OrdinalIgnoreCase) && !label.Contains("download", StringComparison.OrdinalIgnoreCase),
+                "An observed local size was still presented as a Docker download estimate.");
+            installedBytesGameProperty.SetValue(game, 0L);
+            label = typeof(Game).GetProperty("SizeLabel")?.GetValue(game)?.ToString() ?? "";
+            Require(label.Contains("download", StringComparison.OrdinalIgnoreCase), "The uninstalled Docker size was not identified as download size.");
+        });
         Check("Offline transport rejects requests without opening a network connection", () =>
         {
             var guard = new OfflineNetworkGuard(); using var client = new SyncClient(store, guard);

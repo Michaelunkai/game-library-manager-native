@@ -491,7 +491,7 @@ public partial class MainWindow : Window
     {
         static IOrderedEnumerable<Game> NameAsc(IEnumerable<Game> games) => games.OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Id, StringComparer.Ordinal);
         static bool HasTime(Game g) => double.IsFinite(g.Time) && g.Time > 0;
-        static bool HasSize(Game g) => double.IsFinite(g.SizeGb) && g.SizeGb > 0;
+        static bool HasSize(Game g) => double.IsFinite(g.ComparableSizeGb) && g.ComparableSizeGb > 0;
         static bool HasRating(Game g) => g.Rating > 0;
         static bool HasPlayed(Game g) => g.LastPlayedUtc != default || g.PlayedHours > 0;
         static bool HasDate(Game g) => g.Added != default || g.Category == "new";
@@ -506,8 +506,8 @@ public partial class MainWindow : Window
             "Recently Played" => source.OrderByDescending(g => HasPlayed(g)).ThenByDescending(g => g.LastPlayedUtc).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Rating (High–Low)" => source.OrderBy(g => HasRating(g) ? 0 : 1).ThenByDescending(g => HasRating(g) ? g.Rating : int.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Rating (Low–High)" => source.OrderBy(g => HasRating(g) ? 0 : 1).ThenBy(g => HasRating(g) ? g.Rating : int.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
-            "Size (Small–Large)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenBy(g => HasSize(g) ? g.SizeGb : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
-            "Size (Large–Small)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenByDescending(g => HasSize(g) ? g.SizeGb : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Size (Small–Large)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenBy(g => HasSize(g) ? g.ComparableSizeGb : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Size (Large–Small)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenByDescending(g => HasSize(g) ? g.ComparableSizeGb : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Category" => source.OrderBy(g => g.CategoryName, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             _ => source.OrderBy(g => HasDate(g) ? 0 : 1).ThenByDescending(g => HasDate(g) ? DateValue(g) : DateTime.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
         };

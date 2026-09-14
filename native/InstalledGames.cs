@@ -20,7 +20,33 @@ public sealed class LocalGame
         Encoding.UTF8.GetBytes(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant()))).ToLowerInvariant();
 }
 
-public sealed record InstalledDiscovery(string Id, string Name, string Folder, string? Launcher, bool IsLocal);
+public sealed record InstalledDiscovery(string Id, string Name, string Folder, string? Launcher, bool IsLocal, long InstalledBytes = 0);
+
+internal static class InstalledSize
+{
+    internal static long Measure(string folder, System.Threading.CancellationToken cancellation = default)
+    {
+        if (!Directory.Exists(folder)) return 0;
+        long total = 0;
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+        try
+        {
+            foreach (string path in Directory.EnumerateFiles(folder, "*", options))
+            {
+                cancellation.ThrowIfCancellationRequested();
+                try { total = checked(total + new FileInfo(path).Length); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException) { }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return Math.Max(0, total);
+    }
+}
 
 public sealed class InstalledScanResult
 {
@@ -63,6 +89,12 @@ public partial class MainWindow
                 changed = true;
             }
             if (State.InstalledGames.Add(entry.Id)) changed = true;
+            if (entry.InstalledBytes > 0 && State.InstalledBytes.GetValueOrDefault(entry.Id) != entry.InstalledBytes)
+            {
+                State.InstalledBytes[entry.Id] = entry.InstalledBytes;
+                State.InstalledSizeMeasuredUtc[entry.Id] = DateTime.UtcNow;
+                changed = true;
+            }
         }
         if (reconcileMissingCatalog)
         {
@@ -75,7 +107,9 @@ public partial class MainWindow
             {
                 if (!catalogIds.Contains(id) || result.CatalogGamesWithExecutable.Contains(id)) continue;
                 if (State.LaunchPaths.TryGetValue(id, out var saved) && File.Exists(saved)) continue;
-                    if (State.InstalledGames.Remove(id)) changed = true;
+                if (State.InstalledGames.Remove(id)) changed = true;
+                if (State.InstalledBytes.Remove(id)) changed = true;
+                if (State.InstalledSizeMeasuredUtc.Remove(id)) changed = true;
             }
         }
         if (logNotices)

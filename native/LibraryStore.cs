@@ -116,11 +116,13 @@ public sealed class LibraryStore
     }
     public static UserState ValidateState(UserState state)
     {
-        if (state.SchemaVersion != 1 || state.Settings == null || state.Ratings == null || state.GameTags == null || state.Wishlist == null || state.InstalledGames == null || state.Pending == null || state.LaunchPaths == null || state.PlayTimeSeconds == null || state.LastPlayedUtc == null || state.LocalGames == null)
+        if (state.SchemaVersion != 1 || state.Settings == null || state.Ratings == null || state.GameTags == null || state.Wishlist == null || state.InstalledGames == null || state.Pending == null || state.LaunchPaths == null || state.PlayTimeSeconds == null || state.LastPlayedUtc == null || state.InstalledBytes == null || state.InstalledSizeMeasuredUtc == null || state.LocalGames == null)
             throw new FormatException("Unsupported or incomplete library backup.");
         if (state.Ratings.Values.Any(v => v < 0 || v > 5)) throw new FormatException("Ratings must be between zero and five.");
         if (state.PlayTimeSeconds.Values.Any(v => !double.IsFinite(v) || v < 0)) throw new FormatException("Play time must be finite and non-negative.");
         if (state.LastPlayedUtc.Any(e => e.Value.Kind == DateTimeKind.Local)) throw new FormatException("Last-played timestamps must be UTC.");
+        if (state.InstalledBytes.Values.Any(value => value < 0)) throw new FormatException("Installed size must be non-negative.");
+        if (state.InstalledSizeMeasuredUtc.Any(e => e.Value.Kind == DateTimeKind.Local)) throw new FormatException("Installed-size timestamps must be UTC.");
         if (!string.IsNullOrWhiteSpace(state.Settings.WandPath) && (!Path.IsPathFullyQualified(state.Settings.WandPath) || state.Settings.WandPath.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)) throw new FormatException("Wand path must be an absolute Windows executable path.");
         if (state.GameTags.Values.Any(v => v == null || v.Any(t => t == null || t.Length > 80))) throw new FormatException("Invalid game tags.");
         if (state.LocalGames.Any(e => e.Value == null || !e.Key.StartsWith("local:", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(e.Value.Name) || !Path.IsPathFullyQualified(e.Value.Folder)))
@@ -181,6 +183,8 @@ public sealed class LibraryStore
             g.Installed = state.InstalledGames.Contains(g.Id);
             g.PlayedHours = state.PlayTimeSeconds.GetValueOrDefault(g.Id) / 3600d;
             g.LastPlayedUtc = state.LastPlayedUtc.GetValueOrDefault(g.Id);
+            g.InstalledBytes = state.InstalledBytes.GetValueOrDefault(g.Id);
+            g.InstalledSizeMeasuredUtc = state.InstalledSizeMeasuredUtc.GetValueOrDefault(g.Id);
             g.TagsLabel = string.Join("  ·  ", state.GameTags.GetValueOrDefault(g.Id, new()));
             if (!g.IsLocal && string.IsNullOrEmpty(g.DockerImage)) g.DockerImage = $"{state.Settings.DockerUsername}/{state.Settings.RepoName}:{g.Id}";
             if (!g.IsLocal && string.IsNullOrEmpty(g.DockerImageUrl)) g.DockerImageUrl = $"https://hub.docker.com/r/{state.Settings.DockerUsername}/{state.Settings.RepoName}/tags?name={Uri.EscapeDataString(g.Id)}";
