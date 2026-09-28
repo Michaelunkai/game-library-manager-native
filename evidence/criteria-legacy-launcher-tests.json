@@ -1,0 +1,11 @@
+{
+  "fixture": "F:\\study\\repos\\game-library-manager-native\\evidence\\launcher-proof-5f0dcede36a84e09bab5f38b3705c8f4",
+  "launcher": "F:\\study\\repos\\game-library-manager-native\\evidence\\launcher-proof-5f0dcede36a84e09bab5f38b3705c8f4\\dist\\GameLibrary.exe",
+  "checks": {
+    "argumentsPreserved": true,
+    "childExitCodeReturned": true,
+    "noProfileCreated": true,
+    "nextNativeUpdateUsedWithoutReplacingLauncher": true
+  },
+  "passed": true
+}

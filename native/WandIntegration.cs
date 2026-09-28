@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -8,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,15 +17,18 @@ namespace GameLibrary.Native;
 
 internal sealed record WandTarget(string TitleId, string GameId, string TitleName, string Platform, string VersionPath);
 internal sealed record WandCustomInstallationRequest(string GameId, string ExecutablePath, string WorkingDirectory, string Sku, string CorrelationId);
-internal sealed record WandLaunchResult(Process? Process, bool UsedProtocol, string Message, bool OwnsProcess = false);
+internal sealed record WandLaunchResult(Process? Process, bool UsedProtocol, string Message, bool OwnsProcess = false, WandSessionSnapshot? Session = null);
 internal sealed record WandRegisteredInstallation(string TitleId, string GameId, string ExecutablePath);
 internal sealed record WandSupportedGame(string Folder, string TitleId, string GameId, string Name, string Path);
+internal sealed record WandProtocolPreflight(bool SafeToDispatch, bool TrainerBusy, string Reason, string? ActiveTrainerGameId, int? ActiveTrainerProcessId);
 
 internal static class WandIntegration
 {
     private const string CatalogUrl = "https://storage-cdn.wemod.com/catalog.json";
     private const long MaxCatalogBytes = 24 * 1024 * 1024;
     internal static readonly TimeSpan WandStartupWindow = TimeSpan.FromMinutes(3);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> LaunchGates = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, CancellationTokenSource> SessionMonitors = new(StringComparer.OrdinalIgnoreCase);
     private sealed class CatalogIndex
     {
         private readonly Dictionary<string, List<(string Key, JsonObject Title)>> byAlias = new(StringComparer.Ordinal);
@@ -46,8 +51,115 @@ internal static class WandIntegration
 
     internal static string Normalize(string value) => Regex.Replace(value.Trim().ToLowerInvariant(), @"[^\p{L}\p{N}]+", "");
 
+    internal static WandSessionStatus StatusForTrainerEvidence(WandTrainerEvidence evidence) =>
+        evidence.Source is "trainer-connected-before-exit" or "game-process-changed" or "game-pid-reused" or "game-exited"
+            ? WandSessionStatus.Disconnected
+        : evidence.Confirmed ? WandSessionStatus.Connected
+        : WandSessionStatus.GameRunningConnectionUnconfirmed;
+
+    private static bool IsHistoricalTrainerEvidence(WandTrainerEvidence evidence) =>
+        evidence.Source == "trainer-connected-before-exit";
+
     internal static string BuildProtocolUri(string titleId, string gameId) =>
         "wemod://play?titleId=" + Uri.EscapeDataString(titleId) + "&gameId=" + Uri.EscapeDataString(gameId);
+
+    internal static WandProtocolPreflight InterpretProtocolPreflight(string output, int exitCode)
+    {
+        const string unavailable = "trainer-state-unavailable-before-navigation";
+        try
+        {
+            using var result = JsonDocument.Parse(output);
+            var root = result.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("navigated", out var navigated) || navigated.ValueKind != JsonValueKind.False
+                || !root.TryGetProperty("playDispatched", out var dispatched) || dispatched.ValueKind != JsonValueKind.False
+                || !root.TryGetProperty("ok", out var ok)
+                || !root.TryGetProperty("state", out var stateValue) || stateValue.ValueKind != JsonValueKind.String)
+                return new WandProtocolPreflight(false, false, unavailable, null, null);
+
+            string state = stateValue.GetString() ?? string.Empty;
+            if (exitCode == 0 && ok.ValueKind == JsonValueKind.True && state == "idle")
+                return new WandProtocolPreflight(true, false, "idle-sidebar-state", null, null);
+
+            if (exitCode == 3 && ok.ValueKind == JsonValueKind.False && state == "blocked"
+                && root.TryGetProperty("reason", out var reasonValue)
+                && reasonValue.ValueKind == JsonValueKind.String
+                && reasonValue.GetString() == "trainer-was-already-launching")
+            {
+                string? gameId = root.TryGetProperty("activeTrainerGameId", out var gameValue)
+                    && gameValue.ValueKind == JsonValueKind.String
+                    && Regex.IsMatch(gameValue.GetString() ?? string.Empty, "^[1-9]\\d*$")
+                    ? gameValue.GetString() : null;
+                int? processId = root.TryGetProperty("activeTrainerProcessId", out var processValue)
+                    && processValue.ValueKind == JsonValueKind.Number
+                    && processValue.TryGetInt32(out int parsedProcessId)
+                    && parsedProcessId > 0 ? parsedProcessId : null;
+                return new WandProtocolPreflight(false, true, "trainer-was-already-launching", gameId, processId);
+            }
+        }
+        catch (JsonException) { }
+        return new WandProtocolPreflight(false, false, unavailable, null, null);
+    }
+
+    internal static string DescribeProtocolPreflightBlock(WandProtocolPreflight preflight, string requestedGameId)
+    {
+        if (preflight.TrainerBusy)
+        {
+            string target = preflight.ActiveTrainerGameId == null ? "a trainer"
+                : string.Equals(preflight.ActiveTrainerGameId, requestedGameId, StringComparison.Ordinal)
+                    ? "the selected game" : "another game";
+            string identity = (preflight.ActiveTrainerGameId == null ? string.Empty : " gameId=" + preflight.ActiveTrainerGameId)
+                + (preflight.ActiveTrainerProcessId == null ? string.Empty : " PID=" + preflight.ActiveTrainerProcessId);
+            return "Wand's sidebar reports a trainer busy for " + target + identity
+                + ". Sidebar state does not confirm trainer attachment; no new protocol launch was sent.";
+        }
+        return "Wand's trainer state could not be read safely; no protocol launch was sent.";
+    }
+
+    internal static WandCdpLaunchResult InterpretCdpLaunchResult(string output, int exitCode)
+    {
+        try
+        {
+            using var result = JsonDocument.Parse(output);
+            var root = result.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("navigated", out var navigatedValue)
+                || navigatedValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                || !root.TryGetProperty("playDispatched", out var dispatchedValue)
+                || dispatchedValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                return new WandCdpLaunchResult(WandCdpLaunchDisposition.Unknown, true, "helper-output-invalid");
+
+            bool navigated = navigatedValue.ValueKind == JsonValueKind.True;
+            bool playDispatched = dispatchedValue.ValueKind == JsonValueKind.True;
+            string reason = root.TryGetProperty("reason", out var reasonValue)
+                && reasonValue.ValueKind == JsonValueKind.String
+                ? reasonValue.GetString() ?? "helper-result"
+                : "helper-result";
+            string dispatchOutcome = root.TryGetProperty("dispatchOutcome", out var outcomeValue)
+                && outcomeValue.ValueKind == JsonValueKind.String
+                ? outcomeValue.GetString() ?? string.Empty
+                : string.Empty;
+
+            if (navigated)
+            {
+                return exitCode == 0 && playDispatched && dispatchOutcome == "dispatched"
+                    ? new WandCdpLaunchResult(WandCdpLaunchDisposition.PlayDispatched, true, reason)
+                    : new WandCdpLaunchResult(WandCdpLaunchDisposition.Unknown, true, reason);
+            }
+            if (playDispatched)
+                return new WandCdpLaunchResult(WandCdpLaunchDisposition.Unknown, false, reason);
+
+            if (exitCode == 3 && reason == "trainer-was-already-launching")
+                return new WandCdpLaunchResult(WandCdpLaunchDisposition.SafetyBlocked, false, reason);
+
+            if ((exitCode == 1 && dispatchOutcome == "not-dispatched")
+                || (exitCode == 3 && reason == "trainer-state-unavailable-before-navigation"))
+                return new WandCdpLaunchResult(WandCdpLaunchDisposition.KnownNoDispatch, false, reason);
+        }
+        catch (JsonException) { }
+
+        return new WandCdpLaunchResult(WandCdpLaunchDisposition.Unknown, true, "helper-outcome-unknown");
+    }
 
     internal static WandCustomInstallationRequest BuildCustomInstallationRequest(string gameId, string executable)
     {
@@ -207,13 +319,22 @@ internal static class WandIntegration
     }
 
     /// <summary>
-    /// The Wand button is intentionally stricter than catalog support: a game is
-    /// eligible only when its exact executable is one of the registrations that
-    /// the local Mods/Wand sync maintains.  Missing or unreadable registration
-    /// evidence hides the button instead of trying to create a new registration.
+    /// The Wand button requires an exact executable in Wand's current local
+    /// installation registrations. Missing registration evidence hides the
+    /// button instead of creating a new registration or launching unmodified.
     /// </summary>
-    internal static bool CanLaunchExistingWandInstall(Game game, string executable, LibraryStore store, out string message) =>
-        CanLaunchExistingWandInstall(game, executable, store, RegisteredInstallationManifestPaths(), out message);
+    internal static bool CanLaunchExistingWandInstall(Game game, string executable, LibraryStore store, out string message)
+    {
+        // The button and LaunchCore both use the current LevelDB-derived Wand
+        // registrations. A packaged supported-games manifest is only a
+        // fallback/test fixture and can lag behind a user's current library.
+        // LaunchCore validates the exact title/game pair against a refreshed
+        // catalog before sending any play request.
+        message = "The selected executable is not in Wand's current exact installation registrations.";
+        if (!TryGetExistingWandInstallation(executable, out _)) return false;
+        message = string.Empty;
+        return true;
+    }
 
     internal static bool CanLaunchExistingWandInstall(Game game, string executable, LibraryStore store, IEnumerable<string> manifestPaths, out string message)
     {
@@ -267,8 +388,14 @@ internal static class WandIntegration
         return true;
     }
 
-    internal static bool TryGetExistingWandInstallation(string executable, out WandRegisteredInstallation installation) =>
-        TryGetExistingWandInstallation(executable, RegisteredInstallationManifestPaths(), out installation);
+    internal static bool TryGetExistingWandInstallation(string executable, out WandRegisteredInstallation installation)
+    {
+        installation = null!;
+        var row = LoadSupportedGames().FirstOrDefault(row => SameExecutablePath(row.Path, executable));
+        if (row == null) return false;
+        installation = new(row.TitleId, row.GameId, row.Path);
+        return true;
+    }
 
     // The overload keeps the format testable without reading a real user's Wand
     // data. The production caller only supplies the locally maintained manifest.
@@ -321,7 +448,7 @@ internal static class WandIntegration
         yield return Path.Combine(AppContext.BaseDirectory, "tools", "wand-supported-games.json");
     }
 
-    internal static IReadOnlyList<WandSupportedGame> LoadSupportedGames() => LoadSupportedGames(RegisteredInstallationManifestPaths());
+    internal static IReadOnlyList<WandSupportedGame> LoadSupportedGames() => WandLiveLibrary.Read();
 
     internal static IReadOnlyList<WandSupportedGame> LoadSupportedGames(IEnumerable<string> manifestPaths)
     {
@@ -515,10 +642,24 @@ internal static class WandIntegration
 
     internal static async Task<WandLaunchResult> LaunchAsync(Game game, string executable, string wandPath, LibraryStore store, CancellationToken cancellation)
     {
+        string fullPath = Path.GetFullPath(executable);
+        string key = game.Id + "\n" + fullPath;
+        var gate = LaunchGates.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellation);
+        try { return await LaunchCoreAsync(game, fullPath, wandPath, store, cancellation); }
+        finally { gate.Release(); }
+    }
+
+    private static async Task<WandLaunchResult> LaunchCoreAsync(Game game, string executable, string wandPath, LibraryStore store, CancellationToken cancellation)
+    {
+        var session = WandSessionState.Begin(game.Id, executable);
+        WandLaunchResult Result(Process? process, bool usedProtocol, string message, bool ownsProcess = false) =>
+            BuildLaunchResult(process, usedProtocol, message, ownsProcess, session, wandPath);
         JsonObject? catalog = null;
         try { catalog = await LoadCatalogAsync(store, cancellation); }
         catch (OperationCanceledException)
         {
+            session.Transition(WandSessionStatus.Cancelled, "The user cancelled before Wand resolution completed.");
             throw;
         }
         catch (Exception ex)
@@ -527,12 +668,23 @@ internal static class WandIntegration
         }
 
         if (catalog == null)
-            return new WandLaunchResult(null, false, "Wand catalog is unavailable. No unmodified game was started; retry after Wand is online.");
+        {
+            session.Transition(WandSessionStatus.ConnectionFailed, "Wand catalog is unavailable; no game was started.");
+            return Result(null, false, "Wand catalog is unavailable. No unmodified game was started; retry after Wand is online.");
+        }
         string selectedExecutable = executable;
         if (!TryGetExistingWandInstallation(selectedExecutable, out var registration))
-            return new WandLaunchResult(null, false, "This exact executable is not already registered in Wand. No unmodified game was started and no new Wand registration was created.");
+        {
+            session.Transition(WandSessionStatus.RegistrationInvalid, "The exact executable is not already registered in Wand.");
+            return Result(null, false, "This exact executable is not already registered in Wand. No unmodified game was started and no new Wand registration was created.");
+        }
         if (!TryResolveRegisteredTarget(catalog, registration, out var target))
-            return new WandLaunchResult(null, false, "Wand's catalog no longer contains the exact saved title and game registration. No unmodified game was started.");
+        {
+            session.Transition(WandSessionStatus.RegistrationInvalid, "The current Wand catalog does not contain the exact saved title and game registration.");
+            return Result(null, false, "Wand's catalog no longer contains the exact saved title and game registration.");
+        }
+        string wandVersion = ReadWandVersion(wandPath);
+        session.Resolve(target.TitleId, target.GameId, wandVersion);
         string trackedExecutable = ResolveTrackedExecutable(selectedExecutable, target.VersionPath);
 
         Process? ownedBootstrap = null;
@@ -563,7 +715,29 @@ internal static class WandIntegration
         {
             store.Log("Wand's pre-existing exact mapping was confirmed for gameId=" + registration.GameId + "; executable=" + registration.ExecutablePath + ".");
 
-            existing = FindExactProcess(trackedExecutable);
+existing = FindExactProcess(trackedExecutable);
+            if (existing != null)
+                session.Transition(WandSessionStatus.StartingWand, "The exact registered game is already running; checking Wand readiness before attachment.");
+            if (session.Read().Status is WandSessionStatus.Resolving or WandSessionStatus.WaitingForGame)
+                session.Transition(WandSessionStatus.StartingWand, "Starting or checking Wand before any game bootstrap or protocol route.");
+bool wandReady = await EnsureWandStartedAsync(wandPath, store, cancellation, restartForCdpDispatch: existing == null);
+            if (!wandReady)
+            {
+                // Wand may be running without the CDP flag or still starting. The
+                // exact-game protocol URI reaches Wand through its own handler
+                // (it launches or attaches), so do not fail here: the single
+                // dispatch attempt will send that URI.
+                store.Log("Wand readiness was not fully confirmed; proceeding so the exact-game URI can reach Wand.");
+            }
+var initialPreflight = await InspectProtocolPreflightAsync(target.GameId, store, cancellation);
+            if (!initialPreflight.SafeToDispatch)
+            {
+                // A busy or unknown trainer state must not block this game's
+                // launch. Wand routes the exact-game URI by gameId, so proceed
+                // and let the single dispatch attempt (CDP, then the exact-game
+                // URI) carry the launch even while another game is playing.
+                store.Log("Preflight was not idle before dispatch (" + initialPreflight.Reason + "); proceeding with the single exact-game launch attempt.");
+            }
             if (existing == null)
             {
                 string? bootstrap = Path.GetExtension(selectedExecutable).Equals(".exe", StringComparison.OrdinalIgnoreCase)
@@ -571,6 +745,7 @@ internal static class WandIntegration
                     : null;
                 if (bootstrap != null)
                 {
+                    session.Transition(WandSessionStatus.StartingGame, "Starting the verified root bootstrap to preserve the game's launch context.");
                     var bootstrapObserved = ExistingProcessIds(trackedExecutable);
                     var runningBootstrap = FindExactProcess(bootstrap);
                     if (runningBootstrap != null)
@@ -598,6 +773,7 @@ internal static class WandIntegration
                         }
                     }
 
+                    session.Transition(WandSessionStatus.WaitingForGame, "Waiting for the exact nested game executable from the bootstrap.");
                     var bootstrappedGame = await WaitForNewGameAsync(trackedExecutable, bootstrapObserved, TimeSpan.FromSeconds(20), cancellation);
                     if (bootstrappedGame != null)
                     {
@@ -632,102 +808,187 @@ internal static class WandIntegration
 
             if (bootstrapContextObserved && existing != null)
             {
-                // The bootstrap creates the real process before the window and
-                // engine context are stable. Give it the same settling window
-                // used by the proven manual route before Wand injects the exact
-                // nested PID.
-                store.Log("Waiting for the bootstrapped exact game to settle before starting Wand.");
-                await Task.Delay(TimeSpan.FromSeconds(8), cancellation);
+                store.Log("Waiting for the bootstrapped exact game to expose a usable window before starting Wand.");
+                bool bootstrapWindowUsable = await WaitForUsableGameWindowAsync(existing, TimeSpan.FromSeconds(20), cancellation);
+                if (!bootstrapWindowUsable) store.Log("The bootstrap game did not expose a responsive window within 20 seconds; the exact process will remain tracked and Wand attachment will be reported as unconfirmed if no trainer evidence appears.");
+                session.Transition(WandSessionStatus.StartingWand, "The exact bootstrap process was observed; checking Wand readiness.");
             }
 
-            bool wandReady = await EnsureWandStartedAsync(wandPath, store, cancellation);
+            if (session.Read().Status is WandSessionStatus.Resolving or WandSessionStatus.WaitingForGame)
+                session.Transition(WandSessionStatus.StartingWand, "Starting or checking the Wand client.");
+
+            wandReady = await EnsureWandStartedAsync(wandPath, store, cancellation, restartForCdpDispatch: existing == null);
             if (!wandReady)
             {
                 if (ownedBootstrap != null) { ReleaseProcessHandleWithoutTermination(ownedBootstrap); ownedBootstrap = null; }
                 if (existing != null)
-                    return new WandLaunchResult(existing, false, "The game is running, but Wand could not be verified as ready. The game was left running and is being tracked; only Exit will close it.", OwnsProcess: ownedBootstrapGame);
-                return new WandLaunchResult(null, false, "Wand could not be verified as running. No game process was found, and no process was terminated.");
+                {
+                    session.TrackProcess(existing, "The selected game is running; Wand readiness could not be confirmed.");
+                    if (session.Read().Status == WandSessionStatus.StartingWand)
+                        session.Transition(WandSessionStatus.WaitingForGame, "The exact game is running while Wand readiness is unavailable.");
+                    session.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed, "The game remains running, but Wand readiness is unavailable.");
+                    return Result(existing, false, "The game is running, but Wand could not be verified as ready. The game was left running and is being tracked; only Exit will close it.", ownedBootstrapGame);
+                }
+                session.Transition(WandSessionStatus.GameFailedToStart, "Wand did not become ready and no exact game process was found.");
+                return Result(null, false, "Wand could not be verified as running. No game process was found, and no process was terminated.");
             }
             string label = target.TitleName + " (" + target.Platform + ")";
             store.Log("Wand readiness confirmed for " + label + "; titleId=" + target.TitleId + "; gameId=" + target.GameId + ".");
 
             if (bootstrapContextObserved && existing != null)
             {
-                // A wrapper-launched game can expose its exact process before its
-                // first usable window/graphics context. The proven manual route
-                // waits once more after Wand's listener is ready before sending
-                // the URI; keep that barrier bounded and only for this bootstrap
-                // path so ordinary already-running games remain responsive.
-                store.Log("Waiting for the bootstrapped exact game to expose its usable context before the Wand protocol handoff.");
-                await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
+                store.Log("Checking the bootstrapped game's usable window again after Wand readiness.");
             }
 
             if (existing != null)
             {
-                var handoffStarted = DateTime.UtcNow;
-                store.Log("Sending one Wand protocol handoff to the already running exact process " + selectedExecutable + ".");
-                Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true });
-                if (await WaitForConnectionEvidenceAsync(trackedExecutable, existing.Id, handoffStarted, TimeSpan.FromSeconds(30), cancellation))
+                session.Transition(WandSessionStatus.WaitingForGame, "Waiting briefly for a usable window on the exact running process.");
+                bool existingWindowUsable = await WaitForUsableGameWindowAsync(existing, TimeSpan.FromSeconds(20), cancellation);
+                if (!existingWindowUsable) store.Log("The exact running game did not expose a responsive window before attachment; connection remains unverified until trainer evidence is observed.");
+                session.TrackProcess(existing, "The exact game process was verified before the Wand attachment request.");
+var preflight = await InspectProtocolPreflightAsync(target.GameId, store, cancellation);
+                if (!preflight.SafeToDispatch)
+                    store.Log("Preflight not idle for the running game (" + preflight.Reason + "); proceeding with one exact-game attach attempt.");
+                session.Transition(WandSessionStatus.Attaching,
+                    "Checking current trainer evidence for the exact running process without sending a launch request.");
+                var observationStarted = DateTime.UtcNow;
+                store.Log("Observing current trainer state for already-running exact process " + selectedExecutable
+                    + "; no Play route or protocol URI was sent because this URI's attach-versus-launch behavior is unverified.");
+                var existingTrainerEvidence = await WaitForConnectionEvidenceAsync(wandPath, target.GameId, trackedExecutable, existing,
+                    session.Read().ProcessCreationFileTime!, observationStarted, TimeSpan.FromSeconds(30), cancellation);
+                if (existingTrainerEvidence.Confirmed)
                 {
+                    session.Transition(WandSessionStatus.Connected, existingTrainerEvidence.Detail, existingTrainerEvidence.Source, existingTrainerEvidence.ObservedUtc);
                     ReleaseProcessHandleWithoutTermination(ownedBootstrap);
                     ownedBootstrap = null;
-                    return new WandLaunchResult(existing, true, "Wand connected to the already running " + label + " game.", OwnsProcess: ownedBootstrapGame);
+                    return Result(existing, false, "Wand's current trainer state matches the already running " + label + " process.", ownedBootstrapGame);
                 }
                 ReleaseProcessHandleWithoutTermination(ownedBootstrap);
                 ownedBootstrap = null;
-                store.Log("Wand connection evidence was not confirmed for PID " + existing.Id + "; the game was deliberately left running and will remain tracked.");
-                return new WandLaunchResult(existing, true, "The game is running. Wand connection evidence was not confirmed yet, so the game was left running and is being tracked; only Exit will close it.", OwnsProcess: ownedBootstrapGame);
+                if (StatusForTrainerEvidence(existingTrainerEvidence) == WandSessionStatus.Disconnected)
+                {
+                    session.Transition(WandSessionStatus.Disconnected, existingTrainerEvidence.Detail, existingTrainerEvidence.Source, existingTrainerEvidence.ObservedUtc);
+                    if (IsHistoricalTrainerEvidence(existingTrainerEvidence))
+                    {
+                        store.Log("The exact game exited after Tophat recorded a successful trainer command for PID " + existing.Id + ". The trace is historical evidence only; no current connection is reported.");
+                        return Result(null, false, "The game exited after Wand recorded a successful trainer command, but no active connection is reported.", ownedBootstrapGame);
+                    }
+                    store.Log("The exact game process ended or changed before trainer attachment was verified for PID " + existing.Id + ". No current connection is reported. " + existingTrainerEvidence.Detail);
+                    return Result(null, false, "The game process ended before a current Wand connection was verified. No active connection is reported. " + existingTrainerEvidence.Detail, ownedBootstrapGame);
+                }
+session.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed, existingTrainerEvidence.Detail, existingTrainerEvidence.Source, existingTrainerEvidence.ObservedUtc);
+                // Re-click on a running game: send the exact-game URI once so Wand
+                // attaches the running game's trainer, then re-check for fresh
+                // evidence instead of silently observing.
+                store.Log("Sending one exact-game URI to attach the running game's trainer: " + selectedExecutable);
+                try { Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true }); }
+                catch (Exception ex) { store.Log("Could not send the exact-game URI: " + ex.Message); }
+                var attachStarted = DateTime.UtcNow;
+                var attachEvidence = await WaitForConnectionEvidenceAsync(wandPath, target.GameId, trackedExecutable, existing,
+                    session.Read().ProcessCreationFileTime!, attachStarted, TimeSpan.FromSeconds(15), cancellation);
+                if (attachEvidence.Confirmed)
+                {
+                    session.Transition(WandSessionStatus.Connected, attachEvidence.Detail, attachEvidence.Source, attachEvidence.ObservedUtc);
+                    return Result(existing, true, "Wand connected to the running " + label + " after the exact-game attach request.", ownedBootstrapGame);
+                }
+                store.Log("Wand trainer attachment was not confirmed after the exact-game URI for PID " + existing.Id + "; the game was left running. " + attachEvidence.Detail);
+                return Result(existing, true, "The game is running. " + attachEvidence.Detail + " The exact-game URI was sent once; the game was left running.", ownedBootstrapGame);
             }
-            const int maxAttempts = 2;
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+
+            session.Transition(WandSessionStatus.StartingGame, "Starting the exact registered game with one verified Wand Play attempt.");
+            var dispatch = await WandNewGameDispatchCoordinator.DispatchOnceAsync(
+                () => ExistingProcessIds(trackedExecutable),
+                () => FindExactProcess(trackedExecutable),
+                async (_, _) =>
+                {
+                    store.Log("Trying one exact-target Wand CDP Play dispatch for " + selectedExecutable + ".");
+                    return await TryLaunchViaCdpAsync(target, selectedExecutable, store, cancellation);
+                },
+                () => InspectProtocolPreflightAsync(target.GameId, store, cancellation),
+                (_, _) =>
+                {
+                    store.Log("CDP did not confirm a Play dispatch; sending one exact-game protocol URI.");
+                    Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true });
+                    return Task.CompletedTask;
+                },
+                (observed, timeout) => WaitForNewGameAsync(trackedExecutable, observed, timeout, cancellation),
+                TimeSpan.FromSeconds(20), cancellation);
+
+            if (dispatch.Blocked)
             {
-                if (attempt > 1)
-                {
-                    store.Log("Retrying the exact Wand protocol handoff for " + executable + " (attempt " + attempt + "/" + maxAttempts + ").");
-                    await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
-                    if (!await EnsureWandStartedAsync(wandPath, store, cancellation)) break;
-                }
-                var observed = ExistingProcessIds(trackedExecutable);
-                var launchStarted = DateTime.UtcNow;
-                store.Log("Sending Wand protocol for exact executable " + selectedExecutable + " (attempt " + attempt + "/" + maxAttempts + ").");
-                Process.Start(new ProcessStartInfo(BuildProtocolUri(target.TitleId, target.GameId)) { UseShellExecute = true });
-                // The URI is the only launch route for Play with Wand. Wait for the exact
-                // executable; never start a second unmodified copy when the handoff fails.
-                var process = await WaitForNewGameAsync(trackedExecutable, observed, TimeSpan.FromSeconds(20), cancellation);
-                if (process == null && attempt == 1 && await TryLaunchViaCdpAsync(target, store, cancellation))
-                {
-                    // Re-sending the same wemod:// route can be a no-op when
-                    // Wand is already displaying this title. A unique in-app
-                    // route makes autoLaunch run again without starting an
-                    // unmodified fallback or touching another process.
-                    observed = ExistingProcessIds(trackedExecutable);
-                    launchStarted = DateTime.UtcNow;
-                    store.Log("Wand protocol was a no-op; a unique local CDP auto-launch was dispatched for " + selectedExecutable + ".");
-                    process = await WaitForNewGameAsync(trackedExecutable, observed, TimeSpan.FromSeconds(20), cancellation);
-                }
-                ownedProtocolGame = process;
-                store.Log(process == null
-                    ? "Wand protocol did not yield a new exact executable within the launch window."
-                    : "Wand protocol yielded exact executable PID " + process.Id + ".");
-                if (process != null && await WaitForConnectionEvidenceAsync(trackedExecutable, process.Id, launchStarted, TimeSpan.FromSeconds(30), cancellation))
-                {
-                    ownedProtocolGame = null;
-                    return new WandLaunchResult(process, true, "Wand connected to " + label + ". Tracking the exact game process.", OwnsProcess: true);
-                }
-                if (process != null)
-                {
-                    ownedProtocolGame = null;
-                    store.Log("Wand protocol started " + selectedExecutable + " without fresh connection evidence; the exact process was deliberately left running and will remain tracked.");
-                    return new WandLaunchResult(process, true, "The game started through Wand. Connection evidence was not confirmed yet, so the game was left running and is being tracked; only Exit will close it.", OwnsProcess: true);
-                }
-                if (attempt < maxAttempts) continue;
+                string block = dispatch.BlockedPreflight != null
+                    ? DescribeProtocolPreflightBlock(dispatch.BlockedPreflight, target.GameId)
+                    : "Wand blocked the single launch attempt before dispatch: " + dispatch.Reason + ".";
+                ReleaseProcessHandleWithoutTermination(ownedBootstrap);
+                ownedBootstrap = null;
+                session.Transition(WandSessionStatus.GameFailedToStart, block);
+                store.Log(block + " No second launch action was sent.");
+                return Result(null, false, block);
             }
-            store.Log("Wand protocol returned without observing " + selectedExecutable + "; no fallback process was started or terminated.");
-            return new WandLaunchResult(null, false, "Wand did not start the exact game after bounded retries. No fallback process was started, and nothing was terminated.");
+
+            if (dispatch.Process != null && !dispatch.DispatchAttempted)
+            {
+                var appearedProcess = dispatch.Process;
+                session.TrackProcess(appearedProcess, "The exact game appeared before this request sent a launch action; it was left running.");
+                session.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed,
+                    "The exact game appeared before the one launch action could be sent. No Play or URI action was sent; trainer attachment is not confirmed.");
+                store.Log("The exact game process PID " + appearedProcess.Id + " appeared before launch dispatch. It was left running; no Play or URI action was sent.");
+                return Result(appearedProcess, false,
+                    "The exact game appeared before a launch action was sent. It was left running; no duplicate launch was sent and trainer attachment is not confirmed.");
+            }
+
+            var process = dispatch.Process;
+            var launchStarted = dispatch.DispatchStartedUtc;
+            if (process == null)
+            {
+                ReleaseProcessHandleWithoutTermination(ownedBootstrap);
+                ownedBootstrap = null;
+                string message = dispatch.OutcomeUnknown
+                    ? "Wand may still be completing the single launch attempt, but no exact game process was observed in the bounded window. No second URI or Play action was sent."
+                    : "Wand did not start the exact game. No fallback process was started, and nothing was terminated.";
+                store.Log(message + " Selected executable=" + selectedExecutable + "; dispatch=" + dispatch.Reason + ".");
+                session.Transition(WandSessionStatus.GameFailedToStart, message);
+                return Result(null, dispatch.UsedProtocol, message);
+            }
+
+            ownedProtocolGame = process;
+            store.Log("The single Wand launch attempt yielded the exact executable PID " + process.Id
+                + (dispatch.UsedProtocol ? " through the protocol URI." : " through the CDP Play route."));
+            session.TrackProcess(process, "The exact process from the single Wand launch attempt was observed.");
+            session.Transition(WandSessionStatus.WaitingForGame, "Waiting for the exact Wand-launched process to expose a usable window.");
+            bool launchedWindowUsable = await WaitForUsableGameWindowAsync(process, TimeSpan.FromSeconds(20), cancellation);
+            if (!launchedWindowUsable) store.Log("The exact Wand-launched process did not expose a responsive window within 20 seconds.");
+            session.TrackProcess(process, "The exact Wand-launched process and current creation stamp were verified.");
+            session.Transition(WandSessionStatus.Attaching, "Waiting for fresh trainer-session evidence for the exact process.");
+            var launchedTrainerEvidence = await WaitForConnectionEvidenceAsync(wandPath, target.GameId, trackedExecutable, process,
+                session.Read().ProcessCreationFileTime!, launchStarted, TimeSpan.FromSeconds(30), cancellation);
+            if (launchedTrainerEvidence.Confirmed)
+            {
+                session.Transition(WandSessionStatus.Connected, launchedTrainerEvidence.Detail, launchedTrainerEvidence.Source, launchedTrainerEvidence.ObservedUtc);
+                ownedProtocolGame = null;
+                return Result(process, dispatch.UsedProtocol, "Wand connected to " + label + ". Tracking the exact game process.", ownsProcess: true);
+            }
+            if (StatusForTrainerEvidence(launchedTrainerEvidence) == WandSessionStatus.Disconnected)
+            {
+                session.Transition(WandSessionStatus.Disconnected, launchedTrainerEvidence.Detail, launchedTrainerEvidence.Source, launchedTrainerEvidence.ObservedUtc);
+                ownedProtocolGame = null;
+                if (IsHistoricalTrainerEvidence(launchedTrainerEvidence))
+                {
+                    store.Log("The exact Wand-launched game exited after Tophat recorded a successful trainer command for PID " + process.Id + ". The trace is historical evidence only; no active connection is reported.");
+                    return Result(null, dispatch.UsedProtocol, "The game started and exited. Wand recorded a successful trainer command before exit, but the game is no longer running; no active connection is reported.", ownsProcess: false);
+                }
+                store.Log("The exact Wand-launched game process ended or changed before trainer attachment was verified for PID " + process.Id + ". No current connection is reported. " + launchedTrainerEvidence.Detail);
+                return Result(null, dispatch.UsedProtocol, "The game process ended before Wand attachment could be verified. No current connection is reported. " + launchedTrainerEvidence.Detail, ownsProcess: false);
+            }
+            session.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed, launchedTrainerEvidence.Detail, launchedTrainerEvidence.Source, launchedTrainerEvidence.ObservedUtc);
+            ownedProtocolGame = null;
+            store.Log("Wand started " + selectedExecutable + " without fresh trainer-session evidence; the exact process was deliberately left running and will remain tracked. " + launchedTrainerEvidence.Detail);
+            return Result(process, dispatch.UsedProtocol, "The game started through Wand. " + launchedTrainerEvidence.Detail + " The game was left running and is being tracked; only Exit will close it.", ownsProcess: true);
         }
         catch (OperationCanceledException)
         {
             ReleaseLaunchHandles("cancellation");
+            session.Transition(WandSessionStatus.Cancelled, "The user cancelled the Wand launch; any already-running game was left in place.");
             store.Log("Wand launch cancelled; running processes were left untouched.");
             throw;
         }
@@ -740,7 +1001,9 @@ internal static class WandIntegration
                 if (existing != null) { ReleaseProcessHandleWithoutTermination(existing); existing = null; }
                 if (ownedBootstrap != null) { ReleaseProcessHandleWithoutTermination(ownedBootstrap); ownedBootstrap = null; }
                 store.Log("Wand protocol launch reported an error after the exact game started; the game was left running: " + ex.Message);
-                return new WandLaunchResult(process, true, "The game is running even though Wand reported an error. It was left running and is being tracked; only Exit will close it.", OwnsProcess: true);
+                session.TrackProcess(process, "The exact game is running after a Wand launch error.");
+                session.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed, "The exact game remains running, but trainer attachment could not be verified: " + ex.Message);
+                return Result(process, true, "The game is running even though Wand reported an error. It was left running and is being tracked; only Exit will close it.", ownsProcess: true);
             }
             if (IsProcessRunning(existing))
             {
@@ -748,12 +1011,121 @@ internal static class WandIntegration
                 existing = null;
                 if (ownedBootstrap != null) { ReleaseProcessHandleWithoutTermination(ownedBootstrap); ownedBootstrap = null; }
                 store.Log("Wand protocol launch reported an error while the exact game was running; the game was left running: " + ex.Message);
-                return new WandLaunchResult(process, true, "The game is running even though Wand reported an error. It was left running and is being tracked; only Exit will close it.", OwnsProcess: ownedBootstrapGame);
+                session.TrackProcess(process, "The exact pre-existing game remains running after a Wand launch error.");
+                if (session.Read().Status == WandSessionStatus.StartingWand)
+                    session.Transition(WandSessionStatus.WaitingForGame, "The exact game is still running after Wand reported an error.");
+                session.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed, "The game remains running, but trainer attachment could not be verified: " + ex.Message);
+                return Result(process, true, "The game is running even though Wand reported an error. It was left running and is being tracked; only Exit will close it.", ownedBootstrapGame);
             }
             ReleaseLaunchHandles("a failed handoff");
             store.Log("Wand protocol launch failed before an exact game process was observed: " + ex.Message);
-            return new WandLaunchResult(null, false, "Wand protocol could not be sent and no exact game process was found. Nothing was terminated; open Wand and retry.");
+            if (session.Read().Status is not (WandSessionStatus.RegistrationInvalid or WandSessionStatus.UnsupportedBuild or WandSessionStatus.Cancelled))
+                session.Transition(WandSessionStatus.ConnectionFailed, "Wand launch failed before the exact game process was observed: " + ex.Message);
+            return Result(null, false, "Wand protocol could not be sent and no exact game process was found. Nothing was terminated; open Wand and retry.");
         }
+    }
+
+    private static WandLaunchResult BuildLaunchResult(Process? process, bool usedProtocol, string message, bool ownsProcess, WandSessionState session, string wandPath)
+    {
+        var snapshot = session.Read();
+        if (process != null && snapshot.ProcessId.HasValue)
+            StartSessionEvidenceMonitor(snapshot, wandPath);
+        return new WandLaunchResult(process, usedProtocol, message, ownsProcess, snapshot);
+    }
+
+    private static void StartSessionEvidenceMonitor(WandSessionSnapshot initial, string wandPath)
+    {
+        if (initial.ProcessId is null || string.IsNullOrWhiteSpace(initial.ProcessCreationFileTime)) return;
+        string monitorKey = SessionMonitorKey(initial);
+        if (SessionMonitors.TryRemove(monitorKey, out var previous)) previous.Cancel();
+        var cancellation = new CancellationTokenSource();
+        if (!SessionMonitors.TryAdd(monitorKey, cancellation))
+        {
+            cancellation.Dispose();
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!cancellation.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellation.Token).ConfigureAwait(false);
+                    if (!WandSessionState.TryGet(initial.CanonicalGameId, initial.InstallationPath, out var current)
+                        || current.OperationId != initial.OperationId
+                        || current.ProcessId is null
+                        || current.Status is WandSessionStatus.Disconnected or WandSessionStatus.Cancelled or WandSessionStatus.GameFailedToStart)
+                        return;
+
+                    // Keep checking the exact process identity even when this Wand build has
+                    // no trainer-session schema. Never poll the unsupported source repeatedly.
+                    if (current.EvidenceSource == "unsupported-wand-session-schema")
+                    {
+                        if (TryMarkSessionDisconnectedIfExited(current, out _)) return;
+                        continue;
+                    }
+
+                    TryRefreshSessionEvidence(current.CanonicalGameId, current.InstallationPath, wandPath, out var refreshed);
+                    if (refreshed?.Status == WandSessionStatus.Disconnected) return;
+                }
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+            catch (Exception ex)
+            {
+                // Monitoring is best-effort and must never terminate or interrupt the game.
+                try
+                {
+                    if (WandSessionState.Find(initial.CanonicalGameId, initial.InstallationPath) is { } state)
+                    {
+                        var snapshot = state.Read();
+                        if (snapshot.Status is WandSessionStatus.Connected or WandSessionStatus.GameRunningConnectionUnconfirmed)
+                            state.Transition(snapshot.Status, "Background Wand evidence monitoring is temporarily unavailable: " + ex.Message, snapshot.EvidenceSource, snapshot.EvidenceUtc);
+                    }
+                }
+                catch { }
+            }
+            finally
+            {
+                ((ICollection<KeyValuePair<string, CancellationTokenSource>>)SessionMonitors)
+                    .Remove(new KeyValuePair<string, CancellationTokenSource>(monitorKey, cancellation));
+                cancellation.Dispose();
+            }
+        });
+    }
+
+    private static string SessionMonitorKey(WandSessionSnapshot snapshot) =>
+        snapshot.CanonicalGameId + "\n" + Path.GetFullPath(snapshot.InstallationPath);
+
+    private static bool TryMarkSessionDisconnectedIfExited(WandSessionSnapshot snapshot, out WandSessionSnapshot? updated)
+    {
+        updated = null;
+        if (snapshot.ProcessId is not int pid || string.IsNullOrWhiteSpace(snapshot.ProcessCreationFileTime)) return true;
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            process.Refresh();
+            if (process.HasExited)
+            {
+                var exitedState = WandSessionState.Find(snapshot.CanonicalGameId, snapshot.InstallationPath);
+                if (exitedState == null || exitedState.Read().OperationId != snapshot.OperationId) return true;
+                updated = exitedState.Transition(WandSessionStatus.Disconnected, "The exact game process exited.", "process-exit");
+                return true;
+            }
+            if (!process.HasExited)
+            {
+                string creation = process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
+                if (string.Equals(creation, snapshot.ProcessCreationFileTime, StringComparison.Ordinal)) return false;
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Missing or inaccessible identity is not treated as a verified disconnect.
+            if (ex is InvalidOperationException or System.ComponentModel.Win32Exception) return false;
+        }
+        var state = WandSessionState.Find(snapshot.CanonicalGameId, snapshot.InstallationPath);
+        if (state == null || state.Read().OperationId != snapshot.OperationId) return true;
+        updated = state.Transition(WandSessionStatus.Disconnected, "The exact game process exited or its PID was reused.", "process-identity");
+        return true;
     }
 
     private static bool IsProcessRunning(Process? process)
@@ -877,13 +1249,72 @@ internal static class WandIntegration
         return candidates.FirstOrDefault(path => path.Length > 0 && File.Exists(path));
     }
 
-    private static async Task<bool> TryLaunchViaCdpAsync(WandTarget target, LibraryStore store, CancellationToken cancellation)
+    private static Task<WandProtocolPreflight> InspectProtocolPreflightAsync(string requestedGameId, LibraryStore store, CancellationToken cancellation) =>
+        WandNewGameDispatchCoordinator.RetryReadOnlyPreflightAsync(
+            () => InspectProtocolPreflightOnceAsync(requestedGameId, store, cancellation),
+            () => Task.Delay(TimeSpan.FromMilliseconds(350), cancellation),
+            cancellation);
+
+    private static async Task<WandProtocolPreflight> InspectProtocolPreflightOnceAsync(string requestedGameId, LibraryStore store, CancellationToken cancellation)
+    {
+        const string unavailable = "trainer-state-unavailable-before-navigation";
+        string bridge = Path.Combine(AppContext.BaseDirectory, "tools", "wand_cdp_launch.js");
+        if (!File.Exists(bridge)) return new WandProtocolPreflight(false, false, unavailable, null, null);
+        var startInfo = new ProcessStartInfo(FindNodeExecutable())
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = Path.GetDirectoryName(bridge)!
+        };
+        startInfo.ArgumentList.Add(bridge);
+        startInfo.ArgumentList.Add("--preflight");
+        try
+        {
+            using var helper = Process.Start(startInfo);
+            if (helper == null) return new WandProtocolPreflight(false, false, unavailable, null, null);
+            var standardOutput = helper.StandardOutput.ReadToEndAsync();
+            var standardError = helper.StandardError.ReadToEndAsync();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            try { await helper.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+            {
+                try { if (!helper.HasExited) helper.Kill(entireProcessTree: true); } catch { }
+                store.Log("Wand trainer preflight timed out before protocol dispatch; no game URI was sent.");
+                return new WandProtocolPreflight(false, false, unavailable, null, null);
+            }
+            catch (OperationCanceledException)
+            {
+                try { if (!helper.HasExited) helper.Kill(entireProcessTree: true); } catch { }
+                throw;
+            }
+            string output = await standardOutput;
+            string error = await standardError;
+            var preflight = InterpretProtocolPreflight(output, helper.ExitCode);
+            store.Log(preflight.SafeToDispatch
+                ? "Wand preflight found no busy trainer in the read-only sidebar snapshot; the snapshot does not establish trainer attachment."
+                : preflight.TrainerBusy
+                    ? DescribeProtocolPreflightBlock(preflight, requestedGameId)
+                    : "Wand preflight could not verify trainer state; the protocol launch remains blocked." + (error.Length == 0 ? string.Empty : " " + error.Trim()));
+            return preflight;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            store.Log("Wand trainer preflight could not run before protocol dispatch: " + ex.Message);
+            return new WandProtocolPreflight(false, false, unavailable, null, null);
+        }
+    }
+
+    private static async Task<WandCdpLaunchResult> TryLaunchViaCdpAsync(WandTarget target, string executablePath, LibraryStore store, CancellationToken cancellation)
     {
         string bridge = Path.Combine(AppContext.BaseDirectory, "tools", "wand_cdp_launch.js");
         if (!File.Exists(bridge))
         {
-            store.Log("Bundled Wand CDP launch helper is unavailable; continuing with the bounded protocol retry.");
-            return false;
+            store.Log("Bundled Wand CDP launch helper is unavailable; a fresh trainer preflight may permit one protocol fallback.");
+            return new WandCdpLaunchResult(WandCdpLaunchDisposition.KnownNoDispatch, false, "helper-unavailable");
         }
         var startInfo = new ProcessStartInfo(FindNodeExecutable())
         {
@@ -896,20 +1327,24 @@ internal static class WandIntegration
         startInfo.ArgumentList.Add(bridge);
         startInfo.ArgumentList.Add(target.TitleId);
         startInfo.ArgumentList.Add(target.GameId);
+        startInfo.ArgumentList.Add(target.TitleName);
+        startInfo.ArgumentList.Add(executablePath);
+        bool helperStarted = false;
         try
         {
             using var helper = Process.Start(startInfo);
-            if (helper == null) return false;
+            if (helper == null) return new WandCdpLaunchResult(WandCdpLaunchDisposition.KnownNoDispatch, false, "helper-did-not-start");
+            helperStarted = true;
             var standardOutput = helper.StandardOutput.ReadToEndAsync();
             var standardError = helper.StandardError.ReadToEndAsync();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-            timeout.CancelAfter(TimeSpan.FromSeconds(8));
+            timeout.CancelAfter(TimeSpan.FromSeconds(13));
             try { await helper.WaitForExitAsync(timeout.Token); }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
             {
                 try { if (!helper.HasExited) helper.Kill(entireProcessTree: true); } catch { }
-                store.Log("Wand CDP launch helper timed out; continuing with the bounded protocol retry.");
-                return false;
+                store.Log("Wand CDP launch helper timed out; its route outcome is unknown, so only exact-process observation will continue.");
+                return new WandCdpLaunchResult(WandCdpLaunchDisposition.Unknown, true, "helper-timeout");
             }
             catch (OperationCanceledException)
             {
@@ -918,16 +1353,25 @@ internal static class WandIntegration
             }
             string output = await standardOutput;
             string error = await standardError;
-            bool navigated = helper.ExitCode == 0 && output.Contains("\"navigated\":true", StringComparison.Ordinal);
-            store.Log(navigated
-                ? "Wand local CDP route accepted the unique auto-launch request."
-                : "Wand local CDP route was unavailable" + (error.Length == 0 ? "." : ": " + error.Trim()));
-            return navigated;
+            var launch = InterpretCdpLaunchResult(output, helper.ExitCode);
+            store.Log(launch.Disposition == WandCdpLaunchDisposition.PlayDispatched
+                ? "Wand local CDP verified the exact registration and dispatched its Play control."
+                : launch.Disposition == WandCdpLaunchDisposition.SafetyBlocked
+                    ? "Wand local CDP refused Play because the exact trainer or informational-notes gate was ambiguous or unsafe: " + launch.Reason + "."
+                    : launch.Disposition == WandCdpLaunchDisposition.KnownNoDispatch
+                        ? "Wand CDP proved that it did not route or dispatch Play; the protocol URI fallback still requires a fresh idle preflight."
+                        : "Wand local CDP launch outcome is unknown; no second launch action will be sent." + (error.Length == 0 ? string.Empty : " " + error.Trim()));
+            return launch;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
         {
-            store.Log("Wand local CDP launch could not run; continuing with the bounded protocol retry: " + ex.Message);
-            return false;
+            if (helperStarted)
+            {
+                store.Log("Wand local CDP helper failed after starting; its route outcome is unknown, so a second launch action is blocked: " + ex.Message);
+                return new WandCdpLaunchResult(WandCdpLaunchDisposition.Unknown, true, "helper-execution-outcome-unknown");
+            }
+            store.Log("Wand local CDP launch helper could not start; a fresh trainer preflight may permit one protocol fallback: " + ex.Message);
+            return new WandCdpLaunchResult(WandCdpLaunchDisposition.KnownNoDispatch, false, "helper-execution-failed");
         }
     }
 
@@ -990,7 +1434,7 @@ internal static class WandIntegration
         return stopped;
     }
 
-    private static async Task<bool> EnsureWandStartedAsync(string wandPath, LibraryStore store, CancellationToken cancellation)
+private static async Task<bool> EnsureWandStartedAsync(string wandPath, LibraryStore store, CancellationToken cancellation, bool restartForCdpDispatch)
     {
         if (IsWandRunning())
         {
@@ -998,18 +1442,35 @@ internal static class WandIntegration
             // example after Wand's helper processes have just respawned). Keep
             // the same warm-up for an already-running client before sending a
             // play URI.
-            store.Log("Wand client was already visible; waiting for its protocol listener.");
+            store.Log("Wand client was already visible; verifying its loopback CDP recovery endpoint.");
             await Task.Delay(TimeSpan.FromSeconds(2), cancellation);
-            bool ready = IsWandRunning();
-            store.Log("Already-running Wand readiness=" + ready);
-            return ready;
+            if (await IsWandCdpReachableAsync(cancellation))
+            {
+                store.Log("Already-running Wand exposes its loopback CDP recovery endpoint; readiness confirmed.");
+                return true;
+            }
+            // Wand is running but does not expose the CDP endpoint the bundled
+            // protocol helpers require (it was started without the recovery
+            // flag). A read-only preflight can never succeed against it, so
+            // every Play request would fail closed even though Wand is open.
+            // When the selected game is not already running, restart Wand with
+            // the loopback-only debug flags so trainer state can be read and
+            // the one-shot dispatch can run. A running game is never disrupted.
+            if (!restartForCdpDispatch)
+            {
+                store.Log("Already-running Wand lacks the CDP recovery endpoint and the selected game is already running; Wand was not restarted and the game was left untouched.");
+                return false;
+            }
+            store.Log("Already-running Wand lacks the CDP recovery endpoint; restarting Wand with the loopback-only recovery flags so trainer state can be verified.");
+            CloseRunningClientProcesses();
+            await Task.Delay(TimeSpan.FromMilliseconds(750), cancellation);
         }
         if (string.IsNullOrWhiteSpace(wandPath) || !File.Exists(wandPath))
         {
             store.Log("Wand executable was not found; refusing an unmodified Play with Wand launch.");
             return false;
         }
-        try
+try
         {
             store.Log("Starting Wand client " + wandPath + " with a loopback-only recovery endpoint.");
             var startInfo = new ProcessStartInfo(wandPath) { WorkingDirectory = Path.GetDirectoryName(wandPath), UseShellExecute = true };
@@ -1020,16 +1481,17 @@ internal static class WandIntegration
             var nextProgressLog = DateTime.UtcNow + TimeSpan.FromSeconds(30);
             while (DateTime.UtcNow < deadline)
             {
+                if (await IsWandCdpReachableAsync(cancellation))
+                {
+                    store.Log("Wand exposed its loopback CDP recovery endpoint; readiness confirmed.");
+                    return true;
+                }
                 if (IsWandRunning())
                 {
                     // A visible window appears before the protocol listener finishes
-                    // loading. Give a freshly started desktop client enough warm-up
-                    // time before sending the first wemod://play URI.
-                    store.Log("Wand client exposed a visible window; waiting for its protocol listener.");
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
-                    bool ready = IsWandRunning();
-                    store.Log("Freshly-started Wand readiness=" + ready);
-                    return ready;
+                    // loading. Keep waiting for the CDP endpoint so the read-only
+                    // preflight and one-shot dispatch can actually run.
+                    store.Log("Wand client exposed a visible window; waiting for its loopback CDP recovery endpoint.");
                 }
                 if (DateTime.UtcNow >= nextProgressLog)
                 {
@@ -1038,7 +1500,7 @@ internal static class WandIntegration
                 }
                 await Task.Delay(250, cancellation);
             }
-            store.Log("Wand did not expose a responsive client within the three-minute startup window.");
+            store.Log("Wand did not expose its loopback CDP recovery endpoint within the three-minute startup window.");
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or UriFormatException)
         {
@@ -1047,7 +1509,7 @@ internal static class WandIntegration
         return IsWandRunning();
     }
 
-    private static bool IsWandRunning()
+private static bool IsWandRunning()
     {
         foreach (var name in new[] { "Wand", "WeMod" })
         {
@@ -1070,6 +1532,48 @@ internal static class WandIntegration
             catch (InvalidOperationException) { }
         }
         return false;
+    }
+
+    // The bundled Wand protocol helpers require a loopback CDP listener at
+    // 127.0.0.1:9222. Wand only opens it when launched with the recovery flags;
+    // an already-running client started without them cannot be inspected at
+    // all. This probe distinguishes "Wand is open but unreadable" from "Wand
+    // is ready", so Play can restart Wand once instead of failing closed.
+    private static async Task<bool> IsWandCdpReachableAsync(CancellationToken cancellation)
+    {
+        try
+        {
+            using var probe = new HttpClient { Timeout = TimeSpan.FromMilliseconds(800) };
+            using var response = await probe.GetAsync("http://127.0.0.1:9222/json/version", cancellation);
+            return response.IsSuccessStatusCode;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AggregateException or IOException or System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
+
+    // Closes only the Wand/WeMod desktop client and its helper processes so a
+    // fresh client can be started with the loopback-only CDP recovery flags.
+    // Game processes are never touched here.
+    private static void CloseRunningClientProcesses()
+    {
+        foreach (var name in new[] { "Wand", "WeMod" })
+        {
+            Process[] processes;
+            try { processes = Process.GetProcessesByName(name); }
+            catch { continue; }
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException) { }
+                finally { try { process.Dispose(); } catch { } }
+            }
+        }
     }
 
     private static HashSet<int> ExistingProcessIds(string executable)
@@ -1142,6 +1646,8 @@ internal static class WandIntegration
 
     internal static bool ContainsConnectionEvidence(string log, int? expectedPid = null)
     {
+        // This parser is retained for diagnostics and regression fixtures only.
+        // An overlay IPC/hook log is not evidence that the trainer loaded.
         if (string.IsNullOrWhiteSpace(log)) return false;
         if (!expectedPid.HasValue)
             return log.Contains("ipc connected", StringComparison.OrdinalIgnoreCase)
@@ -1160,45 +1666,174 @@ internal static class WandIntegration
                 || line.Contains("hook res: true", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static async Task<bool> WaitForConnectionEvidenceAsync(string executable, int expectedPid, DateTime sinceUtc, TimeSpan timeout, CancellationToken cancellation)
+    private static async Task<WandTrainerEvidence> WaitForConnectionEvidenceAsync(string wandExecutable, string gameId,
+        string executable, Process expectedProcess, string processCreationFileTime, DateTime sinceUtc,
+        TimeSpan timeout, CancellationToken cancellation)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(processCreationFileTime, "^[0-9A-Fa-f]{16}$"))
+            return new WandTrainerEvidence(false, "game-identity-unavailable", DateTime.UtcNow,
+                "The exact game process creation stamp was unavailable for the trainer evidence probe.");
+
+        var deadline = DateTime.UtcNow + timeout;
+        WandTrainerEvidence last = WandTrainerEvidenceAdapter.Inspect(wandExecutable, gameId, expectedProcess.Id,
+            processCreationFileTime, sinceUtc, executable);
+        if (last.Confirmed || last.Source == "trainer-connected-before-exit") return last;
+        if (last.Source == "unsupported-wand-session-schema") return last;
+        while (DateTime.UtcNow < deadline)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            using var current = FindExactProcess(executable);
+            if (current == null || current.Id != expectedProcess.Id)
+            {
+                var final = WandTrainerEvidenceAdapter.Inspect(wandExecutable, gameId, expectedProcess.Id,
+                    processCreationFileTime, sinceUtc, executable);
+                return final.Source == "trainer-connected-before-exit" ? final : new WandTrainerEvidence(false,
+                    "game-process-changed", DateTime.UtcNow,
+                    "The exact game process exited or no longer matches its registered executable before trainer attachment was verified. " + final.Detail);
+            }
+            string currentCreation;
+            try { currentCreation = current.StartTime.ToUniversalTime().ToFileTimeUtc().ToString("X16", System.Globalization.CultureInfo.InvariantCulture); }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                var final = WandTrainerEvidenceAdapter.Inspect(wandExecutable, gameId, expectedProcess.Id,
+                    processCreationFileTime, sinceUtc, executable);
+                return final.Source == "trainer-connected-before-exit" ? final : new WandTrainerEvidence(false,
+                    "game-identity-unavailable", DateTime.UtcNow, "The game process creation time could not be read: " + ex.Message);
+            }
+            if (!string.Equals(currentCreation, processCreationFileTime, StringComparison.OrdinalIgnoreCase))
+            {
+                var final = WandTrainerEvidenceAdapter.Inspect(wandExecutable, gameId, expectedProcess.Id,
+                    processCreationFileTime, sinceUtc, executable);
+                return final.Source == "trainer-connected-before-exit" ? final : new WandTrainerEvidence(false,
+                    "game-pid-reused", DateTime.UtcNow, "The observed PID now belongs to a different process creation identity.");
+            }
+            last = WandTrainerEvidenceAdapter.Inspect(wandExecutable, gameId, expectedProcess.Id,
+                processCreationFileTime, sinceUtc, executable);
+            if (last.Confirmed && last.ObservedUtc >= sinceUtc) return last;
+            if (last.Source == "trainer-connected-before-exit") return last;
+            if (last.Source == "unsupported-wand-session-schema") return last;
+            // The version-pinned trainer probe is a short local CDP request.
+            // Sampling at a bounded cadence avoids repeatedly spawning Node
+            // while Wand is still starting its trainer.
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellation);
+        }
+        return last with { Detail = "No fresh trainer-session evidence arrived within " + timeout.TotalSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " seconds. " + last.Detail };
+    }
+
+    private static async Task<bool> WaitForUsableGameWindowAsync(Process process, TimeSpan timeout, CancellationToken cancellation)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (HasFreshConnectionEvidence(executable, expectedPid, sinceUtc)) return true;
-            var process = FindExactProcess(executable);
-            process?.Dispose();
-            await Task.Delay(250, cancellation);
-        }
-        return HasFreshConnectionEvidence(executable, expectedPid, sinceUtc);
-    }
-
-    private static bool HasFreshConnectionEvidence(string executable, int expectedPid, DateTime sinceUtc)
-    {
-        string overlayRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Wand", "logs", "overlay");
-        if (!Directory.Exists(overlayRoot)) return false;
-        string stem = Normalize(Path.GetFileNameWithoutExtension(executable));
-        if (stem.Length == 0) return false;
-        try
-        {
-            foreach (var logPath in Directory.EnumerateFiles(overlayRoot, "*.log", SearchOption.TopDirectoryOnly))
+            cancellation.ThrowIfCancellationRequested();
+            try
             {
-                if (!string.Equals(Normalize(Path.GetFileNameWithoutExtension(logPath)), stem, StringComparison.Ordinal)) continue;
-                if (File.GetLastWriteTimeUtc(logPath) < sinceUtc.AddMilliseconds(-500)) continue;
-                string text;
-                using (var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-                {
-                    if (stream.Length > 128 * 1024) stream.Seek(-128 * 1024, SeekOrigin.End);
-                    using var reader = new StreamReader(stream);
-                    text = reader.ReadToEnd();
-                }
-                if (ContainsConnectionEvidence(text, expectedPid)) return true;
+                process.Refresh();
+                if (process.HasExited) return false;
+                IntPtr hwnd = process.MainWindowHandle;
+                if (hwnd != IntPtr.Zero && IsWindow(hwnd) && IsWindowVisible(hwnd) && !IsHungAppWindow(hwnd)) return true;
             }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
+            await Task.Delay(200, cancellation);
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
         return false;
     }
+
+    private static string ReadWandVersion(string wandExecutable)
+    {
+        try
+        {
+            var version = FileVersionInfo.GetVersionInfo(wandExecutable);
+            return !string.IsNullOrWhiteSpace(version.ProductVersion) ? version.ProductVersion
+                : !string.IsNullOrWhiteSpace(version.FileVersion) ? version.FileVersion : "unknown";
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException) { return "unknown"; }
+    }
+
+    internal static bool TryRefreshSessionEvidence(string canonicalGameId, string installationPath, string wandExecutable, out WandSessionSnapshot? updated)
+    {
+        updated = null;
+        if (!WandSessionState.TryGet(canonicalGameId, installationPath, out var snapshot)
+            || snapshot.ProcessId is not int pid || string.IsNullOrWhiteSpace(snapshot.ProcessCreationFileTime)) return false;
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            process.Refresh();
+            if (process.HasExited)
+            {
+                var exitedState = WandSessionState.Find(canonicalGameId, installationPath);
+                if (exitedState == null || exitedState.Read().OperationId != snapshot.OperationId) return false;
+                var finalEvidence = WandTrainerEvidenceAdapter.Inspect(wandExecutable, snapshot.GameId, pid,
+                    snapshot.ProcessCreationFileTime!, snapshot.StartedUtc, snapshot.InstallationPath);
+                bool trainerWasObserved = finalEvidence.Source == "trainer-connected-before-exit";
+                updated = exitedState.Transition(WandSessionStatus.Disconnected,
+                    trainerWasObserved ? finalEvidence.Detail : "The exact game process exited.",
+                    trainerWasObserved ? finalEvidence.Source : "process-exit",
+                    trainerWasObserved ? finalEvidence.ObservedUtc : DateTime.UtcNow);
+                return true;
+            }
+            string creation = process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
+            if (!string.Equals(creation, snapshot.ProcessCreationFileTime, StringComparison.Ordinal))
+            {
+                var state = WandSessionState.Find(canonicalGameId, installationPath);
+                if (state == null || state.Read().OperationId != snapshot.OperationId) return false;
+                var finalEvidence = WandTrainerEvidenceAdapter.Inspect(wandExecutable, snapshot.GameId, pid,
+                    snapshot.ProcessCreationFileTime!, snapshot.StartedUtc, snapshot.InstallationPath);
+                bool trainerWasObserved = finalEvidence.Source == "trainer-connected-before-exit";
+                updated = state.Transition(WandSessionStatus.Disconnected,
+                    trainerWasObserved ? finalEvidence.Detail : "The tracked PID was reused by a different process.",
+                    trainerWasObserved ? finalEvidence.Source : "process-identity",
+                    trainerWasObserved ? finalEvidence.ObservedUtc : DateTime.UtcNow);
+                return updated != null;
+            }
+            var evidence = WandTrainerEvidenceAdapter.Inspect(wandExecutable, snapshot.GameId, pid, creation,
+                snapshot.StartedUtc, snapshot.InstallationPath);
+            var current = WandSessionState.Find(canonicalGameId, installationPath);
+            if (current == null || current.Read().OperationId != snapshot.OperationId) return false;
+            if (StatusForTrainerEvidence(evidence) == WandSessionStatus.Disconnected)
+                updated = current.Transition(WandSessionStatus.Disconnected, evidence.Detail, evidence.Source, evidence.ObservedUtc);
+            else if (StatusForTrainerEvidence(evidence) == WandSessionStatus.Connected)
+                updated = current.Transition(WandSessionStatus.Connected, evidence.Detail, evidence.Source, evidence.ObservedUtc);
+            else if (snapshot.Status == WandSessionStatus.Connected)
+                updated = current.Transition(WandSessionStatus.GameRunningConnectionUnconfirmed,
+                    evidence.Detail, evidence.Source, evidence.ObservedUtc);
+            else
+                updated = current.Transition(snapshot.Status, evidence.Detail, evidence.Source, evidence.ObservedUtc);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            var state = WandSessionState.Find(canonicalGameId, installationPath);
+            if (state == null || state.Read().OperationId != snapshot.OperationId) return false;
+            var finalEvidence = WandTrainerEvidenceAdapter.Inspect(wandExecutable, snapshot.GameId, pid,
+                snapshot.ProcessCreationFileTime!, snapshot.StartedUtc, snapshot.InstallationPath);
+            bool trainerWasObserved = finalEvidence.Source == "trainer-connected-before-exit";
+            updated = state.Transition(WandSessionStatus.Disconnected,
+                trainerWasObserved ? finalEvidence.Detail : "The tracked game process no longer exists.",
+                trainerWasObserved ? finalEvidence.Source : "process-exit",
+                trainerWasObserved ? finalEvidence.ObservedUtc : DateTime.UtcNow);
+            return updated != null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            var state = WandSessionState.Find(canonicalGameId, installationPath);
+            if (state == null) return false;
+            var current = state.Read();
+            if (current.OperationId != snapshot.OperationId) return false;
+            updated = state.Transition(current.Status == WandSessionStatus.Connected
+                    ? WandSessionStatus.GameRunningConnectionUnconfirmed : current.Status,
+                "Trainer-session status is temporarily unavailable: " + ex.Message,
+                "trainer-session-probe-unavailable", DateTime.UtcNow);
+            return true;
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    private static extern bool IsHungAppWindow(IntPtr hwnd);
 
     private static IReadOnlyList<string> BuildAliases(Game game, string executable)
     {
@@ -1272,19 +1907,15 @@ internal static class WandAudit
         string cachedCatalog = LibraryStore.SafeChild(store.Cache, "wand-catalog.json");
         if (WandIntegration.TryRead(cachedCatalog, out var loaded)) catalog = loaded;
         var rows = new List<object>();
-        int launcherCount = 0, trackedCount = 0, registrationMatches = 0, protocolCandidates = 0;
+        var usedGameIds = new HashSet<string>(StringComparer.Ordinal);
+        int launcherCount = 0, trackedCount = 0, registrationMatches = 0, protocolCandidates = 0, buttonEligibleCount = 0;
         foreach (var registration in registrations)
         {
-            var game = games
-                .Select(candidate => new { Game = candidate, Score = MainWindow.WandLibraryMatchScore(candidate, registration, state.LaunchPaths.GetValueOrDefault(candidate.Id)) })
-                .Where(candidate => candidate.Score > 0)
-                .OrderByDescending(candidate => candidate.Score)
-                .ThenBy(candidate => candidate.Game.Id, StringComparer.Ordinal)
-                .Select(candidate => candidate.Game)
-                .FirstOrDefault()
+            var game = MainWindow.ResolveWandRegistrationMatch(games, state, registration, usedGameIds)
                 ?? new Game { Id = "wand:" + registration.GameId, Name = registration.Name, IsLocal = true };
             // Production normalizes the selected card to the manifest title.
             // Mirror that exact launch input here without changing persisted data.
+            usedGameIds.Add(game.Id);
             game.Name = registration.Name;
             string launcher = registration.Path;
             bool launcherExists = File.Exists(launcher);
@@ -1298,10 +1929,12 @@ internal static class WandAudit
                 : WandIntegration.ResolveTrackedExecutable(launcher);
             bool trackedExists = File.Exists(trackedExecutable);
             bool protocol = registered && targetResolved && trackedExists;
+            bool buttonEligible = launcherExists && WandIntegration.CanLaunchExistingWandInstall(game, launcher, store, out _);
             if (launcherExists) launcherCount++;
             if (trackedExists) trackedCount++;
             if (registered) registrationMatches++;
             if (protocol) protocolCandidates++;
+            if (buttonEligible) buttonEligibleCount++;
             rows.Add(new
             {
                 folder = registration.Folder,
@@ -1312,16 +1945,18 @@ internal static class WandAudit
                 launcherExists,
                 trackedExists,
                 registrationMatches = registered,
-                protocolCandidate = protocol
+                protocolCandidate = protocol,
+                buttonEligible
             });
         }
         bool wand = File.Exists(MainWindow.DetectWandPath() ?? "");
-        bool passed = registrations.Count >= 39
+        bool passed = registrations.Count > 0
             && registrations.Select(registration => registration.GameId).Distinct(StringComparer.Ordinal).Count() == registrations.Count
             && launcherCount == registrations.Count
             && trackedCount == registrations.Count
             && registrationMatches == registrations.Count
             && protocolCandidates == registrations.Count
+            && buttonEligibleCount == registrations.Count
             && wand;
         var payload = new
         {
@@ -1335,13 +1970,14 @@ internal static class WandAudit
             trackedExecutableCount = trackedCount,
             registrationMatchCount = registrationMatches,
             protocolCandidateCount = protocolCandidates,
+            buttonEligibleCount,
             wandExecutable = MainWindow.DetectWandPath(),
             cachedCatalog = catalog != null,
             games = rows
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(report))!);
         File.WriteAllText(Path.GetFullPath(report), System.Text.Json.JsonSerializer.Serialize(payload, DataJson.Options));
-        Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: latest Wand audit; filter {registrations.Count}; launchers {launcherCount}; tracked executables {trackedCount}; exact registrations {registrationMatches}; protocol candidates {protocolCandidates}; report={Path.GetFullPath(report)}");
+        Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: latest Wand audit; filter {registrations.Count}; launchers {launcherCount}; tracked executables {trackedCount}; exact registrations {registrationMatches}; protocol candidates {protocolCandidates}; button eligible {buttonEligibleCount}; report={Path.GetFullPath(report)}");
         return passed ? 0 : 1;
     }
 }

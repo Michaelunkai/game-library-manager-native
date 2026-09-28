@@ -7,6 +7,9 @@
 /native/obj/
 /native/Assets/catalog.zip
 /.worktrees/
+/native/*_wpftmp.csproj
+/launcher-stage/
+/native/evidence/
 
 # Local verification output can be regenerated; keep committed small receipts
 /evidence/*.log
@@ -22,3 +25,15 @@
 /evidence/self-test-pause-install*.json
 /evidence/self-test-resume-final.json
 /evidence/self-test-visual-final.json
+/evidence/reliability-*/
+/evidence/staged-*/
+/evidence/native-scan-*/
+/evidence/native-dist-rollback-*/
+/evidence/release-audit-*/
+/evidence/verify-agent-*/
+/evidence/self-test-r62c*/
+/evidence/ahk-pause-parity-*/
+/evidence/wand-preflight-*/
+/evidence/launcher-proof-*/
+/evidence/terminal-*/
+/test-data-*/

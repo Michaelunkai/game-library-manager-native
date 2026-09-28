@@ -140,31 +140,50 @@ public partial class MainWindow
     {
         var dialog = new EditorWindow(this, game.Name, game.Meta + "\n" + game.Id);
         dialog.Paragraph(string.IsNullOrWhiteSpace(game.Description) ? game.Details : game.Description);
+        var localStorage = dialog.Paragraph("Local install files: measuring…");
+        string localMountPath = State.Settings.MountPath;
+        string localGameFolder = game.IsLocal && State.LocalGames.TryGetValue(game.Id, out var localGame) ? localGame.Folder : "";
+        string localGameId = game.Id, localGameName = game.Name;
+        var localStorageCancellation = dialog.ClosedToken;
+        dialog.Loaded += async (_, _) =>
+        {
+            try
+            {
+                var measurement = await Task.Run(() =>
+                {
+                    string[] folders = localGameFolder.Length > 0
+                        ? Directory.Exists(localGameFolder) ? new[] { localGameFolder } : Array.Empty<string>()
+                        : InstalledScanner.FindCatalogFolders(localMountPath, localGameId, localGameName).ToArray();
+                    return (Folders: folders, Bytes: InstalledScanner.MeasureFolders(folders, localStorageCancellation));
+                }, localStorageCancellation);
+                if (dialog.IsClosed) return;
+                if (measurement.Folders.Length == 0)
+                    localStorage.Text = "Local install files: no matching folder was found under the configured library.";
+                else if (measurement.Bytes is long bytes)
+                    localStorage.Text = $"Local install files: {bytes / 1_000_000_000d:0.##} GB measured across {measurement.Folders.Length} folder(s). Logical file lengths; allocated disk space can differ. This is separate from the Docker Hub image/download size above.";
+                else
+                    localStorage.Text = "Local install files: full measurement unavailable (the folder changed or access was denied).";
+            }
+            catch (OperationCanceledException) when (localStorageCancellation.IsCancellationRequested) { }
+            catch
+            {
+                if (!dialog.IsClosed) localStorage.Text = "Local install files: measurement unavailable.";
+            }
+        };
         dialog.Action("Watch trailer on YouTube", () => Process.Start(new ProcessStartInfo(TrailerUrl(game)) { UseShellExecute = true }), "WatchTrailer");
         var rate = dialog.Choice("Your rating", new[] { "Unrated", "★", "★★", "★★★", "★★★★", "★★★★★" }, game.Rating);
         var tags = dialog.Text("Tags (comma separated)", string.Join(", ", State.GameTags.GetValueOrDefault(game.Id, new())), "GameTags");
         var installed = dialog.Check("Mark as installed", State.InstalledGames.Contains(game.Id));
-        var categoryChoices = Store.LoadCategories(Sync.Effective(State)).Where(c => c.Id is not ("all" or "wishlist" or "installed")).ToList();
-        if (categoryChoices.All(c => c.Id != "new")) categoryChoices.Insert(0, new Category("new", "New arrivals"));
+        var categoryChoices = EffectiveCategories().Where(c => c.Id is not ("all" or "wishlist" or "installed")).ToList();
         var categories = categoryChoices.ToArray();
         int categoryIndex = Math.Max(0, Array.FindIndex(categories, c => c.Id == game.Category));
         var category = dialog.Choice("Move to tab", categories, categoryIndex, "GameCategory");
-        category.IsEnabled = IsAdmin || game.IsLocal;
-        if (!game.IsLocal && !IsAdmin) category.ToolTip = "Admin sign-in is required to move shared catalog games.";
+        category.ToolTip = "Saved in this Windows library.";
         dialog.Action("Save personal changes", () =>
         {
-            State.Ratings[game.Id] = rate.SelectedIndex;
-            var values = tags.Text.Split(',').Select(t => t.Trim()).Where(t => t.Length > 0).Distinct().ToList();
-            if (values.Any(t => t.Length > 80)) throw new ArgumentException("Keep each tag under 80 characters.");
-            State.GameTags[game.Id] = values;
-            if (installed.IsChecked == true) State.InstalledGames.Add(game.Id); else State.InstalledGames.Remove(game.Id);
-            if (category.SelectedItem is Category target && target.Id != game.Category)
-            {
-                if (game.IsLocal) State.LocalGames[game.Id].Category = target.Id;
-                else if (!RequireAdmin()) throw new InvalidOperationException("Sign in as admin to move shared catalog games between tabs.");
-                else Sync.Queue(State, "gameCategories", game.Id, JsonValue.Create(target.Id));
-            }
-            Save(); Reload(); dialog.Notice.Text = "Saved on this PC.";
+            PersonalGameEdits.Save(Store, State, game.Id, rate.SelectedIndex, tags.Text, installed.IsChecked == true,
+                (category.SelectedItem as Category)?.Id);
+            Reload(); dialog.Notice.Text = "Saved on this PC.";
         }, "SaveGameDetails");
         dialog.Action(game.Wishlisted ? "Remove from wishlist" : "Add to wishlist", () =>
         {
@@ -181,10 +200,18 @@ public partial class MainWindow
             if (picker.ShowDialog(dialog) != true) return;
             State.LaunchPaths[game.Id] = picker.FileName; State.InstalledGames.Add(game.Id); Save(); Reload(); dialog.Notice.Text = "Launcher saved: " + picker.FileName;
         });
-        dialog.ActionAsync("Play", async () => { await PlayGame(game); if (!dialog.IsClosed && !closing) dialog.Close(); }, "PlayGame");
-        dialog.Action("Open Wand", OpenWand, "OpenWand");
-        if (CanLaunchWithExistingWand(game, out _))
-            dialog.ActionAsync("Play with Wand mods", async () => { await PlayWithWand(game, dialog.ClosedToken); if (!dialog.IsClosed && !closing) dialog.Close(); }, "PlayWithWand");
+        if (game.Installed)
+        {
+            dialog.ActionAsync("Play", async () => { await PlayGame(game); if (!dialog.IsClosed && !closing) dialog.Close(); }, "PlayGame");
+            dialog.Action("Open Wand", OpenWand, "OpenWand");
+        }
+        if (game.Installed && CanLaunchWithExistingWand(game, out _))
+            dialog.ActionAsync("Play with Wand mods", async () =>
+            {
+                var target = ResolveWandCardTarget(game) ?? throw new InvalidOperationException("The exact Wand registration is no longer available.");
+                await PlayWithWand(target, dialog.ClosedToken);
+                if (!dialog.IsClosed && !closing) dialog.Close();
+            }, "PlayWithWand");
         dialog.Action("Open installation folder", () => OpenFolder(ResolveInstallationFolder(game)));
         if (!game.IsLocal)
         {
@@ -195,6 +222,7 @@ public partial class MainWindow
     }
     private async Task PlayGame(Game game)
     {
+        if (!game.Installed) throw new InvalidOperationException("Install this game before playing it.");
         await playLaunchGate.WaitAsync(lifetime.Token);
         try
         {
@@ -230,6 +258,7 @@ public partial class MainWindow
     private Task PlayWithWand(Game game) => PlayWithWand(game, lifetime.Token);
     private async Task PlayWithWand(Game game, CancellationToken cancellation)
     {
+        if (!game.Installed) throw new InvalidOperationException("Install this game before playing it.");
         await playLaunchGate.WaitAsync(cancellation);
         try
         {
@@ -255,11 +284,37 @@ public partial class MainWindow
             }, cancellation);
             string exe = launch.Executable;
             string wandPath = launch.WandPath;
-            if (TryActivateExistingPlay(game))
+            WandSessionState.TryGet(game.Id, exe, out var currentWandSession);
+            bool previouslyConnected = activePlays.TryGetValue(game.Id, out var existingWand)
+                && !existingWand.Process.HasExited
+                && currentWandSession != null
+                && currentWandSession.Status == WandSessionStatus.Connected
+                && currentWandSession.ProcessId == existingWand.Process.Id
+                && FrozenProcessState.TryGetCreationStamp(existingWand.Process, out var currentCreation)
+                && string.Equals(currentCreation, currentWandSession.ProcessCreationFileTime, StringComparison.Ordinal);
+            if (previouslyConnected)
             {
-                if (activePlays.TryGetValue(game.Id, out var active) && !active.UsesWand)
-                    StatusText.Text = game.Name + " is already running without Wand mods. Close it before using Play with Wand.";
-                return;
+                // A cached Connected state can outlive the trainer. Inspect the
+                // exact running trainer off the dispatcher before treating this
+                // click as a request merely to focus the existing game.
+                var prior = currentWandSession!;
+                var fresh = await Task.Run(() => WandTrainerEvidenceAdapter.Inspect(wandPath, prior.GameId,
+                    prior.ProcessId!.Value, prior.ProcessCreationFileTime!, DateTime.UtcNow.AddSeconds(-1), exe), cancellation);
+                if (fresh.Confirmed && TryActivateExistingPlay(game)) return;
+                if (WandSessionState.Find(game.Id, exe) is { } stale && stale.Read().OperationId == prior.OperationId)
+                {
+                    try
+                    {
+                        if (stale.Read().Status == WandSessionStatus.Connected)
+                            stale.Transition(WandIntegration.StatusForTrainerEvidence(fresh),
+                                fresh.Detail, fresh.Source, fresh.ObservedUtc);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // An exit or newer launch can change the session while
+                        // this read-only probe is completing; keep its newer state.
+                    }
+                }
             }
             using var observationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             var observation = ObserveWandGameProcess(game, exe, observationCancellation.Token);
@@ -288,9 +343,10 @@ public partial class MainWindow
             {
                 if (activePlays.TryGetValue(game.Id, out var tracked))
                 {
+                    tracked.UsesWand = result.Session?.Status == WandSessionStatus.Connected;
                     if (!ReferenceEquals(tracked.Process, result.Process)) try { result.Process.Dispose(); } catch { }
                 }
-                else if (!TrackPlayProcess(game, result.Process, usesWand: true, ownsProcess: result.OwnsProcess))
+                else if (!TrackPlayProcess(game, result.Process, usesWand: result.Session?.Status == WandSessionStatus.Connected, ownsProcess: result.OwnsProcess))
                     result = result with { Process = null, OwnsProcess = false, Message = game.Name + " closed before Wand launch confirmation. Game Library did not terminate it." };
             }
             StatusText.Text = result.Message;
@@ -309,7 +365,7 @@ public partial class MainWindow
                 if (process != null)
                 {
                     if (activePlays.ContainsKey(game.Id)) { process.Dispose(); return; }
-                    else if (TrackPlayProcess(game, process, usesWand: true, ownsProcess: false)) return;
+                    else if (TrackPlayProcess(game, process, usesWand: false, ownsProcess: false)) return;
                 }
                 await Task.Delay(200, cancellation);
             }
@@ -474,45 +530,83 @@ public partial class MainWindow
     }
     private void ManageCategories(object sender, RoutedEventArgs e)
     {
-        if (!RequireAdmin()) return;
-        var dialog = new EditorWindow(this, "Manage categories", "These changes are shared with the website. Offline edits stay queued until you reconnect and sign in.");
-        var categories = Store.LoadCategories(Sync.Effective(State)).Where(c => c.Id is not ("all" or "wishlist" or "installed")).ToArray();
+        var dialog = new EditorWindow(this, "Manage categories", "Category changes are saved in this Windows library, including while offline.");
+        var effective = Sync.Effective(State);
+        var categories = EffectiveCategories(effective).Where(c => c.Id is not ("all" or "wishlist" or "installed")).ToArray();
         var selected = dialog.Choice("Category", categories);
         var name = dialog.Text("New name / renamed category", "", "CategoryName");
-        var hidden = dialog.Check("Hide selected category from regular users", false);
+        var hideTab = dialog.Check("Hide category tab", false);
+        AutomationProperties.SetAutomationId(hideTab, "CategoryHideTab");
+        var hideGamesFromAll = dialog.Check("Hide games from All games", false);
+        AutomationProperties.SetAutomationId(hideGamesFromAll, "CategoryHideGamesFromAll");
+        void LoadSelectedCategory()
+        {
+            if (selected.SelectedItem is not Category c) return;
+            name.Text = c.Name;
+            var current = Sync.Effective(State);
+            var rule = CategoryVisibility.Get(State, current, c.Id);
+            hideTab.IsChecked = rule.HideTab;
+            hideGamesFromAll.IsChecked = rule.HideGamesFromAll;
+        }
         selected.SelectionChanged += (_, _) =>
         {
-            if (selected.SelectedItem is Category c) { name.Text = c.Name; hidden.IsChecked = Hidden(Sync.Effective(State)).Contains(c.Id); }
+            LoadSelectedCategory();
         };
-        if (selected.SelectedItem is Category initial) { name.Text = initial.Name; hidden.IsChecked = Hidden(Sync.Effective(State)).Contains(initial.Id); }
+        LoadSelectedCategory();
         dialog.Action("Create category", () =>
         {
             string label = name.Text.Trim(); if (label.Length == 0 || label.Length > 80) throw new ArgumentException("Enter a category name of 1–80 characters.");
             string id = System.Text.RegularExpressions.Regex.Replace(label.ToLowerInvariant(), @"[^a-z0-9]+", "_").Trim('_');
             if (id.Length == 0) id = "category_" + Guid.NewGuid().ToString("N")[..8];
-            var tabs = Store.LoadCategories(Sync.Effective(State));
+            var tabs = EffectiveCategories(Sync.Effective(State));
             if (tabs.Any(c => c.Id == id) || id is "wishlist" or "installed") throw new ArgumentException("A category with that identity already exists.");
-            tabs.Add(new(id, label)); QueueTabs(tabs); dialog.Close(); Reload(); ObserveUiOperation("Category refresh", () => Refresh(false));
+            tabs.Add(new(id, label));
+            var deleted = State.LocalCatalog["deletedTabs"] is JsonArray oldDeleted
+                ? oldDeleted.Select(item => DataJson.Text(item)).Where(value => value != id).ToList()
+                : new List<string>();
+            LocalCatalogEdits.Save(Store, State,
+                new PendingEdit { Section = "tabs", After = JsonNode.Parse(DataJson.Write(tabs)) },
+                new PendingEdit { Section = "deletedTabs", After = new JsonArray(deleted.Select(value => (JsonNode?)JsonValue.Create(value)).ToArray()) });
+            dialog.Close(); Reload();
         });
         dialog.Action("Save name and visibility", () =>
         {
             if (selected.SelectedItem is not Category c) return;
             if (name.Text.Trim().Length is < 1 or > 80) throw new ArgumentException("Enter a name of 1–80 characters.");
-            var tabs = Store.LoadCategories(Sync.Effective(State)).Select(t => t.Id == c.Id ? new Category(c.Id, name.Text.Trim()) : t).ToList(); QueueTabs(tabs);
-            var values = Hidden(Sync.Effective(State)); if (hidden.IsChecked == true) values.Add(c.Id); else values.Remove(c.Id);
-            Sync.Queue(State, "hiddenTabs", "", new JsonArray(values.OrderBy(v => v).Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()));
-            dialog.Close(); Reload(); ObserveUiOperation("Category refresh", () => Refresh(false));
+            var current = Sync.Effective(State);
+            var updatedCategories = EffectiveCategories(current);
+            var tabs = updatedCategories.Select(t => t.Id == c.Id ? new Category(c.Id, name.Text.Trim()) : t).ToList();
+            var updated = new CategoryVisibilityRule(hideTab.IsChecked == true, hideGamesFromAll.IsChecked == true);
+            CategoryVisibility.SaveRules(Store, State, current, updatedCategories, c.Id, updated,
+                new PendingEdit { Section = "tabs", After = JsonNode.Parse(DataJson.Write(tabs)) });
+            dialog.Close(); Reload();
+        });
+        dialog.Action("Show all tabs", () =>
+        {
+            var current = Sync.Effective(State);
+            CategoryVisibility.ShowAllTabs(Store, State, current, EffectiveCategories(current));
+            LoadSelectedCategory();
+            dialog.Notice.Text = "All category tabs are visible.";
+            Reload();
+        });
+        dialog.Action("Show all games in All games", () =>
+        {
+            var current = Sync.Effective(State);
+            CategoryVisibility.ShowAllGamesInAll(Store, State, current, EffectiveCategories(current));
+            LoadSelectedCategory();
+            dialog.Notice.Text = "All categories are included in All games.";
+            Reload();
         });
         void ReorderCategory(int delta)
         {
             if (selected.SelectedItem is not Category c) return;
-            var tabs = Store.LoadCategories(Sync.Effective(State));
+            var tabs = EffectiveCategories(Sync.Effective(State));
             if (!MoveCategory(tabs, c.Id, delta))
             {
                 dialog.Notice.Text = delta < 0 ? "That category is already first." : "That category is already last.";
                 return;
             }
-            QueueTabs(tabs); dialog.Close(); Reload(); ObserveUiOperation("Category refresh", () => Refresh(false));
+            QueueTabs(tabs); dialog.Close(); Reload();
         }
         dialog.Action("Move category up", () => ReorderCategory(-1));
         dialog.Action("Move category down", () => ReorderCategory(1));
@@ -520,13 +614,31 @@ public partial class MainWindow
         {
             if (selected.SelectedItem is not Category c || c.Id == "new") throw new ArgumentException("The New category cannot be removed.");
             if (System.Windows.MessageBox.Show(dialog, "Remove '" + c.Name + "' and move its games to New?", "Remove category", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-            foreach (var game in Games.Where(g => g.Category == c.Id))
-                if (game.IsLocal) State.LocalGames[game.Id].Category = "new";
-                else Sync.Queue(State, "gameCategories", game.Id, JsonValue.Create("new"));
-            QueueTabs(Store.LoadCategories(Sync.Effective(State)).Where(t => t.Id != c.Id).ToList());
-            var values = Hidden(Sync.Effective(State)); values.Remove(c.Id);
-            Sync.Queue(State, "hiddenTabs", "", new JsonArray(values.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()));
-            dialog.Close(); Reload(); ObserveUiOperation("Category refresh", () => Refresh(false));
+            var effective = Sync.Effective(State);
+            var categoriesBeforeDelete = EffectiveCategories(effective);
+            var loadedIds = Games.Select(game => game.Id).ToHashSet(StringComparer.Ordinal);
+            var affectedIds = Games.Where(game => game.Category == c.Id).Select(game => game.Id).ToHashSet(StringComparer.Ordinal);
+            // A temporarily absent repository game still has a saved assignment.
+            // Move it too, so rediscovery cannot revive a deleted category. For
+            // loaded games retain their actual category (including local overrides).
+            if (effective["gameCategories"] is JsonObject assignments)
+                foreach (var assignment in assignments)
+                    if (!loadedIds.Contains(assignment.Key) && DataJson.Text(assignment.Value) == c.Id) affectedIds.Add(assignment.Key);
+            var edits = affectedIds.OrderBy(id => id, StringComparer.Ordinal).Select(id => new PendingEdit { Section = "gameCategories", Key = id, After = JsonValue.Create("new") }).ToList();
+            edits.Add(new PendingEdit { Section = "tabs", After = JsonNode.Parse(DataJson.Write(categoriesBeforeDelete.Where(t => t.Id != c.Id).ToList())) });
+            var deletedIds = State.LocalCatalog["deletedTabs"] is JsonArray existingDeleted
+                ? existingDeleted.Select(item => DataJson.Text(item)).Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+            deletedIds.Add(c.Id);
+            edits.Add(new PendingEdit { Section = "deletedTabs", After = new JsonArray(deletedIds.OrderBy(id => id, StringComparer.Ordinal).Select(id => (JsonNode?)JsonValue.Create(id)).ToArray()) });
+            var values = Hidden(effective); values.Remove(c.Id);
+            edits.Add(new PendingEdit { Section = "hiddenTabs", After = new JsonArray(values.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()) });
+            var reliability = State.LocalCatalog["reliability"] is JsonObject currentReliability ? (JsonObject)currentReliability.DeepClone() : new JsonObject();
+            if (reliability["categoryVisibility"] is JsonObject visibility && visibility["categories"] is JsonObject rules)
+                rules.Remove(c.Id);
+            edits.Add(new PendingEdit { Section = "reliability", After = reliability });
+            LocalCatalogEdits.Save(Store, State, edits.ToArray());
+            dialog.Close(); Reload();
         });
         dialog.ShowDialog();
     }
@@ -540,10 +652,19 @@ public partial class MainWindow
         (tabs[index], tabs[target]) = (tabs[target], tabs[index]);
         return true;
     }
-    private void QueueTabs(List<Category> tabs) => Sync.Queue(State, "tabs", "", JsonNode.Parse(DataJson.Write(tabs)));
+    private void QueueTabs(List<Category> tabs) => LocalCatalogEdits.Save(Store, State, new PendingEdit { Section = "tabs", After = JsonNode.Parse(DataJson.Write(tabs)) });
     private void ShowSync(object sender, RoutedEventArgs e)
     {
         var dialog = new EditorWindow(this, "Synchronization", Sync.Status);
+        dialog.Paragraph(Sync.SharedStatus + "\n" + Sync.CatalogStatus + "\n" + Sync.DockerStatus + "\n" + namespaceStatus);
+        try
+        {
+            string attemptPath = Path.Combine(Store.Cache, "docker-namespace-attempt.json");
+            if (File.Exists(attemptPath) && JsonNode.Parse(File.ReadAllText(attemptPath))?["errors"] is JsonArray errors && errors.Count > 0)
+                dialog.Paragraph("Latest Docker checks:\n" + string.Join("\n", errors.Take(12).Select(error => DataJson.Text(error?["scope"]) + ": " + DataJson.Text(error?["code"]))) +
+                    (errors.Count > 12 ? "\nAdditional failures are recorded in the local sync log." : ""));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { Store.Log("Sync diagnostic read failed: " + ex.GetType().Name); }
         dialog.Paragraph("Backend: " + SyncClient.Production + "\nLast successful contact: " + (Sync.LastSync?.ToString("g") ?? "not yet this session") + "\nQueued changes: " + State.Pending.Count);
         dialog.Paragraph(Sync.SupportsConditionalWrites ? "The server supports conditional writes." : "This server does not advertise atomic conditional writes. The app checks for stale edits before saving and verifies read-back, but simultaneous writes from other clients can still race.");
         if (State.Pending.Count > 0)
@@ -568,6 +689,59 @@ public partial class MainWindow
 
 public static class InstalledScanner
 {
+    internal static bool IsInstallerStagingPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        return Path.GetFullPath(path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part.Equals(DockerScripts.StagingDirectoryName, StringComparison.OrdinalIgnoreCase));
+    }
+    // Return logical file lengths for exact, caller-resolved install folders.
+    // Do not follow junctions/symlinks, and never return a partial total as if it
+    // were complete when an install is changing or a file is inaccessible.
+    internal static long? MeasureFolders(IEnumerable<string> folders, CancellationToken cancellation)
+    {
+        try
+        {
+            var roots = folders.Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(path)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (roots.Length == 0) return null;
+            long bytes = 0;
+            var options = new EnumerationOptions
+            {
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = false
+            };
+            foreach (var root in roots)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                if (!Directory.Exists(root) || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) return null;
+                var pending = new Stack<string>();
+                pending.Push(root);
+                while (pending.Count > 0)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    var folder = pending.Pop();
+                    if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) return null;
+                    foreach (var file in Directory.EnumerateFiles(folder, "*", options))
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0)
+                            bytes = checked(bytes + new FileInfo(file).Length);
+                    }
+                    foreach (var child in Directory.EnumerateDirectories(folder, "*", options))
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) pending.Push(child);
+                    }
+                }
+            }
+            return bytes;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or
+            NotSupportedException or System.Security.SecurityException or OverflowException) { return null; }
+    }
+
     public static Dictionary<string, string> Scan(string root, IEnumerable<(string Id, string Name)> games, CancellationToken cancellation)
     {
         // Compatibility for callers that need only an unambiguous catalog-to-launcher map.
@@ -575,9 +749,10 @@ public static class InstalledScanner
             .ToDictionary(g => g.Id, g => g.Launcher!, StringComparer.Ordinal);
     }
 
-    public static InstalledScanResult Discover(string root, IEnumerable<(string Id, string Name)> games, CancellationToken cancellation)
+    public static InstalledScanResult Discover(string root, IEnumerable<(string Id, string Name)> games, CancellationToken cancellation, IReadOnlyDictionary<string, string>? preferredInstallations = null)
     {
         root = Path.GetFullPath(root);
+        if (IsInstallerStagingPath(root)) return new InstalledScanResult();
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException("The selected game folder is unavailable.");
         if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) throw new ArgumentException("Choose the actual game folder rather than a folder link.");
         var catalog = games.Where(g => !g.Id.StartsWith("local:", StringComparison.Ordinal)).ToArray();
@@ -586,6 +761,13 @@ public static class InstalledScanner
         var folders = Directory.EnumerateDirectories(root, "*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }).ToArray();
         AddCatalogFolderLookups(lookups, root, catalog);
         foreach (var folder in folders) AddCatalogFolderLookups(lookups, folder, catalog);
+        var selectedInstallFolders = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var game in catalog)
+        {
+            string? preferred = preferredInstallations?.GetValueOrDefault(game.Id);
+            string? selected = SelectCatalogFolder(root, game.Id, game.Name, preferred);
+            if (selected != null) selectedInstallFolders[game.Id] = selected;
+        }
         // A launcher alongside a library's game subfolders must not hide those games.
         // A catalog folder or a same-named executable identifies a directly selected game.
         string rootName = Normalize(Path.GetFileName(Path.TrimEndingDirectorySeparator(root)));
@@ -596,32 +778,51 @@ public static class InstalledScanner
         if (isGameRoot) Inspect(root, lookups, true, result, cancellation);
         else
         {
-            foreach (var folder in folders) Inspect(folder, lookups, true, result, cancellation);
+            result.LibraryRoot = root;
+            foreach (var folder in folders)
+            {
+                string label = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
+                bool unselectedCanonicalInstall = catalog.Any(game =>
+                {
+                    bool installFolder = label.Equals(DockerScripts.InstallFolder(game.Id), StringComparison.OrdinalIgnoreCase)
+                        || DockerScripts.IsVersionedInstallFolder(game.Id, label);
+                    if (!installFolder) return false;
+                    return !selectedInstallFolders.TryGetValue(game.Id, out string? chosen)
+                        || !string.Equals(Path.GetFullPath(chosen), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase);
+                });
+                if (!unselectedCanonicalInstall) Inspect(folder, lookups, true, result, cancellation);
+            }
             if (result.Games.Count == 0 && rootExecutables.Length > 0) Inspect(root, lookups, true, result, cancellation);
             else if (rootExecutables.Length > 0) result.Notices.Add(Path.GetFileName(root) + ": game subfolders were scanned; executables beside those folders were not assumed to be another game.");
         }
         return result;
     }
 
-    public static InstalledScanResult ScanDownloads(string root, IEnumerable<(string Id, string Name)> games, CancellationToken cancellation)
+    public static InstalledScanResult ScanDownloads(string root, IEnumerable<(string Id, string Name)> games, CancellationToken cancellation, IReadOnlyDictionary<string, string>? preferredInstallations = null, string? requiredOperationId = null)
     {
-        var catalog = games.Where(g => DockerScripts.ValidTag(g.Id)).ToArray();
+        var catalog = games.Where(g => DockerIdentity.Valid(g.Id)).ToArray();
         var lookups = Lookups(catalog);
         var result = new InstalledScanResult();
         foreach (var game in catalog)
         {
             cancellation.ThrowIfCancellationRequested();
-            var folders = FindCatalogFolders(root, game.Id, game.Name);
-            if (folders.Count == 0)
+            string? preferred = preferredInstallations?.GetValueOrDefault(game.Id);
+            string? folder = SelectCatalogFolder(root, game.Id, game.Name, preferred, requiredOperationId);
+            if (folder == null)
             {
-                result.Notices.Add(game.Name + ": the downloaded game folder was not found.");
+                // Keep a non-playable payload visible to diagnostics without
+                // promoting it to an installed game. This includes folders
+                // containing only support utilities.
+                if (FindCatalogFolders(root, game.Id, game.Name, requiredOperationId).Count > 0)
+                {
+                    result.CatalogFoldersPresent.Add(game.Id);
+                    result.Notices.Add(game.Name + ": a download folder exists, but no Windows game executable was found.");
+                }
+                else result.Notices.Add(game.Name + ": the downloaded game folder was not found.");
                 continue;
             }
-            foreach (var folder in folders)
-            {
-                AddCatalogFolderLookup(lookups, folder, game);
-                Inspect(folder, lookups, false, result, cancellation);
-            }
+            AddCatalogFolderLookup(lookups, folder, game);
+            Inspect(folder, lookups, false, result, cancellation);
         }
         return result;
     }
@@ -631,9 +832,9 @@ public static class InstalledScanner
     /// the catalog id followed by a separator/hash. Older builds used a different
     /// suffix formula, so exact-path lookup alone loses otherwise valid installs.
     /// </summary>
-    internal static IReadOnlyList<string> FindCatalogFolders(string root, string id, string? name = null)
+    internal static IReadOnlyList<string> FindCatalogFolders(string root, string id, string? name = null, string? requiredOperationId = null)
     {
-        if (!Directory.Exists(root) || !DockerScripts.ValidTag(id)) return Array.Empty<string>();
+        if (!Directory.Exists(root) || !DockerIdentity.Valid(id)) return Array.Empty<string>();
         root = Path.GetFullPath(root);
         var expected = Path.Combine(root, DockerScripts.InstallFolder(id));
         var folders = new List<string>();
@@ -649,6 +850,19 @@ public static class InstalledScanner
             catch (UnauthorizedAccessException) { }
         }
         Add(expected);
+        try
+        {
+            foreach (var folder in Directory.EnumerateDirectories(root, "*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }))
+            {
+                string folderName = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
+                if (DockerScripts.IsVersionedInstallFolder(id, folderName)
+                    && IsValidVersionedCompletionMarker(Path.Combine(folder, DockerScripts.CompletionMarkerName), id, requiredOperationId)) Add(folder);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        if (DockerIdentity.IsQualified(id)) return folders.OrderBy(path => path.Equals(expected, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).ToArray();
         Add(Path.Combine(root, id));
         if (!string.IsNullOrWhiteSpace(name)) Add(Path.Combine(root, name));
         try
@@ -658,6 +872,11 @@ public static class InstalledScanner
                 string folderName = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
                 bool friendlyName = !string.IsNullOrWhiteSpace(name) && FolderIdentityMatches(folderName, name);
                 bool idAlias = FolderIdentityMatches(folderName, id);
+                if (DockerScripts.IsVersionedInstallFolder(id, folderName))
+                {
+                    if (IsValidVersionedCompletionMarker(Path.Combine(folder, DockerScripts.CompletionMarkerName), id, requiredOperationId)) Add(folder);
+                    continue;
+                }
                 if (folderName.StartsWith(id + "-", StringComparison.OrdinalIgnoreCase) || idAlias || friendlyName) Add(folder);
             }
         }
@@ -665,6 +884,52 @@ public static class InstalledScanner
         catch (UnauthorizedAccessException) { }
         return folders.OrderBy(path => path.Equals(expected, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string? SelectCatalogFolder(string root, string id, string? name = null, string? preferredPath = null, string? requiredOperationId = null)
+    {
+        IReadOnlyList<string> candidates = FindCatalogFolders(root, id, name, requiredOperationId);
+        if (!string.IsNullOrWhiteSpace(requiredOperationId))
+            candidates = candidates.Where(path => IsValidCompletionMarker(Path.Combine(path, DockerScripts.CompletionMarkerName), id, requiredOperationId)).ToArray();
+        if (candidates.Count == 0) return null;
+        string? preferred = candidates.FirstOrDefault(path => !string.IsNullOrWhiteSpace(preferredPath)
+            && string.Equals(Path.GetFullPath(path), Path.GetFullPath(preferredPath), StringComparison.OrdinalIgnoreCase)
+            && FindGameExecutables(path).Count > 0);
+        if (preferred != null) return preferred;
+        var versioned = candidates.Where(path => DockerScripts.IsVersionedInstallFolder(id, Path.GetFileName(Path.TrimEndingDirectorySeparator(path)))
+                && IsValidVersionedCompletionMarker(Path.Combine(path, DockerScripts.CompletionMarkerName), id, requiredOperationId)
+                && FindGameExecutables(path).Count > 0)
+            .Select(path => new { Path = path, MarkerTime = SafeMarkerWriteTime(Path.Combine(path, DockerScripts.CompletionMarkerName)) })
+            .OrderByDescending(item => item.MarkerTime).ThenBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Path, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (versioned != null) return versioned.Path;
+        string expected = Path.Combine(Path.GetFullPath(root), DockerScripts.InstallFolder(id));
+        return candidates.Where(path => !DockerScripts.IsVersionedInstallFolder(id, Path.GetFileName(Path.TrimEndingDirectorySeparator(path))) && FindGameExecutables(path).Count > 0)
+            .OrderBy(path => string.Equals(Path.GetFullPath(path), Path.GetFullPath(expected), StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).FirstOrDefault();
+    }
+
+    private static DateTime SafeMarkerWriteTime(string markerPath)
+    {
+        try { return File.GetLastWriteTimeUtc(markerPath); }
+        catch (IOException) { return DateTime.MinValue; }
+        catch (UnauthorizedAccessException) { return DateTime.MinValue; }
+    }
+
+    private static bool IsValidVersionedCompletionMarker(string markerPath, string id, string? requiredOperationId = null)
+    {
+        if (!IsValidCompletionMarker(markerPath, id, requiredOperationId)) return false;
+        try
+        {
+            var info = new FileInfo(markerPath);
+            if (!info.Exists || info.Length > 1024 || (info.Attributes & FileAttributes.ReparsePoint) != 0) return false;
+            string[] fields = File.ReadAllText(markerPath).Trim().Split('|');
+            return fields.Length == 3 && string.Equals(fields[1], id, StringComparison.Ordinal)
+                && Guid.TryParseExact(fields[2], "N", out _)
+                && (requiredOperationId == null || string.Equals(fields[2], requiredOperationId, StringComparison.Ordinal));
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     internal static bool HasCompletionMarker(string root, string id, string? name = null) =>
@@ -703,6 +968,7 @@ public static class InstalledScanner
         foreach (var path in Directory.EnumerateFiles(folder, "*.exe", options))
         {
             cancellation.ThrowIfCancellationRequested();
+            if (IsInstallerStagingPath(path)) continue;
             if (!IsGameExecutable(folder, path)) continue;
             candidates.Add(path);
             if (candidates.Count > 100) break;
@@ -734,6 +1000,11 @@ public static class InstalledScanner
 
     private static IEnumerable<string> LookupKeys((string Id, string Name) game)
     {
+        if (DockerIdentity.IsQualified(game.Id))
+        {
+            yield return Normalize(DockerScripts.InstallFolder(game.Id));
+            yield break;
+        }
         foreach (var value in new[] { game.Id, game.Name, DockerScripts.InstallFolder(game.Id) })
         {
             string key = Normalize(value);
@@ -770,7 +1041,10 @@ public static class InstalledScanner
     private static void AddCatalogFolderLookup(Dictionary<string, (string Id, string Name)[]> lookups, string folder, (string Id, string Name) game)
     {
         string label = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
-        bool idFolder = label.Equals(game.Id, StringComparison.OrdinalIgnoreCase)
+        bool qualifiedExact = DockerIdentity.IsQualified(game.Id) && (label.Equals(DockerScripts.InstallFolder(game.Id), StringComparison.OrdinalIgnoreCase)
+            || DockerScripts.IsVersionedInstallFolder(game.Id, label));
+        if (DockerIdentity.IsQualified(game.Id) && !qualifiedExact) return;
+        bool idFolder = qualifiedExact || label.Equals(game.Id, StringComparison.OrdinalIgnoreCase)
             || label.StartsWith(game.Id + "-", StringComparison.OrdinalIgnoreCase)
             || FolderIdentityMatches(label, game.Id);
         bool friendlyFolder = FolderIdentityMatches(label, game.Name);
@@ -847,6 +1121,7 @@ public static class InstalledScanner
         var parts = Path.GetRelativePath(folder, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (parts.Take(parts.Length - 1).Any(p => SupportFolders.Contains(Normalize(p)))) return false;
         string name = Normalize(Path.GetFileNameWithoutExtension(path));
+        if (name is "epicwebhelper" or "fitgirllauncher") return false;
         if (name.Contains("editor", StringComparison.OrdinalIgnoreCase)
             || name.Contains("toolkit", StringComparison.OrdinalIgnoreCase)
             || name.Contains("packager", StringComparison.OrdinalIgnoreCase)) return false;
@@ -865,6 +1140,24 @@ public static class InstalledScanner
             string name = Normalize(label);
             if (SupportFolders.Contains(name)) return;
             lookups.TryGetValue(name, out var ids);
+            if (ids != null && ids.Any(identity => DockerScripts.IsVersionedInstallFolder(identity.Id, label))
+                && !ids.Any(identity => DockerScripts.IsVersionedInstallFolder(identity.Id, label)
+                    && IsValidVersionedCompletionMarker(Path.Combine(folder, DockerScripts.CompletionMarkerName), identity.Id)))
+            {
+                result.Notices.Add(label + ": digest-scoped installation has no valid exact operation receipt; it was not marked installed.");
+                return;
+            }
+            // A saved custom launcher can live in a catalog-ID folder even
+            // when automatic executable selection deliberately excludes it.
+            foreach (var identity in ids ?? Array.Empty<(string Id, string Name)>())
+                if (label.Equals(identity.Id, StringComparison.OrdinalIgnoreCase) ||
+                    (DockerIdentity.Valid(identity.Id) && (label.Equals(DockerScripts.InstallFolder(identity.Id), StringComparison.OrdinalIgnoreCase)
+                        || DockerScripts.IsVersionedInstallFolder(identity.Id, label))))
+                    result.ExplicitCatalogFolders.Add((identity.Id, folder));
+            // Filesystem location is independent of catalog-title ambiguity.
+            // Retain it for already chosen launchers without assigning a game ID.
+            var candidates = FindGameExecutables(folder, cancellation).ToList();
+            foreach (string executable in candidates) result.ExecutableFolders.Add((executable, folder));
             if (ids is { Length: > 1 })
             {
                 // Windows spelling alone cannot identify case-distinct Docker catalog entries.
@@ -875,7 +1168,6 @@ public static class InstalledScanner
             if (local && !includeLocal) return;
             if (!local)
                 foreach (var catalogGame in ids!) result.CatalogFoldersPresent.Add(catalogGame.Id);
-            var candidates = FindGameExecutables(folder, cancellation).ToList();
             if (candidates.Count == 0)
             {
                 if (!local) result.Notices.Add(label + ": no Windows game executable was found; support utilities were excluded.");

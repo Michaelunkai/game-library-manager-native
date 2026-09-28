@@ -33,13 +33,15 @@ internal sealed class FrozenProcessRecord
     internal string CreationStamp { get; }
     internal string State { get; }
     internal string Mode { get; }
+    internal long WindowHandle { get; }
 
-    internal FrozenProcessRecord(int processId, string creationStamp, string state, string mode)
+    internal FrozenProcessRecord(int processId, string creationStamp, string state, string mode, long windowHandle = 0)
     {
         ProcessId = processId;
         CreationStamp = FrozenProcessIdentity.NormalizeCreationStamp(creationStamp);
         State = state.Trim();
         Mode = mode.Trim();
+        WindowHandle = windowHandle;
     }
 
     // AHK keeps a record while it stabilizes a resumed window, but the process
@@ -75,6 +77,19 @@ internal readonly record struct FrozenProcessReadResult(bool IsAvailable, bool I
 
 internal static class FrozenProcessState
 {
+    internal static IntPtr FindWindowHandle(string? path, int processId, string creationStamp)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return IntPtr.Zero;
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        string normalized = FrozenProcessIdentity.NormalizeCreationStamp(creationStamp);
+        long[] handles = Parse(reader.ReadToEnd()).Processes
+            .Where(record => record.ProcessId == processId && record.CreationStamp == normalized && record.WindowHandle > 0)
+            .Select(record => record.WindowHandle).Distinct().ToArray();
+        if (handles.Length > 1) throw new InvalidDataException("AHK has multiple windows for the selected process identity.");
+        return handles.Length == 1 ? new IntPtr(handles[0]) : IntPtr.Zero;
+    }
+
     internal static FrozenProcessReadResult Read(string? path, IEnumerable<FrozenProcessIdentity> identities)
     {
         if (string.IsNullOrWhiteSpace(path)) return new(true, false, null);
@@ -140,7 +155,11 @@ internal static class FrozenProcessState
                 || string.IsNullOrWhiteSpace(state))
                 throw new FormatException("FrozenProcess" + index + " has incomplete identity data.");
             section.TryGetValue("Mode", out var mode);
-            records.Add(new FrozenProcessRecord(pid, created, state, mode ?? string.Empty));
+            long hwnd = 0;
+            if (section.TryGetValue("Hwnd", out var hwndText) &&
+                (!long.TryParse(hwndText, NumberStyles.Integer, CultureInfo.InvariantCulture, out hwnd) || hwnd < 0))
+                throw new FormatException("FrozenProcess" + index + " has an invalid window handle.");
+            records.Add(new FrozenProcessRecord(pid, created, state, mode ?? string.Empty, hwnd));
         }
         return new FrozenProcessSnapshot(count, records);
     }
@@ -185,5 +204,12 @@ internal sealed class ActivePlaytime
             activeSeconds += (timestamp - lastTimestamp) / (double)frequency;
         lastTimestamp = timestamp;
         IsPaused = paused;
+    }
+
+    internal void Hold(long timestamp)
+    {
+        // A missing AHK state is neither proof of running nor proof of pause.
+        // Advance the observation clock without attributing this interval.
+        if (timestamp >= lastTimestamp) lastTimestamp = timestamp;
     }
 }

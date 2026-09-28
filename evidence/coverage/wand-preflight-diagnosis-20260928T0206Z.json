@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "preflightAtUtc": "2026-09-28T02:02:23.2536872Z",
+  "package": "F:\\study\\repos\\game-library-manager-native\\evidence\\reliability-20260927T134422Z\\stage\\package-wand-once-20260928T0158Z",
+  "exeSha256": "1BADF366EC4A8FDEC772863F6007AAB776D2EE892C6C70D41A1425F9224312BA",
+  "helperSha256": "18260525C65342C447083F2128228D9897E4E88DBEE60B9450E4F15BBA6E83B9",
+  "preflight": {
+    "state": "unknown",
+    "exitCode": 3,
+    "reason": "trainer-state-unavailable-before-navigation",
+    "playDispatched": false,
+    "navigated": false
+  },
+  "cdpProbe": {
+    "versionReachable": false,
+    "targetListError": "HttpRequestException: actively refused 127.0.0.1:9222",
+    "targetListReachable": false,
+    "versionError": "HttpRequestException: actively refused 127.0.0.1:9222",
+    "atUtc": "2026-09-28T02:06:06.1994517Z",
+    "tabCount": null
+  },
+  "processSnapshot": {
+    "atUtc": "2026-09-28T02:05:00.9548434Z",
+    "port9222ListenerCount": 0,
+    "wandOrWeModProcessCount": 0
+  },
+  "topHat": {
+    "atUtc": "2026-09-28T02:05:46.6911584Z",
+    "directoryExists": true,
+    "fileCount": 0,
+    "directory": "C:\\Users\\Admin\\AppData\\Local\\Wand\\logs\\tophat"
+  },
+  "sourceBehavior": {
+    "coldStartBranch": "launches with --remote-debugging-port=9222 and --remote-debugging-address=127.0.0.1",
+    "interpretation": "No authoritative idle or busy signal was available because there was no CDP endpoint or current trainer trace. Treat as unknown; do not fail open or restart Wand.",
+    "alreadyRunningBranch": "waits 2 seconds and tests process visibility; does not add remote-debugging flags",
+    "statusChannel": "wand_trainer_status.js queries CDP /json/list and read-only in-memory trainerService state",
+    "ensureWandMethod": "native/WandIntegration.cs:1439"
+  }
+}

@@ -59,6 +59,14 @@ try {
         } finally { $archive.Dispose() }
     }
     (Get-FileHash -LiteralPath (Join-Path $nativeRoot 'Assets\catalog.zip') -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -LiteralPath (Join-Path $nativeRoot 'Assets\catalog.sha256') -Encoding ASCII
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $verifyArchive = [IO.Compression.ZipFile]::OpenRead((Join-Path $nativeRoot 'Assets\catalog.zip'))
+    try {
+        $verifyCount = @($verifyArchive.Entries).Count
+        if ($verifyCount -lt 1000) { throw ('The packaged catalog is incomplete: ' + $verifyCount + ' entries.') }
+        Write-Output ('Verified packaged catalog: ' + $verifyCount + ' entries')
+    } finally { $verifyArchive.Dispose() }
     $selfContained = 'true'
     if ($FrameworkDependent) { $selfContained = 'false' }
     $usingDefaultDistributionRoot = [string]::IsNullOrWhiteSpace($DistributionRoot)
@@ -87,6 +95,8 @@ try {
     $requiredTools = @(
         (Join-Path $publishedTools 'wemod_add_custom_install.js'),
         (Join-Path $publishedTools 'wand_cdp_launch.js'),
+        (Join-Path $publishedTools 'wand_trainer_status.js'),
+        (Join-Path $publishedTools 'wand_tophat_evidence.js'),
         (Join-Path $publishedTools 'wand-supported-games.json'),
         (Join-Path $publishedTools 'wand-runtime\classic-level\prebuilds\win32-x64\classic-level.node'),
         (Join-Path $publishedTools 'node\node.exe')

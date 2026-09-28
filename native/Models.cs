@@ -20,9 +20,18 @@ public sealed class Game : INotifyPropertyChanged
     public string Description { get; set; } = "";
     public string Details { get; set; } = "";
     public double Time { get; set; }
+    [JsonIgnore] public DateTime TimeVerifiedAt { get; set; }
     [JsonIgnore] public double SizeGb { get; set; }
+    [JsonIgnore] public double DiskRequirementGb { get; set; }
+    [JsonIgnore] public string InstalledStorageLabel { get; set; } = "";
+    [JsonIgnore] public string InstalledStorageDetail { get; set; } = "";
     [JsonIgnore] public bool Discovered { get; set; }
     [JsonIgnore] public bool IsLocal { get; set; }
+    [JsonIgnore] public bool IsNonGame { get; set; }
+    [JsonIgnore] public bool RequiresGameIdentity => DockerIdentity.RequiresGameIdentity(Id);
+    [JsonIgnore] public string MetadataLookupTitle { get; set; } = "";
+    [JsonIgnore] public int MetadataSteamAppId { get; set; }
+    [JsonIgnore] public bool MetadataIdentityConflict { get; set; }
     [JsonIgnore] public DateTime Added { get; set; }
     [JsonIgnore] public string Cover { get; set; } = "";
     [JsonIgnore] public string CategoryName { get; set; } = "";
@@ -31,19 +40,36 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public DateTime LastPlayedUtc { get; set; }
     [JsonIgnore] public bool IsPlaying { get; set; }
     [JsonIgnore] public bool IsPlayPaused { get; set; }
+    [JsonIgnore] public bool IsPauseStateUnknown { get; set; }
+    [JsonIgnore] public string ProgressLabel { get; set; } = "";
+    [JsonIgnore] public string ProgressDetail { get; set; } = "";
     // This is deliberately an exact, locally verified Wand registration rather
     // than a broad catalog match. The UI must never advertise a mod launch for
     // a game that Wand does not already know at this executable path.
     [JsonIgnore] public bool CanPlayWithWand { get; set; }
     [JsonIgnore] public string PlayLabel => IsPlaying ? "●  Playing" : "▶  Play";
+    [JsonIgnore] public string PauseLabel => IsPauseStateUnknown ? "Pause status unknown" : IsPlayPaused ? "Resume" : "Pause";
     [JsonIgnore] public string PlayedMeta => IsPlaying
-        ? (IsPlayPaused ? $"Paused · {PlayedHours:0.0} h · timing held" : $"Playing · {PlayedHours:0.0} h")
+        ? (IsPauseStateUnknown ? $"Pause state unknown · {PlayedHours:0.0} h · timing held"
+            : IsPlayPaused ? $"Paused · {PlayedHours:0.0} h · timing held" : $"Playing · {PlayedHours:0.0} h")
         : PlayedHours > 0 ? $"Played {PlayedHours:0.0} h" : "Not played";
     [JsonIgnore] public bool ShowTime { get; set; } = true;
     [JsonIgnore] public bool ShowCategory { get; set; } = true;
     [JsonIgnore] public double CoverHeight { get; set; } = 98;
     [JsonIgnore] public double CoverWidth => CoverHeight * 0.735;
-    [JsonIgnore] public string Meta => string.Join("  ·  ", new[] { ShowCategory ? CategoryName : "", ShowTime ? (Time > 0 ? $"~{Time:0.#} h" : "Time unknown") : "", SizeGb > 0 ? $"{SizeGb:0.##} GB" : "Size unknown" }.Where(s => s.Length > 0));
+    [JsonIgnore] internal IReadOnlyList<Game> SourceRecords { get; set; } = Array.Empty<Game>();
+    [JsonIgnore] internal Game? ActionTarget { get; set; }
+    [JsonIgnore] internal Game? PublishedRepresentative { get; set; }
+    [JsonIgnore] internal bool PublicationFreshnessVerified { get; set; }
+    [JsonIgnore] internal string CanonicalCardId { get; set; } = "";
+    [JsonIgnore] internal IReadOnlyList<string> IdentityRelationshipReasons { get; set; } = Array.Empty<string>();
+    [JsonIgnore] internal List<(Game Source, PropertyChangedEventHandler Handler)> ProjectionSubscriptions { get; } = new();
+    [JsonIgnore] internal string ProjectionVersionLabel => SourceRecords.Count > 1 && PublishedRepresentative is { DockerImage.Length: > 0 } published
+        ? (PublicationFreshnessVerified ? $"Latest published image: {published.DockerImage}" : $"Published image candidate: {published.DockerImage} (freshness unverified)")
+            + (string.Equals(published.Name, Name, StringComparison.Ordinal) ? "" : $" · Published title: {published.Name}")
+            + (string.Equals(published.Id, Id, StringComparison.Ordinal) ? "" : $" · Play/save target remains {Id}")
+        : "";
+    [JsonIgnore] public string Meta => string.Join("  ·  ", new[] { ShowCategory ? CategoryName : "", RequiresGameIdentity ? "Game identity not verified" : IsNonGame ? "Utility / backup" : ShowTime ? (Time > 0 ? $"~{Time:0.#} h" + (TimeVerifiedAt == default ? " (unverified estimate)" : "") : "No sourced completion time") : "", DiskRequirementGb > 0 ? $"{DiskRequirementGb:0.##} GB disk required" : SizeGb > 0 ? $"{SizeGb:0.##} GB download" : "No published size data", ProjectionVersionLabel }.Where(s => s.Length > 0));
     [JsonIgnore] public string Initial => string.IsNullOrWhiteSpace(Name) ? "G" : Name[..1].ToUpperInvariant();
     [JsonIgnore] public string RatingLabel => Rating > 0 ? new string('★', Rating) + new string('☆', 5 - Rating) : "☆☆☆☆☆";
     [JsonIgnore] public string WishlistLabel => Wishlisted ? "♥ Saved" : "♡ Save";
@@ -85,10 +111,19 @@ public sealed class Preferences
     public string LastTab { get; set; } = "all";
     public double WindowWidth { get; set; } = 1440;
     public double WindowHeight { get; set; } = 900;
+    public string WindowMonitorDeviceName { get; set; } = "";
+    public int WindowBoundsLeftPixels { get; set; }
+    public int WindowBoundsTopPixels { get; set; }
+    public int WindowBoundsWidthPixels { get; set; }
+    public int WindowBoundsHeightPixels { get; set; }
+    public bool ShowHiddenCategories { get; set; }
 }
 
 public sealed class UserState
 {
+    // Keep older/newer profile fields across releases, even when this build
+    // does not consume them (for example legacy installed-size measurements).
+    [JsonExtensionData] public Dictionary<string, JsonElement>? AdditionalData { get; set; }
     public int SchemaVersion { get; set; } = 1;
     public Preferences Settings { get; set; } = new();
     public HashSet<string> Wishlist { get; set; } = new(StringComparer.Ordinal);
@@ -96,10 +131,25 @@ public sealed class UserState
     public Dictionary<string, int> Ratings { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, List<string>> GameTags { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, string> LaunchPaths { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> InstallationFolders { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> PendingGameBackups { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PlayTimeSeconds { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DateTime> LastPlayedUtc { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LocalGame> LocalGames { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, LocalGame> WandGames { get; set; } = new(StringComparer.Ordinal);
     public List<PendingEdit> Pending { get; set; } = new();
+    [JsonConverter(typeof(ExactIdentityJsonObjectConverter))]
+    public JsonObject LocalCatalog { get; set; } = new();
+}
+
+// Property names on a model can be case-insensitive; dictionary game IDs
+// cannot. JsonNode otherwise inherits the serializer's case-insensitive option
+// and rejects valid legacy IDs such as AgainsttheStorm / againstthestorm.
+public sealed class ExactIdentityJsonObjectConverter : JsonConverter<JsonObject>
+{
+    public override JsonObject? Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+        => JsonNode.Parse(ref reader, new JsonNodeOptions { PropertyNameCaseInsensitive = false })?.AsObject();
+    public override void Write(Utf8JsonWriter writer, JsonObject value, JsonSerializerOptions options) => value.WriteTo(writer);
 }
 
 public sealed class PendingEdit

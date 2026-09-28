@@ -1,52 +1,103 @@
 # Game Library Manager Native
 
-This project contains the native Windows WPF build of Game Library Manager.
-It is the desktop executable lane, separate from the related web repository.
+A native Windows 11 WPF desktop application for managing your Docker-backed game
+library. It tracks installed games, downloads and extracts them from Docker Hub
+with live progress, organizes categories/tags/wishlist, and launches games
+directly or through the WeMod/Wand trainer app.
 
-## Run the verified bundle
+## Install — download the release
+
+Grab the latest release asset **`GameLibrary-windows-x64.zip`** from
+[GitHub Releases](https://github.com/Michaelunkai/game-library-manager-native/releases)
+and extract it anywhere (for example `C:\Games\GameLibrary`). Then run:
 
 ```powershell
-F:\study\repos\game-library-manager-native\dist\GameLibrary.exe
+C:\Games\GameLibrary\GameLibrary.exe
 ```
 
-The direct launch is the supported route: it selects the adjacent F-drive
-`data\` profile automatically and keeps the window on the secondary display
-when that display is available; startup placement is normalized after WPF
-restores any stale Windows placement. The adjacent native WPF runtime DLLs and
-`dist\tools` directory are part of the self-contained package; no native
-runtime extraction to the user's TEMP directory is required. `--offline`
-remains available for a no-network session, and `--main-monitor` is available
-when the primary display is explicitly wanted.
+- The executable is **self-contained** — no .NET runtime or Node install is
+  required. The adjacent WPF runtime DLLs and the `tools\` folder are part of
+  the bundle, so keep the whole extracted folder together.
+- On first launch it creates a `data\` folder next to the executable and loads
+  the bundled 1,179-game catalog (covers included). No install wizard or
+  admin rights are required.
+- `--offline` starts a no-network session; `--main-monitor` forces the primary
+  display.
+- Download a game's image from Docker Hub to install it into your chosen
+  library folder; the durable install terminal shows live byte progress and
+  percentages for every command and finishes with extraction and verification.
+
+## Build from source
+
+Requirements: .NET 10 SDK and Docker Desktop.
+
+```powershell
+cd native
+# publishes a self-contained x64 bundle into native\dist (GameLibrary.exe,
+# runtime DLLs, and tools\)
+.\build.ps1
+```
+
+The build also bundles `public\data` + `public\images` into
+`native\Assets\catalog.zip` and copies the Wand bridge runtime. Run the full
+verification against the exact executable with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File native\verify-reliability.ps1 `
+  -ExePath native\dist\GameLibrary.exe -EvidenceRoot evidence\verification -Phase Target
+```
+
+The legacy `dist\GameLibrary.exe` path (used by a `GameL` PowerShell alias) is a
+compatibility launcher that forwards to `native\dist\GameLibrary.exe`.
 
 ## Project layout
 
-- `native\` — C# WPF source, build scripts, acceptance checks, and tests.
-- `public\` — catalog source used by the native build.
-- `dist\` — verified runnable Windows x64 bundle (kept outside Git history).
-- `data\` — F-drive runtime catalog, cache, state, and job receipts (kept
-  outside Git history).
-- `evidence\` — small verification receipts from the completed acceptance
-  run.
+- `native\` — C# WPF source, build scripts, acceptance checks, and self-tests.
+- `public\` — catalog source (games, times, sizes, covers) bundled by the build.
+- `native\dist\` — current runnable Windows x64 bundle (outside Git history).
+- `dist\GameLibrary.exe` — compatibility launcher for existing commands.
+- `launcher\` — forwarding-launcher source, build script and process tests.
+- `data\` — runtime catalog, cache, state, and install-job receipts (outside Git
+  history; created automatically beside the executable).
+- `docs\` — acceptance audits and reliability notes.
+- `evidence\` — small verification receipts (large local test output is ignored).
 
-## Verification receipt
+## Current build verification
 
-`evidence\self-test-final-20260910.json` records 69 passing diagnostic
-checks with zero failures. The fresh external WPF UI proof records 31
-passing checks, and the WPF pause proof records 29 passing checks including
-an actual AHK-format pause/resume fixture. The final source executable was
-copied into `dist\GameLibrary.exe` and retains its SHA-256 identity:
+- Deployed SHA-256:
+  `DE9EEAC8ED5FFC7F649D215D3418CEA5BC2BD9FDC79D13E02B69A0F852E794BC`
+- Core self-test: **150 / 150** (metadata identity, classification, save/restore,
+  durable install concurrency, Wand dispatch, live progress parsing).
+- Reliability target suite: **12 / 12** (package manifest, self-test, storage/sync,
+  install-job, UI, native pause, Reass restore, progress helper, Wand Node fixtures).
+- Live durable installs stream real byte progress (`x/y B (0.000%)`) straight
+  from the Docker Engine API, so a percentage never sits flat while a layer
+  downloads; stalled pulls restart automatically and a fully downloaded image is
+  never killed during extraction.
 
-`4DAF00CF10CBABA8EB572E15EE43534C5DC091E14D3393847794C42F50DAD992`
+### Recent reliability work
 
-The final executable is 460,153,704 bytes and embeds the complete catalog
-payload: 1,179 games and 2,028 cached covers. The pause proof recorded
-`activeBeforePause=1.41`, `pausedDelta=0.00`, and `resumedDelta=1.64` seconds
-against `F:\study\Platforms\windows\autohotkey\mymainahk\frozen-processes.ini`.
-The live verification located its window on the non-primary display. Install
-requests are exact game/destination reservations with cross-process lock files,
-so repeated requests do not write the same game folder concurrently while
-independent destinations remain parallel.
+- **Durable installs**: every game installs into its own digest-scoped folder;
+  many games install concurrently; an interrupted stage auto-resumes; a lost
+  extraction container is recreated; the terminal shows continuous byte/percent
+  progress and never freezes on a percentage.
+- **Play with Wand**: every eligible game sends an exact-game `wemod://play`
+  handoff whenever the CDP route does not confirm a dispatch — another game's
+  busy trainer, an unreachable CDP endpoint, or an already-running game no longer
+  blocks a launch, and re-clicks attach the running game's trainer.
+- **Responsiveness**: the catalog JSON is parsed once and cached, file-existence
+  checks are cached, and the identity projection is reused across pure view
+  changes, so startup, every keystroke, and the periodic refresh stay smooth.
+- **Metadata**: exact-title/Steam/GOG identity, sourced completion hours, and
+  artwork come from corroborated sources; ambiguous numeric tags are never
+  mislabeled as games.
+- **Backup/restore**: save detection and restore reject shared/registry roots and
+  verify payload hashes; no live saves are overwritten by automated checks.
 
-The root bundle and the build-output bundle were synchronized by checksum
-after the final tests. The app was then launched from the root bundle and
-verified responding on the non-primary display.
+## Acceptance status
+
+Full acceptance is **not** treated as finished for every external guarantee
+(universal availability of remote services, campaign-progress denominators for
+every game, and all possible hardware/network conditions). Remaining gaps are
+recorded in [the current acceptance audit](docs/acceptance-current.md). The
+native application itself is rebuilt, deployed, and verified in this repository.

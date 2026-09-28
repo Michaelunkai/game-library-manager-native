@@ -36,7 +36,75 @@ public static class DockerScripts
         string identity = id + "\0" + canonicalDestination;
         return "glm-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant()[..24];
     }
-    public static string InstallFolder(string id) => id + "-" + ContainerName(id)[4..12];
+    public static string InstallFolder(string id)
+    {
+        if (!DockerIdentity.IsQualified(id)) return id + "-" + ContainerName(id)[4..12];
+        if (!DockerIdentity.TryParse(id, out string repository, out string tag)) throw new ArgumentException("Invalid Docker identity.");
+        string label = repository.Replace('/', '-') + "-" + tag;
+        return "docker-" + label[..Math.Min(label.Length, 90)] + "-" + ContainerName(id)[4..];
+    }
+    internal static string VersionedInstallFolder(string sourceGameId, string digest)
+    {
+        if (!DockerIdentity.Valid(sourceGameId)) throw new ArgumentException("Invalid source game identity.", nameof(sourceGameId));
+        if (!System.Text.RegularExpressions.Regex.IsMatch(digest, @"\Asha256:[0-9a-f]{64}\z", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+            throw new ArgumentException("Invalid image digest.", nameof(digest));
+        string legacy = InstallFolder(sourceGameId);
+        return legacy[..Math.Min(legacy.Length, 128)] + "-sha256-" + digest[7..].ToLowerInvariant();
+    }
+    internal static bool IsVersionedInstallFolder(string sourceGameId, string folderName)
+    {
+        if (!DockerIdentity.Valid(sourceGameId) || string.IsNullOrWhiteSpace(folderName)) return false;
+        string prefix = VersionedFolderPrefix(sourceGameId);
+        if (!folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+        string digest = folderName[prefix.Length..];
+        return System.Text.RegularExpressions.Regex.IsMatch(digest, @"\A[0-9a-f]{64}\z", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    }
+    private static string VersionedFolderPrefix(string sourceGameId)
+    {
+        if (!DockerIdentity.Valid(sourceGameId)) throw new ArgumentException("Invalid source game identity.", nameof(sourceGameId));
+        string legacy = InstallFolder(sourceGameId);
+        return legacy[..Math.Min(legacy.Length, 128)] + "-sha256-";
+    }
+    internal static InstallJobRecord CreateInstallJobRecord(
+        Game game,
+        Preferences settings,
+        string canonicalGameId,
+        string destinationPath,
+        string? dockerContext = null,
+        string? dockerHost = null,
+        IEnumerable<string>? relatedSourceGameIds = null,
+        string? operationId = null,
+        string? executionTarget = null)
+    {
+        if (game == null) throw new ArgumentNullException(nameof(game));
+        if (settings == null) throw new ArgumentNullException(nameof(settings));
+        if (string.IsNullOrWhiteSpace(canonicalGameId)) throw new ArgumentException("A canonical game identity is required.", nameof(canonicalGameId));
+        if (!DockerIdentity.TryParse(game.Id, out string repository, out string tag)) throw new ArgumentException("The selected game has no valid Docker source identity.", nameof(game));
+        _ = DockerIdentity.Image(game, settings);
+        string id = string.IsNullOrWhiteSpace(operationId) ? Guid.NewGuid().ToString("N") : InstallJobStore.ValidateOperationId(operationId);
+        string destination = Path.GetFullPath(destinationPath.Trim());
+        string staging = Path.Combine(destination, StagingDirectoryName, InstallFolder(game.Id) + "-" + id);
+        string installedPath = Path.Combine(destination, InstallFolder(game.Id));
+        string[] sourceIds = (relatedSourceGameIds ?? new[] { game.Id }).Append(game.Id).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal).ToArray();
+        return new InstallJobRecord
+        {
+            OperationId = id,
+            CanonicalGameId = canonicalGameId,
+            SourceGameId = game.Id,
+            SourceGameIds = sourceIds.ToList(),
+            ImageRepository = repository,
+            ImageTag = tag,
+            DestinationPath = destination,
+            StagingPath = staging,
+            InstalledPath = installedPath,
+            DockerContext = dockerContext?.Trim() ?? "",
+            DockerHost = dockerHost?.Trim() ?? "",
+            ShellTarget = string.IsNullOrWhiteSpace(executionTarget) ? InstallWorkerCapability.NativeWindowsTarget : executionTarget.Trim(),
+            OwnedContainerName = ContainerNameForDestination(game.Id, destination)
+        };
+    }
+
+    internal static string OwnedContainerInspectFormat => "{{.Id}}|{{json .Config.Labels}}";
     internal static string InstallLockPath(string destination, string gameId) => Path.Combine(Path.GetFullPath(destination), ".gamelibrarymanager-locks", ContainerNameForDestination(gameId, destination) + ".lock");
     internal static string InstallWorkKey(string destination, string gameId)
     {
@@ -81,7 +149,7 @@ public static class DockerScripts
         foreach (var game in games)
         {
             if (game.IsLocal || game.Id.StartsWith("local:", StringComparison.Ordinal)) throw new ArgumentException(game.Name + " was found on this PC and has no Docker image. Open Details to play it; select catalog games for Docker scripts.");
-            if (!ValidTag(game.Id)) throw new ArgumentException("Invalid Docker tag: " + game.Id);
+            _ = DockerIdentity.Image(game, settings);
         }
     }
     internal static Game[] DistinctGames(IEnumerable<Game> selected)
@@ -124,7 +192,7 @@ public static class DockerScripts
         {
             index++;
             string destinationPath = Path.GetFullPath(settings.MountPath);
-            string name = ContainerNameForDestination(game.Id, destinationPath), image = settings.DockerUsername + "/" + settings.RepoName + ":" + game.Id;
+            string name = ContainerNameForDestination(game.Id, destinationPath), image = DockerIdentity.Image(game, settings);
             string ownership = OwnershipMetadata(game.Id);
             lines.Add("Write-Output ((Get-Date -Format o) + " + PsQuote(" GAME " + index + "/" + games.Length + " · " + (stop ? "Stopping " : "Downloading ") + game.Name) + ")");
             string lockPath = ".gamelibrarymanager-locks\\" + name + ".lock";
@@ -246,7 +314,7 @@ public static class DockerScripts
             }
             else
             {
-            var image = ShQuote(settings.DockerUsername + "/" + settings.RepoName + ":" + game.Id);
+            var image = ShQuote(DockerIdentity.Image(game, settings));
             lines.Add("  pull_success=0; for attempt in 1 2 3 4 5; do if docker info >/dev/null 2>&1 && docker pull " + image + "; then pull_success=1; break; fi; echo \"[RETRY $attempt/5] Pull failed; waiting before retry...\"; sleep $((attempt * 2)); done");
             lines.Add("  if [ $pull_success -ne 1 ]; then echo " + ShQuote("Docker pull failed for " + game.Name + " after five attempts.") + " >&2; exit 1; fi");
             var folderName = InstallFolder(game.Id);

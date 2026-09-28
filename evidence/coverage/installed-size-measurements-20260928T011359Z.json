@@ -1,0 +1,1072 @@
+{
+  "schemaVersion": 1,
+  "auditId": "metadata-coverage-20260928T002842Z",
+  "startedUtc": "2026-09-28T01:14:39.4313304Z",
+  "finishedUtc": "2026-09-28T01:15:12.0288366Z",
+  "status": "completed",
+  "measurementKind": "Logical installed file bytes",
+  "readOnly": true,
+  "atomicSnapshot": false,
+  "processPriority": "BelowNormal",
+  "scannerSource": {
+    "relativePath": "native/InstalledStorage.cs",
+    "sha256": "9139E6FACD4DF79C2FE1A8733F502D44109ED491A1885641AF787BA53721CCB4"
+  },
+  "inputs": {
+    "statePath": "data/state.json",
+    "stateSha256Before": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+    "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+    "metadataPath": "data/cache/metadata.json",
+    "metadataSha256Before": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D",
+    "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+  },
+  "limits": {
+    "maxDurationSeconds": 30,
+    "maxFiles": 1000000,
+    "maxEntries": 2000000,
+    "maxDepth": 128
+  },
+  "stopPolicy": {
+    "minAvailableCommitBytes": 12884901888,
+    "maxAvailableCommitDropBytes": 4294967296,
+    "minAvailablePhysicalBytes": 25769803776,
+    "maxAvailablePhysicalDropBytes": 8589934592
+  },
+  "deltaruneBefore": {
+    "pid": 2212,
+    "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+    "cpuSeconds": 2605.484375,
+    "workingSetBytes": 170602496
+  },
+  "deltaruneAfter": {
+    "pid": 2212,
+    "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+    "cpuSeconds": 2637.171875,
+    "workingSetBytes": 170602496
+  },
+  "baselineMemory": {
+    "availableCommitBytes": 20797181952,
+    "availablePhysicalBytes": 51548749824,
+    "availableCommitGb": 19.37,
+    "availablePhysicalGb": 48.01
+  },
+  "finalMemory": {
+    "availableCommitBytes": 22404284416,
+    "availablePhysicalBytes": 53939449856,
+    "availableCommitGb": 20.87,
+    "availablePhysicalGb": 50.24
+  },
+  "stopReason": null,
+  "targets": [
+    {
+      "id": "dragonquestviireimagined",
+      "rootPathSha256": "7DAAB74871298297189C80C80EA85F797770CF536C435FD312254254054E422D",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 5799269853,
+      "fileCount": 596,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:39.8816493Z",
+      "elapsedMilliseconds": 316,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 20735283200,
+        "availablePhysicalBytes": 51457622016,
+        "availableCommitGb": 19.31,
+        "availablePhysicalGb": 47.92
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 20651339776,
+        "availablePhysicalBytes": 51318042624,
+        "availableCommitGb": 19.23,
+        "availablePhysicalGb": 47.79
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2605.609375,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2605.796875,
+        "workingSetBytes": 168529920
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "legendoftianding",
+      "rootPathSha256": "063F9C631FE94143488CCBA44DF66B1657B51CD747734C936DB00BE7636A1E80",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 1306316368,
+      "fileCount": 747,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:40.0982401Z",
+      "elapsedMilliseconds": 151,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 20643176448,
+        "availablePhysicalBytes": 51497160704,
+        "availableCommitGb": 19.23,
+        "availablePhysicalGb": 47.96
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 20999393280,
+        "availablePhysicalBytes": 51801395200,
+        "availableCommitGb": 19.56,
+        "availablePhysicalGb": 48.24
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2605.828125,
+        "workingSetBytes": 168529920
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2605.9375,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "local:c41be61017ac8c501160ad90ed5c755e13c15bcebea19a3a8c2fde427dea7db9",
+      "rootPathSha256": "C41BE61017AC8C501160AD90ED5C755E13C15BCEBEA19A3A8C2FDE427DEA7DB9",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 112335764506,
+      "fileCount": 445,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:40.6325902Z",
+      "elapsedMilliseconds": 472,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 21046005760,
+        "availablePhysicalBytes": 51830407168,
+        "availableCommitGb": 19.6,
+        "availablePhysicalGb": 48.27
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 20983848960,
+        "availablePhysicalBytes": 51666423808,
+        "availableCommitGb": 19.54,
+        "availablePhysicalGb": 48.12
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2605.96875,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2606.390625,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "wand:27643",
+      "rootPathSha256": "11C7869DEB1508CCA5EED31643C7DA575418B27E9BCE4C1BF32C5CE3E9677000",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 8811742228,
+      "fileCount": 62,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:40.713022Z",
+      "elapsedMilliseconds": 34,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 20967952384,
+        "availablePhysicalBytes": 51645489152,
+        "availableCommitGb": 19.53,
+        "availablePhysicalGb": 48.1
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 20953776128,
+        "availablePhysicalBytes": 51629641728,
+        "availableCommitGb": 19.51,
+        "availablePhysicalGb": 48.08
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2606.421875,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2606.453125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "deathsgambitafterlifedeathsgambitAfterlife",
+      "rootPathSha256": "2F70010546108F5738FE0550A64F1588F20E3478B9E17C30473DAF8352DC6D9B",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 1428965340,
+      "fileCount": 3787,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:43.7136018Z",
+      "elapsedMilliseconds": 2940,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 20937326592,
+        "availablePhysicalBytes": 51609030656,
+        "availableCommitGb": 19.5,
+        "availablePhysicalGb": 48.06
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 21467574272,
+        "availablePhysicalBytes": 52047888384,
+        "availableCommitGb": 19.99,
+        "availablePhysicalGb": 48.47
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2606.46875,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.078125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "islets",
+      "rootPathSha256": "D85A0B7BEE3BDB5EB42AB29B796BE1D6E35AEA3C5FC500578FAE3D3469497B64",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 551290457,
+      "fileCount": 46,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:43.7752319Z",
+      "elapsedMilliseconds": 11,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 21469052928,
+        "availablePhysicalBytes": 52040650752,
+        "availableCommitGb": 19.99,
+        "availablePhysicalGb": 48.47
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 21459554304,
+        "availablePhysicalBytes": 52028497920,
+        "availableCommitGb": 19.99,
+        "availablePhysicalGb": 48.46
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.171875,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.1875,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "TailsofIron",
+      "rootPathSha256": "858102BDC3FC26CAD3350B9E3F2108E5A8D1CACBB415B3726598EB0F2244F9DF",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 1694422465,
+      "fileCount": 632,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:43.842097Z",
+      "elapsedMilliseconds": 27,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 21457227776,
+        "availablePhysicalBytes": 52018978816,
+        "availableCommitGb": 19.98,
+        "availablePhysicalGb": 48.45
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 21455486976,
+        "availablePhysicalBytes": 51999297536,
+        "availableCommitGb": 19.98,
+        "availablePhysicalGb": 48.43
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.203125,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.234375,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "theelderscrollsivoblivionremastered",
+      "rootPathSha256": "929BA8A5F6F8800F55E38458277B1DCACDE2638EC3AEA2ACF703DD3A3CE93433",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 133403507170,
+      "fileCount": 602,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:44.3988452Z",
+      "elapsedMilliseconds": 508,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 21467365376,
+        "availablePhysicalBytes": 52006776832,
+        "availableCommitGb": 19.99,
+        "availablePhysicalGb": 48.44
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22173609984,
+        "availablePhysicalBytes": 52790386688,
+        "availableCommitGb": 20.65,
+        "availablePhysicalGb": 49.16
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.28125,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.828125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "RedDeadRedemption",
+      "rootPathSha256": "E73B631EB274C8B7F60159B9D6E1686761B3C0C622B4E9DE3D2C6642BCD6B131",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 1208059217,
+      "fileCount": 95,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:44.4527199Z",
+      "elapsedMilliseconds": 6,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22193893376,
+        "availablePhysicalBytes": 52805091328,
+        "availableCommitGb": 20.67,
+        "availablePhysicalGb": 49.18
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22187790336,
+        "availablePhysicalBytes": 52798111744,
+        "availableCommitGb": 20.66,
+        "availablePhysicalGb": 49.17
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.859375,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.875,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "local:4817f08444c5494d3a8bf9fede74d30291cca8d94c742747bca0ff4f69365859",
+      "rootPathSha256": "4817F08444C5494D3A8BF9FEDE74D30291CCA8D94C742747BCA0FF4F69365859",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 58556368225,
+      "fileCount": 335,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:44.6534375Z",
+      "elapsedMilliseconds": 162,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22182645760,
+        "availablePhysicalBytes": 52788334592,
+        "availableCommitGb": 20.66,
+        "availablePhysicalGb": 49.16
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22175649792,
+        "availablePhysicalBytes": 52769701888,
+        "availableCommitGb": 20.65,
+        "availablePhysicalGb": 49.15
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2609.90625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.0625,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "local:605b7453a6c8a0f390395155d5f47a6d52b403ddfa675de7b6f390b53a575c89",
+      "rootPathSha256": "605B7453A6C8A0F390395155D5F47A6D52B403DDFA675DE7B6F390B53A575C89",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 22981333008,
+      "fileCount": 21,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:44.752866Z",
+      "elapsedMilliseconds": 61,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22173474816,
+        "availablePhysicalBytes": 52764368896,
+        "availableCommitGb": 20.65,
+        "availablePhysicalGb": 49.14
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22169071616,
+        "availablePhysicalBytes": 52754731008,
+        "availableCommitGb": 20.65,
+        "availablePhysicalGb": 49.13
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.140625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.203125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "MoonglowBay",
+      "rootPathSha256": "4489E9A4772FD996E04E13C937A71124C5487FFF3A3CB9F1D08AD15852B3DCF5",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 4423939402,
+      "fileCount": 223,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:44.8219853Z",
+      "elapsedMilliseconds": 17,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22133731328,
+        "availablePhysicalBytes": 52725133312,
+        "availableCommitGb": 20.61,
+        "availablePhysicalGb": 49.1
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22139686912,
+        "availablePhysicalBytes": 52724105216,
+        "availableCommitGb": 20.62,
+        "availablePhysicalGb": 49.1
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.203125,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.234375,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "thelegendoftianding",
+      "rootPathSha256": "063F9C631FE94143488CCBA44DF66B1657B51CD747734C936DB00BE7636A1E80",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 1306316368,
+      "fileCount": 747,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:45.0333314Z",
+      "elapsedMilliseconds": 152,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22134042624,
+        "availablePhysicalBytes": 52718891008,
+        "availableCommitGb": 20.61,
+        "availablePhysicalGb": 49.1
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22098702336,
+        "availablePhysicalBytes": 52650987520,
+        "availableCommitGb": 20.58,
+        "availablePhysicalGb": 49.04
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.265625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.453125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "Gothic 1 Remake",
+      "rootPathSha256": "82963CA5279D49F17BB773FCDFE0C4E9EC982BA294C2F47D5D23276385A8DA59",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 38468767940,
+      "fileCount": 834,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:45.1476607Z",
+      "elapsedMilliseconds": 70,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22086168576,
+        "availablePhysicalBytes": 52641726464,
+        "availableCommitGb": 20.57,
+        "availablePhysicalGb": 49.03
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22087225344,
+        "availablePhysicalBytes": 52622147584,
+        "availableCommitGb": 20.57,
+        "availablePhysicalGb": 49.01
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.5,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.53125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "wand:97515",
+      "rootPathSha256": "E6D5E0F2B12FA8BDC1110FD659E7607F74C7658FB6B7EEE8925A63F606CE7F17",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 623320214,
+      "fileCount": 139,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:45.2035Z",
+      "elapsedMilliseconds": 8,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22079746048,
+        "availablePhysicalBytes": 52602593280,
+        "availableCommitGb": 20.56,
+        "availablePhysicalGb": 48.99
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22074077184,
+        "availablePhysicalBytes": 52593045504,
+        "availableCommitGb": 20.56,
+        "availablePhysicalGb": 48.98
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.5625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.578125,
+        "workingSetBytes": 170614784
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "wand:77733",
+      "rootPathSha256": "83E365E09BA3AD8B67D94F7F4AEA9FC58A43108174BE9F4811437B9C46532B82",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 1099291103,
+      "fileCount": 107,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:45.2570032Z",
+      "elapsedMilliseconds": 9,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22065238016,
+        "availablePhysicalBytes": 52589649920,
+        "availableCommitGb": 20.55,
+        "availablePhysicalGb": 48.98
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22063448064,
+        "availablePhysicalBytes": 52580392960,
+        "availableCommitGb": 20.55,
+        "availablePhysicalGb": 48.97
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.640625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.65625,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "wand:63937",
+      "rootPathSha256": "F7B70F6994E18FDA7544C3425D85DB4572018C393D91D3E2AB0695BB66D4E0D7",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 2037387621,
+      "fileCount": 337,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:45.3157328Z",
+      "elapsedMilliseconds": 17,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22060396544,
+        "availablePhysicalBytes": 52571590656,
+        "availableCommitGb": 20.55,
+        "availablePhysicalGb": 48.96
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22065901568,
+        "availablePhysicalBytes": 52569505792,
+        "availableCommitGb": 20.55,
+        "availablePhysicalGb": 48.96
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.6875,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.828125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "Star Wars Outlaws",
+      "rootPathSha256": "CCA090C6CD8B742DED9AC2383C8C8E9C7E62DD77942BF6860BC38EB1EE4A2B1E",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 91275730621,
+      "fileCount": 1662,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:14:45.914335Z",
+      "elapsedMilliseconds": 549,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22064545792,
+        "availablePhysicalBytes": 52557393920,
+        "availableCommitGb": 20.55,
+        "availablePhysicalGb": 48.95
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22009765888,
+        "availablePhysicalBytes": 52535537664,
+        "availableCommitGb": 20.5,
+        "availablePhysicalGb": 48.93
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2610.859375,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2611.484375,
+        "workingSetBytes": 170348544
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "wand:98778",
+      "rootPathSha256": "73C01968946E3567BADE0CD6CE97ABF7A67CCE887AEA0CC1B6A8663BD4BABD02",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 38306997201,
+      "fileCount": 22431,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:11.124206Z",
+      "elapsedMilliseconds": 25164,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22037532672,
+        "availablePhysicalBytes": 52561874944,
+        "availableCommitGb": 20.52,
+        "availablePhysicalGb": 48.95
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22370848768,
+        "availablePhysicalBytes": 54019612672,
+        "availableCommitGb": 20.83,
+        "availablePhysicalGb": 50.31
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2611.515625,
+        "workingSetBytes": 170348544
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.09375,
+        "workingSetBytes": 170610688
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "local:82963ca5279d49f17bb773fcdfe0c4e9ec982ba294c2f47d5d23276385a8da59",
+      "rootPathSha256": "82963CA5279D49F17BB773FCDFE0C4E9EC982BA294C2F47D5D23276385A8DA59",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 38468767940,
+      "fileCount": 834,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:11.2173251Z",
+      "elapsedMilliseconds": 51,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22373740544,
+        "availablePhysicalBytes": 54016868352,
+        "availableCommitGb": 20.84,
+        "availablePhysicalGb": 50.31
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22367727616,
+        "availablePhysicalBytes": 54014447616,
+        "availableCommitGb": 20.83,
+        "availablePhysicalGb": 50.3
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.15625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.203125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "local:96639dd571c7d80a8439921079aff99646c39752c672e923e9983ef2261fb9f0",
+      "rootPathSha256": "96639DD571C7D80A8439921079AFF99646C39752C672E923E9983EF2261FB9F0",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 2762560435,
+      "fileCount": 437,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:11.3023722Z",
+      "elapsedMilliseconds": 35,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22243172352,
+        "availablePhysicalBytes": 53984079872,
+        "availableCommitGb": 20.72,
+        "availablePhysicalGb": 50.28
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22245629952,
+        "availablePhysicalBytes": 54036402176,
+        "availableCommitGb": 20.72,
+        "availablePhysicalGb": 50.33
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.25,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.328125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "local:cca090c6cd8b742ded9ac2383c8c8e9c7e62dd77942bf6860bc38eb1ee4a2b1e",
+      "rootPathSha256": "CCA090C6CD8B742DED9AC2383C8C8E9C7E62DD77942BF6860BC38EB1EE4A2B1E",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 91275730621,
+      "fileCount": 1662,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:11.6671607Z",
+      "elapsedMilliseconds": 321,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22246002688,
+        "availablePhysicalBytes": 54029139968,
+        "availableCommitGb": 20.72,
+        "availablePhysicalGb": 50.32
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22437867520,
+        "availablePhysicalBytes": 54025850880,
+        "availableCommitGb": 20.9,
+        "availablePhysicalGb": 50.32
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.359375,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.75,
+        "workingSetBytes": 169558016
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "onimusha-way-of-the-sword",
+      "rootPathSha256": "B75921B906C5C576D572C2CF4799CEB428DA3AF18B52EEE0D35E36799FF87A04",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 59970904333,
+      "fileCount": 240,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:11.872905Z",
+      "elapsedMilliseconds": 166,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22430199808,
+        "availablePhysicalBytes": 54006976512,
+        "availableCommitGb": 20.89,
+        "availablePhysicalGb": 50.3
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22398312448,
+        "availablePhysicalBytes": 53951672320,
+        "availableCommitGb": 20.86,
+        "availablePhysicalGb": 50.25
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2636.796875,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2637.015625,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "Win64",
+      "rootPathSha256": "11C7869DEB1508CCA5EED31643C7DA575418B27E9BCE4C1BF32C5CE3E9677000",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 8811742228,
+      "fileCount": 62,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:11.9247568Z",
+      "elapsedMilliseconds": 5,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22417661952,
+        "availablePhysicalBytes": 53964484608,
+        "availableCommitGb": 20.88,
+        "availablePhysicalGb": 50.26
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22417653760,
+        "availablePhysicalBytes": 53957898240,
+        "availableCommitGb": 20.88,
+        "availablePhysicalGb": 50.25
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2637.0625,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2637.078125,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    },
+    {
+      "id": "oblivion",
+      "rootPathSha256": "929BA8A5F6F8800F55E38458277B1DCACDE2638EC3AEA2ACF703DD3A3CE93433",
+      "driveType": "Fixed",
+      "status": "complete",
+      "bytes": 133403507170,
+      "fileCount": 602,
+      "skippedCount": 0,
+      "measuredUtc": "2026-09-28T01:15:12.0060594Z",
+      "elapsedMilliseconds": 36,
+      "reasonCode": "",
+      "reasonSha256": null,
+      "failureType": null,
+      "memoryBefore": {
+        "availableCommitBytes": 22384259072,
+        "availablePhysicalBytes": 53924380672,
+        "availableCommitGb": 20.85,
+        "availablePhysicalGb": 50.22
+      },
+      "memoryAfter": {
+        "availableCommitBytes": 22384840704,
+        "availablePhysicalBytes": 53916860416,
+        "availableCommitGb": 20.85,
+        "availablePhysicalGb": 50.21
+      },
+      "deltaruneBefore": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2637.109375,
+        "workingSetBytes": 170602496
+      },
+      "deltaruneAfter": {
+        "pid": 2212,
+        "startTimeUtc": "2026-09-28T00:24:07.0366931Z",
+        "cpuSeconds": 2637.15625,
+        "workingSetBytes": 170602496
+      },
+      "stateSha256After": "0A8C61A7EBEAE6F6A94C2EC897EAEEA41257FFECA793E81FDE11102828F08105",
+      "metadataSha256After": "0F53FF172FFA29524B47AE934353AC9E8067BF30616C6CC99A7523223E4E373D"
+    }
+  ],
+  "summary": {
+    "completeCount": 25,
+    "partialCount": 0,
+    "failedCount": 0,
+    "deferredCount": 0,
+    "completeBytes": 860312002034,
+    "partialBytes": 0,
+    "completeFileCount": 37685,
+    "partialFileCount": 0
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "atUtc": "2026-09-28T02:02:23.2536872Z",
+  "package": "F:\\study\\repos\\game-library-manager-native\\evidence\\reliability-20260927T134422Z\\stage\\package-wand-once-20260928T0158Z",
+  "exeSha256": "1BADF366EC4A8FDEC772863F6007AAB776D2EE892C6C70D41A1425F9224312BA",
+  "sourceHelperSha256": "18260525C65342C447083F2128228D9897E4E88DBEE60B9450E4F15BBA6E83B9",
+  "packagedHelperSha256": "18260525C65342C447083F2128228D9897E4E88DBEE60B9450E4F15BBA6E83B9",
+  "helperHashMatchesSource": true,
+  "exitCode": 3,
+  "state": "unknown",
+  "reason": "trainer-state-unavailable-before-navigation",
+  "navigated": false,
+  "playDispatched": false
+}

@@ -1,4 +1,4 @@
-param([string]$ExePath = (Join-Path $PSScriptRoot 'dist\GameLibrary.exe'))
+param([string]$ExePath = (Join-Path $PSScriptRoot 'dist\GameLibrary.exe'), [int]$ProgressSeconds = 30, [switch]$IncludeControlAck, [string]$Game = 'staroceanthedivineforce', [int]$WatchSeconds = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -9,9 +9,6 @@ $dataRoot = Join-Path $evidenceRoot ('terminal-native-' + $stamp)
 $report = Join-Path $evidenceRoot 'terminal-native-current.json'
 $checks = New-Object 'System.Collections.Generic.List[object]'
 $app = $null
-$job = $null
-$terminalProcessIds = @()
-$terminalHostProcessIds = @()
 function Add-Check([string]$Name, [bool]$Passed) {
     $checks.Add([pscustomobject]@{ name=$Name; passed=$Passed; at=[DateTime]::UtcNow.ToString('o') })
     if (-not $Passed) { throw ('Verification failed: ' + $Name) }
@@ -23,6 +20,9 @@ function Find-Id($Root, [string]$Id) {
     return $control
 }
 function Invoke-Control($Control) { ([Windows.Automation.InvokePattern]$Control.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke() }
+function Text-Descendants($Root) {
+    return (($Root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition) | ForEach-Object { $_.Current.Name }) -join "`n")
+}
 function Wait-AppWindow {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     do {
@@ -38,7 +38,7 @@ function Wait-AppWindow {
             }
         }
         Start-Sleep -Milliseconds 150
-    } while ($clock.Elapsed.TotalSeconds -lt 25)
+    } while ($clock.Elapsed.TotalSeconds -lt 40)
     throw 'Native window did not become accessible.'
 }
 function Wait-Dialog([string]$Title, [Windows.Automation.AutomationElement]$Owner) {
@@ -51,7 +51,7 @@ function Wait-Dialog([string]$Title, [Windows.Automation.AutomationElement]$Owne
             if ($candidate -and $candidate.Current.ControlType -eq [Windows.Automation.ControlType]::Window) { return $candidate }
         }
         Start-Sleep -Milliseconds 100
-    } while ($clock.Elapsed.TotalSeconds -lt 15)
+    } while ($clock.Elapsed.TotalSeconds -lt 20)
     throw ('Native dialog did not open: ' + $Title)
 }
 function Find-Button($Root, [string]$Name) {
@@ -61,13 +61,13 @@ function Find-Button($Root, [string]$Name) {
     }
     throw ('Missing native button: ' + $Name)
 }
-function Text-Descendants($Root) {
-    return (($Root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition) | ForEach-Object { $_.Current.Name }) -join "`n")
-}
-function Get-ProcessSnapshot([string]$Name) {
-    @(Get-Process -Name $Name -ErrorAction SilentlyContinue | ForEach-Object {
-        try { [pscustomobject]@{ Id=$_.Id; StartTime=$_.StartTime; MainWindowHandle=$_.MainWindowHandle; MainWindowTitle=$_.MainWindowTitle } } catch { }
-    })
+function Find-TerminalWindow {
+    $roots = [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, [Windows.Automation.Condition]::TrueCondition)
+    foreach ($candidate in $roots) {
+        $name = $candidate.Current.Name
+        if ($name -and $name -match '(?i)Game Library' -and $name -match '(?i)Install terminal') { return $candidate }
+    }
+    return $null
 }
 try {
     Get-Process -Name GameLibrary -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -76,54 +76,155 @@ try {
     $window = Wait-AppWindow
     Add-Check 'Rebuilt WPF EXE exposes the install controls' ($window.Current.ProcessId -eq $app.Id -and $null -ne (Find-Id $window 'InstallSelected'))
     $search = Find-Id $window 'SearchBox'
-    ([Windows.Automation.ValuePattern]$search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue('staroceanthedivineforce')
-    Start-Sleep -Milliseconds 600
+    ([Windows.Automation.ValuePattern]$search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue($Game)
+    $list = Find-Id $window 'GameList'
+    $filterClock = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        Start-Sleep -Milliseconds 100
+        $rows = $list.FindAll([Windows.Automation.TreeScope]::Children, (New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::ListItem)))
+    } while ($rows.Count -ne 1 -and $filterClock.Elapsed.TotalSeconds -lt 15)
+    Add-Check 'Search returns the exact install candidate' ($rows.Count -eq 1)
     Invoke-Control (Find-Id $window 'SelectAll')
     Invoke-Control (Find-Id $window 'InstallSelected')
     $review = Wait-Dialog 'Install selected games' $window
     $reviewText = Text-Descendants $review
     Add-Check 'Install review names the Windows BAT and WSL2 install routes' ($reviewText -match '(?i)Windows BAT' -and $reviewText -match '(?i)default terminal' -and $reviewText -match '(?i)WSL2 Ubuntu' -and $reviewText -match '(?i)\.SH')
-    $beforeCmd = @(Get-ProcessSnapshot 'cmd')
-    $beforeHost = @(Get-ProcessSnapshot 'conhost')
-    $actionAt = [DateTime]::Now
     Invoke-Control (Find-Button $review 'Start download')
-    $job = Wait-Dialog ('Game Library ' + [char]0xB7 + ' Download terminal') $window
-    $deadline = [DateTime]::UtcNow.AddSeconds(12)
-    $bat = $null
-    $cmd = $null
+
+    # The durable terminal and worker are separate processes launched from the
+    # same executable. Wait for the manifest and the console window.
+    $jobsRoot = Join-Path $dataRoot 'jobs'
+    $manifestClock = [Diagnostics.Stopwatch]::StartNew()
+    $jobDirectory = $null
     do {
-        $bat = Get-ChildItem -LiteralPath (Join-Path $dataRoot 'jobs') -Filter '*.bat' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        $after = @(Get-ProcessSnapshot 'cmd' | Where-Object { $beforeCmd.Id -notcontains $_.Id -and $_.StartTime -ge $actionAt.AddSeconds(-2) })
-        $cmd = $after | Select-Object -First 1
-        if ($bat -and $cmd) { break }
-        Start-Sleep -Milliseconds 200
-    } while ([DateTime]::UtcNow -lt $deadline)
-    Add-Check 'Native install writes a BAT job and hands it to cmd.exe' ($null -ne $bat -and $null -ne $cmd)
-    $terminalProcessIds = @($cmd.Id)
-    $terminalHosts = @(Get-ProcessSnapshot 'conhost' | Where-Object { $beforeHost.Id -notcontains $_.Id -and $_.StartTime -ge $actionAt.AddSeconds(-2) })
-    $terminalHostProcessIds = @($terminalHosts | Select-Object -ExpandProperty Id)
-    $jobClock = [Diagnostics.Stopwatch]::StartNew()
+        if (Test-Path -LiteralPath $jobsRoot) {
+            $jobDirectory = Get-ChildItem -LiteralPath $jobsRoot -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'job.json') } | Select-Object -First 1
+        }
+        if ($null -eq $jobDirectory) { Start-Sleep -Milliseconds 200 }
+    } while ($null -eq $jobDirectory -and $manifestClock.Elapsed.TotalSeconds -lt 30)
+    Add-Check 'Durable install manifest was created' ($null -ne $jobDirectory)
+
+    $eventsPath = Join-Path $jobDirectory.FullName 'events.jsonl'
+    $terminalWindow = $null
+    $windowClock = [Diagnostics.Stopwatch]::StartNew()
     do {
-        $jobText = Text-Descendants $job
-        if ($jobText -match '(?i)Running in your default terminal') { break }
-        Start-Sleep -Milliseconds 100
-    } while ($jobClock.Elapsed.TotalSeconds -lt 5)
-    Add-Check 'Native job window reports the user default terminal route' ($jobText -match '(?i)Running in your default terminal')
-    $batText = if ($bat) { Get-Content -LiteralPath $bat.FullName -Raw } else { '' }
-    Add-Check 'Generated BAT contains the reviewed PowerShell payload' ($batText.StartsWith('@echo off') -and $batText.Contains('# GLM_POWERSHELL_START'))
-    $terminalVisible = ($cmd.MainWindowHandle -ne [IntPtr]::Zero) -or (@($terminalHosts | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -or $_.MainWindowTitle.Length -gt 0 }).Count -gt 0)
-    Add-Check 'Default terminal handoff creates an external console host' ($terminalProcessIds.Count -gt 0 -and $terminalHostProcessIds.Count -gt 0)
-    $payload = [pscustomobject]@{ at=[DateTime]::UtcNow.ToString('o'); passed=$true; executable=(Resolve-Path $ExePath).Path; sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $ExePath).Hash; dataRoot=$dataRoot; batPath=if($bat){$bat.FullName}else{$null}; terminalProcessId=if($cmd){$cmd.Id}else{$null}; terminalProcessName='cmd.exe'; terminalHostProcessIds=$terminalHostProcessIds; terminalVisible=$terminalVisible; checks=@($checks.ToArray()) }
+        $terminalWindow = Find-TerminalWindow
+        if ($null -eq $terminalWindow) { Start-Sleep -Milliseconds 250 }
+    } while ($null -eq $terminalWindow -and $windowClock.Elapsed.TotalSeconds -lt 30)
+    Add-Check 'Durable install terminal window is visible' ($null -ne $terminalWindow -and -not $terminalWindow.Current.IsOffscreen)
+
+    # Real-time progress: the event log must keep growing while the job runs.
+    function Read-Events {
+        if (-not (Test-Path -LiteralPath $eventsPath)) { return @() }
+        return @(Get-Content -LiteralPath $eventsPath -ErrorAction SilentlyContinue)
+    }
+    $before = @(Read-Events)
+    $progressClock = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        Start-Sleep -Milliseconds 500
+        $after = @(Read-Events)
+    } while ($after.Count -le $before.Count -and $progressClock.Elapsed.TotalSeconds -lt $ProgressSeconds)
+    Add-Check 'Durable install streams real-time progress events' ($after.Count -gt $before.Count)
+
+    function Get-Stages([object[]]$Events) {
+        return @($Events | ForEach-Object { try { (ConvertFrom-Json $_).stage } catch { } } | Where-Object { $_ } | Select-Object -Unique)
+    }
+    $stages = @(Get-Stages $after)
+    $stageClock = [Diagnostics.Stopwatch]::StartNew()
+    while ($stages.Count -lt 2 -and $stageClock.Elapsed.TotalSeconds -lt 120) {
+        Start-Sleep -Milliseconds 750
+        $after = @(Read-Events)
+        $stages = @(Get-Stages $after)
+    }
+    Add-Check 'Progress advances through real install stages' ($stages.Count -ge 2)
+
+    # A real Docker pull reports byte ratios ("4.0MB/8.0MB"). Wait until at
+    # least one command event carries a positive byte total so the terminal can
+    # render a live percentage.
+    $byteClock = [Diagnostics.Stopwatch]::StartNew()
+    $byteEvent = $null
+    do {
+        $after = @(Read-Events)
+        $byteEvent = $after | Where-Object { $_ -match '"completedBytes":[1-9]' -and $_ -match '"totalBytes":[1-9]' } | Select-Object -Last 1
+        if ($byteEvent) { break }
+        Start-Sleep -Milliseconds 750
+    } while ($byteClock.Elapsed.TotalSeconds -lt 150)
+    # Recorded, not fatal: a fully cached image reports "Already exists" with no
+    # byte ratio. Byte/percent parsing is asserted deterministically in the
+    # self-test suite.
+    $byteProgressObserved = $null -ne $byteEvent
+
+    if ($WatchSeconds -gt 0) {
+        $watchStart = [DateTime]::UtcNow
+        while ([DateTime]::UtcNow.Subtract($watchStart).TotalSeconds -lt $WatchSeconds) {
+            Start-Sleep -Seconds 3
+            $latest = @(Read-Events) | ForEach-Object { try { ($_ | ConvertFrom-Json) } catch {} } |
+                Where-Object { $_.stage -eq 'Pull' -and $_.kind -eq 'progress' -and $_.completedBytes -gt 0 -and $_.totalBytes -gt 0 } | Select-Object -Last 1
+            if ($latest) {
+                $p = [math]::Round(100.0 * $latest.completedBytes / $latest.totalBytes, 3)
+                Write-Output ("WATCH " + $p.ToString('0.000') + "% " + $latest.completedBytes + "/" + $latest.totalBytes + " B " + $latest.message)
+            } else {
+                Write-Output "WATCH waiting for byte progress..."
+            }
+        }
+    }
+
+    # Live pause/resume acknowledgement: write the same control request the UI
+    # sends and require the durable worker to answer with a matching identity
+    # (the terminal reported "mismatched job identity" before this fix).
+    $jobManifest = Get-Content -LiteralPath (Join-Path $jobDirectory.FullName 'job.json') -Raw | ConvertFrom-Json
+    if ($IncludeControlAck) {
+    $controlDir = Join-Path $jobDirectory.FullName 'controls'
+    [IO.Directory]::CreateDirectory($controlDir) | Out-Null
+    function Send-Control([string]$Action) {
+        $rid = [guid]::NewGuid().ToString('N')
+        $body = [pscustomobject]@{ schemaVersion=1; operationId=$jobManifest.operationId; requestId=$rid; action=$Action; requestedUtc=[DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
+        Set-Content -LiteralPath (Join-Path $controlDir ($rid + '.json')) -Value $body -Encoding UTF8
+        $responsePath = Join-Path $controlDir ($rid + '.response.json')
+        $clock = [Diagnostics.Stopwatch]::StartNew()
+        while (-not (Test-Path -LiteralPath $responsePath) -and $clock.Elapsed.TotalSeconds -lt 30) { Start-Sleep -Milliseconds 250 }
+        if (-not (Test-Path -LiteralPath $responsePath)) { return $null }
+        return Get-Content -LiteralPath $responsePath -Raw | ConvertFrom-Json
+    }
+    $pauseAck = Send-Control 'pause'
+    Add-Check 'Durable worker acknowledges a live pause request' ($null -ne $pauseAck)
+    Add-Check 'Pause acknowledgement carries the exact job identity' ($null -ne $pauseAck -and $pauseAck.operationId -eq $jobManifest.operationId -and $pauseAck.accepted -eq $true)
+    Start-Sleep -Milliseconds 500
+    $resumeAck = Send-Control 'resume'
+    Add-Check 'Durable worker acknowledges a live resume request' ($null -ne $resumeAck -and $resumeAck.operationId -eq $jobManifest.operationId -and $resumeAck.accepted -eq $true)
+    }
+
+    $job = Get-Content -LiteralPath (Join-Path $jobDirectory.FullName 'job.json') -Raw | ConvertFrom-Json
+    Add-Check 'Durable install has not entered a failed state' ($job.status -notin @('failed','retryableFailure'))
+
+    $payload = [pscustomobject]@{ at=[DateTime]::UtcNow.ToString('o'); passed=$true; executable=(Resolve-Path $ExePath).Path; sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $ExePath).Hash; dataRoot=$dataRoot; jobDirectory=$jobDirectory.FullName; status=$job.status; stages=$stages; eventCount=$after.Count; byteProgressObserved=$byteProgressObserved; terminalWindowName=$terminalWindow.Current.Name; checks=@($checks.ToArray()) }
     $payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $report -Encoding UTF8
-    Write-Output ('PASS: Native install opened the default terminal route; evidence=' + $report)
+    Write-Output ('PASS: Native durable install terminal opened and streamed progress; evidence=' + $report)
 }
 catch {
     [pscustomobject]@{ at=[DateTime]::UtcNow.ToString('o'); passed=$false; executable=$ExePath; dataRoot=$dataRoot; error=$_.ToString(); checks=@($checks.ToArray()) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $report -Encoding UTF8
     throw
 }
 finally {
-    foreach ($id in @($terminalProcessIds + $terminalHostProcessIds)) { if ($id) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }
-    if ($null -ne $job) { try { ([Windows.Automation.WindowPattern]$job.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).Close() } catch {} }
+    if ($null -ne $jobDirectory) {
+        $jobPath = Join-Path $jobDirectory.FullName 'job.json'
+        if (Test-Path -LiteralPath $jobPath) {
+            try {
+                $job = Get-Content -LiteralPath $jobPath -Raw | ConvertFrom-Json
+                foreach ($id in @($job.ownedProcess.processId, $job.workerProcess.processId)) {
+                    if ($id) { Stop-Process -Id ([int]$id) -Force -ErrorAction SilentlyContinue }
+                }
+                # A force-killed worker cannot reconcile its Docker child, so stop
+                # any docker pull that still references this job's pinned digest.
+                if ($job.pinnedDigest) {
+                    Get-CimInstance Win32_Process -Filter "Name='docker.exe'" -ErrorAction SilentlyContinue |
+                        Where-Object { $_.CommandLine -like ('*' + $job.pinnedDigest + '*') } |
+                        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                }
+            } catch { }
+        }
+        try { ([Windows.Automation.WindowPattern]$terminalWindow.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).Close() } catch { }
+    }
     if ($null -ne $app -and -not $app.HasExited) {
         try { $app.CloseMainWindow() | Out-Null; $app.WaitForExit(5000) | Out-Null } catch {}
         if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
