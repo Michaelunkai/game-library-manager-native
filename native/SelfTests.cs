@@ -754,6 +754,66 @@ public static class SelfTests
             var games = new List<Game>(); LibraryStore.MergeTags(games, JsonNode.Parse("{\"tags\":[{\"name\":\"NewGame\",\"full_size\":1000000000,\"last_updated\":\"2026-09-08T00:00:00Z\"}]}")!, state.Settings);
             Require(games.Single().Time == 0 && games.Single().Discovered && games.Single().SizeGb == 1 && games.Single().Added.Year == 2026, "Unknown playtime was fabricated or verified metadata lost.");
         });
+        Check("Bundled metadata works offline and a mismatched cache cannot replace a catalog identity", () =>
+        {
+            var metadata = store.ReadMetadata();
+            Require(metadata.Count >= 50 && metadata.Any(entry => entry.Value is JsonObject value && File.Exists(LibraryStore.SafeChild(Path.Combine(store.Assets, "data"), DataJson.Text(value["cover"])))),
+                "Bundled supplemental metadata or its covers were unavailable on a clean profile.");
+            var config = store.ReadConfig();
+            var catalog = store.LoadGames(state, config);
+            var target = catalog.First(game => !game.IsLocal && metadata[game.Id] == null);
+            string originalName = target.Name; double originalTime = target.Time;
+            string cachePath = Path.Combine(store.Cache, "metadata.json");
+            byte[]? previous = File.Exists(cachePath) ? File.ReadAllBytes(cachePath) : null;
+            try
+            {
+                store.CacheData("metadata.json", new JsonObject
+                {
+                    [target.Id] = new JsonObject { ["name"] = "Unrelated Different Product", ["time"] = 999, ["source"] = new JsonObject { ["time"] = "provider" } }
+                }.ToJsonString());
+                var reloaded = store.LoadGames(state, config).Single(game => game.Id == target.Id);
+                Require(reloaded.Name == originalName && reloaded.Time == originalTime, "A mismatched cached metadata record replaced the catalog identity.");
+            }
+            finally
+            {
+                if (previous == null) File.Delete(cachePath); else File.WriteAllBytes(cachePath, previous);
+            }
+        });
+        Check("Installed size is measured and persisted separately from Docker download size", () =>
+        {
+            string folder = Path.Combine(root, "installed-size-proof");
+            Directory.CreateDirectory(Path.Combine(folder, "nested"));
+            File.WriteAllBytes(Path.Combine(folder, "game.exe"), new byte[1536]);
+            File.WriteAllBytes(Path.Combine(folder, "nested", "payload.bin"), new byte[2560]);
+            var measureType = typeof(MainWindow).Assembly.GetType("GameLibrary.Native.InstalledSize")
+                ?? throw new InvalidOperationException("InstalledSize is missing.");
+            var measure = measureType.GetMethod("Measure", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("InstalledSize.Measure is missing.");
+            long bytes = (long)(measure.Invoke(null, new object?[] { folder, CancellationToken.None }) ?? -1L);
+            Require(bytes == 4096, "Installed byte measurement was not exact.");
+
+            var installedBytesProperty = typeof(UserState).GetProperty("InstalledBytes")
+                ?? throw new InvalidOperationException("UserState.InstalledBytes is missing.");
+            var measuredUtcProperty = typeof(UserState).GetProperty("InstalledSizeMeasuredUtc")
+                ?? throw new InvalidOperationException("UserState.InstalledSizeMeasuredUtc is missing.");
+            installedBytesProperty.SetValue(state, new Dictionary<string, long>(StringComparer.Ordinal) { ["size-proof"] = bytes });
+            measuredUtcProperty.SetValue(state, new Dictionary<string, DateTime>(StringComparer.Ordinal) { ["size-proof"] = DateTime.UtcNow });
+            store.Save(state);
+            var restored = store.LoadState();
+            var restoredBytes = (Dictionary<string, long>)installedBytesProperty.GetValue(restored)!;
+            Require(restoredBytes["size-proof"] == bytes, "Measured installed bytes did not survive restart.");
+
+            var game = new Game { Id = "size-proof", Name = "Size Proof", SizeGb = 1.5, Installed = true };
+            var installedBytesGameProperty = typeof(Game).GetProperty("InstalledBytes")
+                ?? throw new InvalidOperationException("Game.InstalledBytes is missing.");
+            installedBytesGameProperty.SetValue(game, 2_000_000_000L);
+            string label = typeof(Game).GetProperty("SizeLabel")?.GetValue(game)?.ToString() ?? "";
+            Require(label.Contains("installed", StringComparison.OrdinalIgnoreCase) && !label.Contains("download", StringComparison.OrdinalIgnoreCase),
+                "An observed local size was still presented as a Docker download estimate.");
+            installedBytesGameProperty.SetValue(game, 0L);
+            label = typeof(Game).GetProperty("SizeLabel")?.GetValue(game)?.ToString() ?? "";
+            Require(label.Contains("download", StringComparison.OrdinalIgnoreCase), "The uninstalled Docker size was not identified as download size.");
+        });
         Check("Offline transport rejects requests without opening a network connection", () =>
         {
             var guard = new OfflineNetworkGuard(); using var client = new SyncClient(store, guard);
@@ -1187,6 +1247,7 @@ public static class SelfTests
                     Require(script.Contains("yuzu") && script.Contains("gamebootstrapper") && script.Contains("toolkit"), "Install scripts must not treat emulator or bundled utility executables as native game proof.");
                 }
                 if (format == "sh") Require(script.Contains("completed_games") && script.Contains("failed_games") && script.Contains("Install batch completed with failures:"), "The shell export still aborts a multi-game batch at the first failure.");
+                if (format == "sh") Require(script.Contains("^[A-Za-z0-9-]{8,64}$") && script.IndexOf("Invalid install operation identity", StringComparison.Ordinal) < script.IndexOf("staging_folder=", StringComparison.Ordinal), "The shell export constructs destructive staging paths before validating its operation identity.");
                 if (format == "sh") Require(script.Contains("grep -Eiv") && script.Contains("/[^/]*(editor|toolkit|packager)"), "The Bash export does not reject support utilities when proving a native executable.");
                 File.WriteAllText(Path.Combine(root, "generated." + format), DockerScripts.Generate(new[] { game }, state.Settings, format));
             }
@@ -1228,20 +1289,36 @@ public static class SelfTests
         Check("Windows installs hand off a reviewed BAT job to the visible default terminal", () =>
         {
             string batPath = Path.Combine(root, "install-games.bat");
+            string transcriptPath = Path.Combine(root, "install-games.terminal.log");
             string bat = DockerScripts.Generate(new[] { new Game { Id = "terminalproof", Name = "Terminal proof" } }, state.Settings, "bat");
-            var start = JobWindow.BuildDefaultTerminalStartInfo(batPath);
+            var buildStart = typeof(JobWindow).GetMethod("BuildDefaultTerminalStartInfo", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, null, new[] { typeof(string), typeof(string) }, null)
+                ?? throw new InvalidOperationException("The visible-terminal transcript launcher is missing.");
+            var start = (ProcessStartInfo)(buildStart.Invoke(null, new object[] { batPath, transcriptPath })
+                ?? throw new InvalidOperationException("The visible-terminal transcript launcher returned no process configuration."));
             const string operationId = "11111111111111111111111111111111";
             string bound = JobWindow.BindJobEnvironment(bat, "bat", operationId, lockHeld: true);
             Require(bat.StartsWith("@echo off\r\n", StringComparison.Ordinal), "The install export is not a BAT job.");
             Require(bat.Contains("# GLM_POWERSHELL_START") && bat.Contains(DockerScripts.CompletionMarkerName), "The BAT job lost its reviewed PowerShell payload or completion proof.");
             Require(bat.Contains("exit /b %GLM_EXIT%\r\n") && !bat.Contains("\r\npause\r\n"), "The BAT job lost its completion exit contract.");
-            string expectedCmd = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
-            Require(start.UseShellExecute && !start.CreateNoWindow
-                && string.Equals(start.FileName, expectedCmd, StringComparison.OrdinalIgnoreCase)
-                && start.Arguments == "/d /c call \"" + Path.GetFullPath(batPath) + "\""
+            string expectedPowerShell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+            Require(!start.UseShellExecute && !start.CreateNoWindow
+                && string.Equals(start.FileName, expectedPowerShell, StringComparison.OrdinalIgnoreCase)
+                && start.Arguments.Contains("-EncodedCommand", StringComparison.Ordinal)
+                && string.Equals(start.Environment["GLM_JOB_SCRIPT"], Path.GetFullPath(batPath), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(start.Environment["GLM_JOB_TRANSCRIPT"], Path.GetFullPath(transcriptPath), StringComparison.OrdinalIgnoreCase)
                 && string.Equals(start.WorkingDirectory, root, StringComparison.OrdinalIgnoreCase), "The BAT job was not handed to the visible default terminal with its working directory.");
             Require(bound.StartsWith("@set \"GLM_INSTALL_OPERATION_ID=" + operationId + "\"\r\n@set \"GLM_NATIVE_INSTALL_LOCK_HELD=1\"\r\n", StringComparison.Ordinal) && bound.EndsWith(bat, StringComparison.Ordinal), "The BAT job did not retain its bound operation identity and payload.");
-            Reject(() => JobWindow.BuildDefaultTerminalStartInfo(Path.Combine(root, "install-games.ps1")));
+            var summarize = typeof(JobWindow).GetMethod("SummarizeFailure", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The install failure summarizer is missing.");
+            string transcript = "2026-09-14 GAME 1/2 · Downloading Alpha\r\n2026-09-14 FAILED alpha: IOException: provider unavailable\r\nInstall batch completed with failures: 1/2 selected operation(s) completed; failed game(s): alpha.";
+            string summary = summarize.Invoke(null, new object[] { transcript, 1 })?.ToString() ?? "";
+            Require(summary.Contains("alpha", StringComparison.OrdinalIgnoreCase) && summary.Contains("provider unavailable", StringComparison.OrdinalIgnoreCase), "The precise per-game failure was reduced to an exit code.");
+            try
+            {
+                buildStart.Invoke(null, new object[] { Path.Combine(root, "install-games.ps1"), transcriptPath });
+                throw new Exception("A non-BAT visible-terminal job was accepted.");
+            }
+            catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is ArgumentException) { }
         });
         Check("Per-game install failures stay bounded and identify the affected game", () =>
         {
@@ -1297,6 +1374,20 @@ public static class SelfTests
                 && shell.Contains("native_install_lock", StringComparison.Ordinal)
                 && shell.Contains("native_install_unlock", StringComparison.Ordinal),
                  "Concurrent jobs still share the timestamp-only script/log path.");
+        });
+        Check("Interrupted install artifacts restore the previous game and remove only operation-scoped staging", () =>
+        {
+            string destination = Path.Combine(root, "install-recovery-proof");
+            string id = "recovery-proof"; string folder = DockerScripts.InstallFolder(id);
+            string staging = Path.Combine(destination, DockerScripts.StagingDirectoryName);
+            string oldOperation = Guid.NewGuid().ToString("N"), activeOperation = Guid.NewGuid().ToString("N");
+            string backup = Path.Combine(staging, folder + "-previous-" + oldOperation);
+            string partial = Path.Combine(staging, folder + "-" + oldOperation);
+            string active = Path.Combine(staging, folder + "-" + activeOperation);
+            Directory.CreateDirectory(backup); Directory.CreateDirectory(partial); Directory.CreateDirectory(active);
+            File.WriteAllText(Path.Combine(backup, "previous.exe"), "fixture");
+            int changed = JobWindow.RecoverStaleInstallArtifacts(destination, id, activeOperation);
+            Require(changed == 2 && File.Exists(Path.Combine(destination, folder, "previous.exe")) && !Directory.Exists(partial) && Directory.Exists(active), "Recovery failed to restore the previous install or touched the active operation.");
         });
         Check("Same-game installs to different destinations receive isolated Docker identities", () =>
         {
@@ -1788,7 +1879,7 @@ public partial class MainWindow
     private async Task RunUiProof(string report)
     {
         var checks = new List<object>();
-        void Check(string name, bool passed) { checks.Add(new { name, passed, at = DateTime.UtcNow }); if (!passed) throw new InvalidOperationException("UI proof failed: " + name); }
+        void Check(string name, bool passed, string? detail = null) { checks.Add(new { name, passed, detail, at = DateTime.UtcNow }); if (!passed) throw new InvalidOperationException("UI proof failed: " + name + (detail == null ? string.Empty : " (" + detail + ")")); }
         static T? FindVisual<T>(DependencyObject? root, Func<T, bool> predicate) where T : DependencyObject
         {
             if (root == null) return null;
@@ -1803,6 +1894,17 @@ public partial class MainWindow
         try
         {
             Check("Packaged WPF window visible with taskbar identity", IsVisible && ShowInTaskbar && Icon != null && Games.Count >= 1179);
+            Check("Fluent shell exposes custom caption controls and semantic status", FindName("AppTitleBar") is FrameworkElement titleBar
+                && titleBar.ActualHeight >= 44
+                && FindName("MinimizeWindow") is Button minimize && minimize.MinHeight >= 40
+                && FindName("MaximizeWindow") is Button maximize && maximize.MinHeight >= 40
+                && FindName("CloseWindow") is Button close && close.MinHeight >= 40
+                && System.Windows.Automation.AutomationProperties.GetLiveSetting(StatusText) == System.Windows.Automation.AutomationLiveSetting.Polite);
+            Check("Fluent design tokens and comfortable control targets are active", new[] { "SurfaceBrush", "ElevatedSurfaceBrush", "SuccessBrush", "WarningBrush", "DangerBrush", "InformationBrush", "FocusBrush", "AccentOnBrush", "SelectionBrush", "CornerRadiusLarge" }.All(System.Windows.Application.Current.Resources.Contains)
+                && SearchBox.MinHeight >= 40 && SortBox.MinHeight >= 40
+                && InstalledOnlyFilter.MinHeight >= 40
+                && (System.Windows.Application.Current.FindResource(typeof(Button)) as Style)?.Setters.OfType<Setter>().Any(setter => setter.Property == FrameworkElement.MinHeightProperty && Convert.ToDouble(setter.Value, System.Globalization.CultureInfo.InvariantCulture) >= 40) == true
+                && FontFamily.Source.Contains("Segoe UI Variable", StringComparison.OrdinalIgnoreCase));
             Check("Tray icon and useful menu created", tray is { Visible: true } && tray.ContextMenuStrip?.Items.Count == 5);
             Save();
             string persistenceId = "storage-failure-proof";
@@ -1887,7 +1989,7 @@ public partial class MainWindow
                 && FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "RestoreGame") != null);
             Check("Idle cards reflect exact Wand eligibility while hiding force-exit controls", playButton?.Content?.ToString()?.Contains("Play", StringComparison.Ordinal) == true
                 && wandButton?.Visibility == (playStateGame.CanPlayWithWand ? Visibility.Visible : Visibility.Collapsed)
-                && exitButton?.Visibility == Visibility.Collapsed);
+                && exitButton?.Visibility == Visibility.Collapsed, idleCardEvidence);
             string processFixtureFolder = Path.Combine(Store.Root, "process-fixture");
             Directory.CreateDirectory(processFixtureFolder);
             string processFixture = Path.Combine(processFixtureFolder, "TrackedGame.exe");
@@ -2111,9 +2213,17 @@ public partial class MainWindow
             job.Show();
             var deadline = DateTime.UtcNow.AddSeconds(15);
             while (job.LastExitCode == null && DateTime.UtcNow < deadline) await Task.Delay(100);
-            Check("Progress window captures real process output and nonzero exit", job.LastExitCode == 7 && job.DisplayedOutput.Contains("native-progress-proof") && job.DisplayedOutput.Contains("Failed"));
+            Check("Progress window captures real process output and nonzero exit", job.LastExitCode == 7 && job.DisplayedOutput.Contains("native-progress-proof") && job.DisplayedOutput.Contains("failed", StringComparison.OrdinalIgnoreCase));
             Check("Failed process completion fires once after stopping without marking installation successful", completedEvents == 1 && completionSuccess == false && completionAfterStopped);
             job.Close(); RestoreWindow();
+            var terminalJob = new JobWindow(Store, "@echo off\r\necho native-terminal-transcript-proof\r\nexit /b 7", Array.Empty<string>(), openInDefaultTerminal: true, scriptExtension: "bat");
+            terminalJob.Show();
+            var terminalDeadline = DateTime.UtcNow.AddSeconds(15);
+            while (terminalJob.LastExitCode == null && DateTime.UtcNow < terminalDeadline) await Task.Delay(100);
+            Check("Visible terminal failures preserve child output and the real nonzero exit code", terminalJob.LastExitCode == 7
+                && terminalJob.DisplayedOutput.Contains("native-terminal-transcript-proof", StringComparison.Ordinal)
+                && terminalJob.DisplayedOutput.Contains("Install failed", StringComparison.OrdinalIgnoreCase));
+            terminalJob.Close(); RestoreWindow();
             string markerRoot = Path.Combine(Store.Root, "immediate-marker-proof");
             string markerId = "immediate-proof";
             string markerFolder = Path.Combine(markerRoot, DockerScripts.InstallFolder(markerId));
@@ -2239,7 +2349,21 @@ public partial class MainWindow
             using (var file = File.Create(Path.ChangeExtension(report, ".png"))) png.Save(file);
             LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = true, executable = Environment.ProcessPath, catalog = Games.Count, checks }));
         }
-        catch (Exception ex) { LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = false, error = ex.ToString(), checks })); }
+        catch (Exception ex)
+        {
+            try
+            {
+                var content = (FrameworkElement)Content;
+                if (content.ActualWidth > 0 && content.ActualHeight > 0)
+                {
+                    var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(content);
+                    var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var file = File.Create(Path.ChangeExtension(report, ".failure.png")); png.Save(file);
+                }
+            }
+            catch { }
+            LibraryStore.AtomicWrite(report, DataJson.Write(new { at = DateTime.UtcNow, passed = false, error = ex.ToString(), checks }));
+        }
         finally { Close(); }
     }
 
