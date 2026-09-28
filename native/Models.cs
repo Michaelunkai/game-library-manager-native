@@ -135,8 +135,6 @@ public sealed class UserState
     public Dictionary<string, string> PendingGameBackups { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PlayTimeSeconds { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DateTime> LastPlayedUtc { get; set; } = new(StringComparer.Ordinal);
-    public Dictionary<string, long> InstalledBytes { get; set; } = new(StringComparer.Ordinal);
-    public Dictionary<string, DateTime> InstalledSizeMeasuredUtc { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LocalGame> LocalGames { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LocalGame> WandGames { get; set; } = new(StringComparer.Ordinal);
     public List<PendingEdit> Pending { get; set; } = new();
