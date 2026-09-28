@@ -192,11 +192,8 @@ public partial class MainWindow : Window
         wandRegistrationSyncDelay.Tick += WandRegistrationSyncDelayTick;
         WandLiveLibrary.RegistrationSetChanged += OnWandRegistrationSetChanged;
         Closing += OnClosing;
-        SystemParameters.StaticPropertyChanged += SystemParametersChanged;
         StateChanged += (_, _) => ObserveUiAction("Window state change", () =>
         {
-            MaximizeWindow.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
-            System.Windows.Automation.AutomationProperties.SetName(MaximizeWindow, WindowState == WindowState.Maximized ? "Restore" : "Maximize");
             if (!ready || WindowState != WindowState.Minimized || !State.Settings.MinimizeToTray) return;
             HideToTray();
         });
@@ -790,7 +787,7 @@ public partial class MainWindow : Window
     {
         static IOrderedEnumerable<Game> NameAsc(IEnumerable<Game> games) => games.OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Id, StringComparer.Ordinal);
         static bool HasTime(Game g) => double.IsFinite(g.Time) && g.Time > 0;
-        static bool HasSize(Game g) => double.IsFinite(g.ComparableSizeGb) && g.ComparableSizeGb > 0;
+        static bool HasSize(Game g) => double.IsFinite(g.SizeGb) && g.SizeGb > 0;
         static bool HasRating(Game g) => g.Rating > 0;
         static bool HasPlayed(Game g) => g.LastPlayedUtc != default || g.PlayedHours > 0;
         static bool HasDate(Game g) => g.Added != default || g.Category == "new";
@@ -805,8 +802,8 @@ public partial class MainWindow : Window
             "Recently Played" => source.OrderByDescending(g => HasPlayed(g)).ThenByDescending(g => g.LastPlayedUtc).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Rating (High–Low)" => source.OrderBy(g => HasRating(g) ? 0 : 1).ThenByDescending(g => HasRating(g) ? g.Rating : int.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Rating (Low–High)" => source.OrderBy(g => HasRating(g) ? 0 : 1).ThenBy(g => HasRating(g) ? g.Rating : int.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
-            "Size (Small–Large)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenBy(g => HasSize(g) ? g.ComparableSizeGb : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
-            "Size (Large–Small)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenByDescending(g => HasSize(g) ? g.ComparableSizeGb : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Size (Small–Large)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenBy(g => HasSize(g) ? g.SizeGb : double.MaxValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
+            "Size (Large–Small)" => source.OrderBy(g => HasSize(g) ? 0 : 1).ThenByDescending(g => HasSize(g) ? g.SizeGb : double.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             "Category" => source.OrderBy(g => g.CategoryName, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase),
             _ => source.OrderBy(g => HasDate(g) ? 0 : 1).ThenByDescending(g => HasDate(g) ? DateValue(g) : DateTime.MinValue).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
         };
@@ -1141,41 +1138,11 @@ public partial class MainWindow : Window
         finally { refreshing = false; if (!closing) ScheduleMetadata(); }
     }
     private void ToggleTheme(object sender, RoutedEventArgs e) { State.Settings.Theme = State.Settings.Theme == "dark" ? "light" : "dark"; Save(); ApplyTheme(); }
-    private void MinimizeWindowClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-    private void MaximizeWindowClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-    private void CloseWindowClick(object sender, RoutedEventArgs e) => Close();
     private void ApplyTheme()
     {
         bool light = State.Settings.Theme == "light";
-        var values = new Dictionary<string, string>
-        {
-            ["CanvasBrush"] = light ? "#F3F6F8" : "#0F1217", ["ShellBrush"] = light ? "#F9FBFC" : "#12161D",
-            ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["SurfaceBrush"] = light ? "#FFFFFF" : "#171B23",
-            ["ElevatedSurfaceBrush"] = light ? "#EDF2F5" : "#222936", ["CardBrush"] = light ? "#F0F4F6" : "#1D222C",
-            ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["SubtleStrokeBrush"] = light ? "#DDE5EA" : "#26303D",
-            ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9",
-            ["AccentBrush"] = light ? "#3E9C68" : "#9CE7BB", ["AccentHoverBrush"] = light ? "#2F8558" : "#B3F2CB",
-            ["AccentPressedBrush"] = light ? "#236A45" : "#78C99B", ["SuccessBrush"] = light ? "#218653" : "#63D39A",
-            ["WarningBrush"] = light ? "#9A6500" : "#F0C36B", ["DangerBrush"] = light ? "#C42B1C" : "#FF7B7B",
-            ["InformationBrush"] = light ? "#0067C0" : "#71B7FF", ["FocusBrush"] = light ? "#0067C0" : "#8DC8FF",
-            ["AccentOnBrush"] = light ? "#FFFFFF" : "#13211A", ["SelectionBrush"] = light ? "#9CCAF0" : "#426F61"
-        };
-        if (SystemParameters.HighContrast)
-        {
-            string canvas = SystemColors.WindowColor.ToString(), text = SystemColors.WindowTextColor.ToString();
-            string accent = SystemColors.HighlightColor.ToString(), accentText = SystemColors.HighlightTextColor.ToString();
-            values["CanvasBrush"] = values["ShellBrush"] = values["PanelBrush"] = values["SurfaceBrush"] = values["CardBrush"] = values["ElevatedSurfaceBrush"] = canvas;
-            values["TextBrush"] = values["MutedBrush"] = text;
-            values["StrokeBrush"] = values["SubtleStrokeBrush"] = SystemColors.WindowTextColor.ToString();
-            values["AccentBrush"] = values["AccentHoverBrush"] = values["AccentPressedBrush"] = values["FocusBrush"] = values["SelectionBrush"] = accent;
-            values["AccentOnBrush"] = accentText;
-        }
+        var values = new Dictionary<string, string> { ["CanvasBrush"] = light ? "#F3F5F6" : "#101217", ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["CardBrush"] = light ? "#E8EDF0" : "#1D222C", ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9", ["AccentBrush"] = light ? "#58B37F" : "#9CE7BB" };
         foreach (var entry in values) System.Windows.Application.Current.Resources[entry.Key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(entry.Value));
-        WindowEffects.Apply(this, light);
-    }
-    private void SystemParametersChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(SystemParameters.HighContrast)) Dispatcher.BeginInvoke(ApplyTheme);
     }
     private void Keyboard(object sender, System.Windows.Input.KeyEventArgs e)
     {

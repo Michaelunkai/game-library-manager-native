@@ -13,18 +13,12 @@ const receiptPath = path.join(evidence, 'deployment-bundle.json');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const requireCondition = (condition, message) => { if (!condition) throw new Error(message); };
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-const cliPackage = [
-  process.env.GLM_NETLIFY_CLI_PACKAGE,
-  path.join(process.env.LOCALAPPDATA || '', 'npm-global/node_modules/netlify-cli/package.json'),
-  path.join(process.env.APPDATA || '', 'npm/node_modules/netlify-cli/package.json')
-].filter(Boolean).find(candidate => fs.existsSync(candidate));
-requireCondition(cliPackage, 'Netlify CLI package was not found. Set GLM_NETLIFY_CLI_PACKAGE to the installed package.json.');
+const cliPackage = path.join(process.env.APPDATA, 'npm/node_modules/netlify-cli/package.json');
 const requireCli = createRequire(cliPackage);
 const cli = readJson(cliPackage);
 const bundlerPath = requireCli.resolve('@netlify/zip-it-and-ship-it');
 const bundlerPackage = path.resolve(path.dirname(bundlerPath), '../package.json');
 const bundler = readJson(bundlerPackage);
-const semver = requireCli('semver');
 const toml = requireCli('toml');
 const yauzl = requireCli('yauzl');
 const stage = readJson(path.join(evidence, 'deployment-candidate.json'));
@@ -70,9 +64,7 @@ async function entries(zipPath) {
   });
 }
 try {
-  check('Installed CLI resolves an official bundler allowed by its dependency range', semver.satisfies(bundler.version, cli.dependencies['@netlify/zip-it-and-ship-it']), {
-    declared: cli.dependencies['@netlify/zip-it-and-ship-it'], resolved: bundler.version
-  });
+  check('Installed CLI pins the exact local official bundler', cli.dependencies['@netlify/zip-it-and-ship-it'] === bundler.version);
   requireCondition(resume ? fs.existsSync(fixture) : !fs.existsSync(fixture), 'The isolated bundle fixture does not match the requested new/resume operation.');
   fs.mkdirSync(source, { recursive: true });
   for (const file of stage.files) {

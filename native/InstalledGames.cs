@@ -20,34 +20,7 @@ public sealed class LocalGame
         Encoding.UTF8.GetBytes(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant()))).ToLowerInvariant();
 }
 
-public sealed record InstalledDiscovery(string Id, string Name, string Folder, string? Launcher, bool IsLocal, long InstalledBytes = 0);
-
-internal static class InstalledSize
-{
-    internal static long Measure(string folder, System.Threading.CancellationToken cancellation = default)
-    {
-        if (!Directory.Exists(folder)) return 0;
-        long total = 0;
-        bool complete = true;
-        var options = new EnumerationOptions
-        {
-            RecurseSubdirectories = true,
-            IgnoreInaccessible = false,
-            AttributesToSkip = FileAttributes.ReparsePoint
-        };
-        try
-        {
-            foreach (string path in Directory.EnumerateFiles(folder, "*", options))
-            {
-                cancellation.ThrowIfCancellationRequested();
-                try { total = checked(total + new FileInfo(path).Length); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException) { complete = false; }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { complete = false; }
-        return complete ? Math.Max(0, total) : -1;
-    }
-}
+public sealed record InstalledDiscovery(string Id, string Name, string Folder, string? Launcher, bool IsLocal);
 
 public sealed class InstalledScanResult
 {
@@ -201,17 +174,6 @@ public partial class MainWindow
                 changed = true;
             }
             if (State.InstalledGames.Add(entry.Id)) changed = true;
-            if (entry.InstalledBytes >= 0 && (!State.InstalledBytes.TryGetValue(entry.Id, out var previousBytes) || previousBytes != entry.InstalledBytes))
-            {
-                State.InstalledBytes[entry.Id] = entry.InstalledBytes;
-                State.InstalledSizeMeasuredUtc[entry.Id] = DateTime.UtcNow;
-                changed = true;
-            }
-            else if (entry.InstalledBytes < 0)
-            {
-                if (State.InstalledBytes.Remove(entry.Id)) changed = true;
-                if (State.InstalledSizeMeasuredUtc.Remove(entry.Id)) changed = true;
-            }
         }
         if (reconcileMissingCatalog)
         {

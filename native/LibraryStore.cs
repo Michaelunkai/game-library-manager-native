@@ -145,8 +145,6 @@ public sealed class LibraryStore
         if (state.Ratings.Values.Any(v => v < 0 || v > 5)) throw new FormatException("Ratings must be between zero and five.");
         if (state.PlayTimeSeconds.Values.Any(v => !double.IsFinite(v) || v < 0)) throw new FormatException("Play time must be finite and non-negative.");
         if (state.LastPlayedUtc.Any(e => e.Value.Kind == DateTimeKind.Local)) throw new FormatException("Last-played timestamps must be UTC.");
-        if (state.InstalledBytes.Values.Any(value => value < 0)) throw new FormatException("Installed size must be non-negative.");
-        if (state.InstalledSizeMeasuredUtc.Any(e => e.Value.Kind == DateTimeKind.Local)) throw new FormatException("Installed-size timestamps must be UTC.");
         if (!string.IsNullOrWhiteSpace(state.Settings.WandPath) && (!Path.IsPathFullyQualified(state.Settings.WandPath) || state.Settings.WandPath.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)) throw new FormatException("Wand path must be an absolute Windows executable path.");
         if (state.GameTags.Values.Any(v => v == null || v.Any(t => t == null || t.Length > 80))) throw new FormatException("Invalid game tags.");
         if (state.LocalGames.Any(e => e.Value == null || !e.Key.StartsWith("local:", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(e.Value.Name) || !Path.IsPathFullyQualified(e.Value.Folder)))
@@ -324,8 +322,6 @@ public sealed class LibraryStore
             g.Installed = state.InstalledGames.Contains(g.Id);
             g.PlayedHours = state.PlayTimeSeconds.GetValueOrDefault(g.Id) / 3600d;
             g.LastPlayedUtc = state.LastPlayedUtc.GetValueOrDefault(g.Id);
-            g.InstalledBytes = state.InstalledBytes.GetValueOrDefault(g.Id);
-            g.InstalledSizeMeasuredUtc = state.InstalledSizeMeasuredUtc.GetValueOrDefault(g.Id);
             g.TagsLabel = string.Join("  ·  ", state.GameTags.GetValueOrDefault(g.Id, new()));
             if (!g.IsLocal && string.IsNullOrEmpty(g.DockerImage)) g.DockerImage = $"{DockerIdentity.CatalogRepository}:{g.Id}";
             if (!g.IsLocal && string.IsNullOrEmpty(g.DockerImageUrl)) g.DockerImageUrl = $"https://hub.docker.com/r/{DockerIdentity.CatalogRepository}/tags?name={Uri.EscapeDataString(g.Id)}";
@@ -345,9 +341,6 @@ public sealed class LibraryStore
             if (!g.IsNonGame && !g.RequiresGameIdentity && metadata[g.Id] is JsonObject extra && CatalogIdentity.AcceptsMetadata(g.Id, extra) &&
                 InstalledPlatformIdentity.Accepts(g, extra))
             {
-                var identityProof = (JsonObject)extra.DeepClone();
-                identityProof["id"] = g.Id;
-                if (!MetadataClient.MatchesGame(g, identityProof)) continue;
                 // Provider classification only fills new Docker entries, never curated/shared overrides.
                 if (g.Discovered)
                 {
@@ -363,17 +356,7 @@ public sealed class LibraryStore
                 g.DiskRequirementGb = DataJson.Number(extra["diskRequirementGb"]);
                 if (enrichedTime > 0 && (g.Time <= 0 || DataJson.Text(extra["source"]?["time"]) != "genre-estimate")) g.Time = enrichedTime;
                 var cover = DataJson.Text(extra["cover"]);
-                if (cover.Length > 0)
-                {
-                    try
-                    {
-                        var cached = SafeChild(Cache, cover);
-                        var bundled = SafeChild(Path.Combine(Assets, "data"), cover);
-                        if (File.Exists(cached)) g.Cover = cached;
-                        else if (File.Exists(bundled)) g.Cover = bundled;
-                    }
-                    catch (ArgumentException) { }
-                }
+                if (cover.Length > 0) { try { var path = SafeChild(Cache, cover); if (File.Exists(path)) g.Cover = path; } catch (ArgumentException) { } }
             }
         }
         return games;

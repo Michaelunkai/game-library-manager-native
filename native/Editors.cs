@@ -1195,7 +1195,7 @@ public static class InstalledScanner
                 result.Notices.Add(label + ": multiple installation folders match this catalog game. Existing launcher choices were preserved.");
                 return;
             }
-            result.Games.Add(new(id, local ? label : ids![0].Name, folder, chosen, local, InstalledSize.Measure(folder, cancellation)));
+            result.Games.Add(new(id, local ? label : ids![0].Name, folder, chosen, local));
             if (chosen == null) result.Notices.Add(label + ": multiple game executables were found. Choose the launcher in Details.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
