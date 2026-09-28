@@ -3,10 +3,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const root = path.resolve(__dirname, '../..');
+const root = path.resolve(process.env.GLM_MAINTAINED_SOURCE_ROOT || path.resolve(__dirname, '../..'));
 const hash = data => crypto.createHash('sha256').update(data).digest('hex');
 const headers = { 'User-Agent': 'GameLibrarySourceVerification' };
 (async () => {
+  if (!fs.existsSync(path.join(root, '.git')) || !fs.existsSync(path.join(root, 'public/app.js')))
+    throw Error('Maintained source root must be a standalone game-library-manager-web checkout: ' + root);
   const response = await fetch('https://api.github.com/repos/Michaelunkai/game-library-manager-web/commits/main', { headers });
   if (!response.ok) throw Error('Could not resolve maintained source revision: ' + response.status);
   const commit = (await response.json()).sha;
@@ -19,10 +21,18 @@ const headers = { 'User-Agent': 'GameLibrarySourceVerification' };
   }
   const localApp = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8').replace(/^\uFEFF/, '');
   if (localApp.replace(/\r\n/g, '\n') !== upstream.get('public/app.js').replace(/\r\n/g, '\n')) throw Error('Website changed from the inspected baseline. Reconcile changes before preparing again.');
-  if (upstream.get('netlify/functions/admin-config.js') !== fs.readFileSync(path.join(__dirname, 'admin-config.production-reference.js'), 'utf8')) throw Error('Backend production reference drifted; review current source.');
+  const candidateAdmin = fs.readFileSync(path.join(__dirname, 'admin-config.js'), 'utf8').replace("require('./safe-fetch')", "require('../../lib/netlify-safe-fetch')");
+  const upstreamAdmin = upstream.get('netlify/functions/admin-config.js');
+  const legacyAdmin = fs.readFileSync(path.join(__dirname, 'admin-config.production-reference.js'), 'utf8');
+  const normalized = value => value.replace(/\r\n/g, '\n');
+  if (normalized(upstreamAdmin) !== normalized(legacyAdmin) && normalized(upstreamAdmin) !== normalized(candidateAdmin)) throw Error('Backend production source drifted outside the reviewed legacy/current implementations.');
   const next = new Map(upstream);
-  next.set('public/app.js', fs.readFileSync(path.join(__dirname, 'app.cas.js'), 'utf8'));
-  next.set('netlify/functions/admin-config.js', fs.readFileSync(path.join(__dirname, 'admin-config.js'), 'utf8').replace("require('./safe-fetch')", "require('../../lib/netlify-safe-fetch')"));
+  // Current GitHub source may already contain the reviewed browser outbox while
+  // production is still on an older deploy. Never replace later catalog/UI
+  // changes with the historical full-file candidate merely to trigger deploy.
+  if (!upstream.get('public/app.js').includes('ConditionalAdminSync'))
+    next.set('public/app.js', fs.readFileSync(path.join(__dirname, 'app.cas.js'), 'utf8'));
+  next.set('netlify/functions/admin-config.js', candidateAdmin);
   next.set('lib/netlify-safe-fetch.js', fs.readFileSync(path.join(__dirname, 'safe-fetch.js'), 'utf8'));
   const pkg = JSON.parse(upstream.get('package.json')); pkg.dependencies['@netlify/blobs'] = '10.7.13';
   next.set('package.json', JSON.stringify(pkg, null, 2) + '\n');

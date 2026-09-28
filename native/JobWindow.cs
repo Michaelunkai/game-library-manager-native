@@ -47,25 +47,42 @@ public sealed class JobWindow : Window
     private bool ownsInstallation;
     private bool stopRequested;
     internal string OperationId { get; } = Guid.NewGuid().ToString("N");
-    internal static ProcessStartInfo BuildDefaultTerminalStartInfo(string path)
+    internal static ProcessStartInfo BuildDefaultTerminalStartInfo(string path, string? transcriptPath = null)
     {
         if (!Path.GetExtension(path).Equals(".bat", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The default Windows terminal launcher requires a BAT script.", nameof(path));
         string fullPath = Path.GetFullPath(path);
         string directory = Path.GetDirectoryName(fullPath)!;
-        string command = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
-        // Do not delegate a .BAT to the file association. On this host that
-        // ShellExecute route can return Access Denied (and on other hosts it can
-        // return the Windows Terminal broker rather than the script process), so
-        // JobWindow cannot observe the install's real exit code. Start cmd.exe
-        // explicitly and use CALL so exit /b from the generated payload is
-        // propagated to the waitable process we own.
-        return new ProcessStartInfo(command)
+        string transcript = Path.GetFullPath(transcriptPath ?? Path.ChangeExtension(fullPath, ".terminal.log"));
+        const string loader = "$ErrorActionPreference='Stop'; $command='call \"' + $env:GLM_JOB_SCRIPT + '\"'; try { & $env:ComSpec /d /c $command 2>&1 | Tee-Object -FilePath $env:GLM_JOB_TRANSCRIPT -Append; $code=$LASTEXITCODE } catch { $_ | Out-String | Tee-Object -FilePath $env:GLM_JOB_TRANSCRIPT -Append; $code=1 }; exit $code";
+        string command = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+        // The console process is started directly so Windows can host it in the
+        // user's configured default terminal. Its stream is mirrored to an
+        // operation-scoped transcript while the actual BAT exit code remains
+        // attached to the process JobWindow owns and awaits.
+        var start = new ProcessStartInfo(command)
         {
-            Arguments = "/d /c call \"" + fullPath + "\"",
-            UseShellExecute = true,
+            Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand " + Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(loader)),
+            UseShellExecute = false,
+            CreateNoWindow = false,
             WorkingDirectory = directory,
-                WindowStyle = ProcessWindowStyle.Normal
+            WindowStyle = ProcessWindowStyle.Normal
         };
+        start.Environment["GLM_JOB_SCRIPT"] = fullPath;
+        start.Environment["GLM_JOB_TRANSCRIPT"] = transcript;
+        return start;
+    }
+
+    internal static string SummarizeFailure(string transcript, int exitCode)
+    {
+        string[] lines = (transcript ?? string.Empty).Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
+        string? failure = lines.LastOrDefault(line => line.Contains(" FAILED ", StringComparison.Ordinal));
+        if (failure != null)
+        {
+            int marker = failure.IndexOf(" FAILED ", StringComparison.Ordinal);
+            return "Install failed · " + failure[(marker + " FAILED ".Length)..].Trim();
+        }
+        string? batch = lines.LastOrDefault(line => line.Contains("Install batch completed with failures:", StringComparison.Ordinal));
+        return batch?.Trim() ?? "Install failed · exit code " + exitCode;
     }
     internal static string BuildJobLogPath(string root, DateTime timestamp, Guid operationId)
     {
@@ -108,6 +125,7 @@ public sealed class JobWindow : Window
         }
         this.containerGameIds = identityMap;
         Style = (Style)System.Windows.Application.Current.FindResource(typeof(Window));
+        SourceInitialized += (_, _) => WindowEffects.Apply(this, false);
         Title = openInDefaultTerminal ? "Game Library · Download terminal" : wsl2 ? "Game Library · WSL2 Ubuntu install" : "Game Library · Download progress";
         Width = 900; Height = 600; MinWidth = 600; MinHeight = 400;
         var grid = new DockPanel { Margin = new Thickness(18) };
@@ -121,7 +139,7 @@ public sealed class JobWindow : Window
         Directory.CreateDirectory(Path.Combine(store.Root, "jobs"));
         log = BuildJobLogPath(store.Root, DateTime.Now, Guid.NewGuid());
         Loaded += (_, _) => _ = RunObservedAsync();
-        Closing += (_, e) => { if (Busy) { e.Cancel = true; status.Text = "Stop the operation before closing. Partial files will be preserved."; } };
+        Closing += (_, e) => { if (Busy) { e.Cancel = true; status.Text = "Stop the operation before closing. The previous installation will be preserved."; } };
     }
     private async Task RunObservedAsync()
     {
@@ -186,7 +204,10 @@ public sealed class JobWindow : Window
                 operationCancellation.Token.ThrowIfCancellationRequested();
                 ownsInstallation = true;
             }
+            if (ownsInstallation) RecoverInstallArtifacts(OperationId);
             string path = Path.ChangeExtension(log, "." + scriptExtension);
+            string? terminalTranscript = openInDefaultTerminal ? Path.ChangeExtension(log, ".terminal.log") : null;
+            if (terminalTranscript != null && File.Exists(terminalTranscript)) File.Delete(terminalTranscript);
             string boundScript = BindJobEnvironment(script, scriptExtension, OperationId, acquireInstallation != null && ownsInstallation);
             File.WriteAllText(path, boundScript, new System.Text.UTF8Encoding(scriptExtension == "ps1"));
             ProcessStartInfo start;
@@ -195,7 +216,7 @@ public sealed class JobWindow : Window
                 // Run cmd.exe in the user's default console host, but own the
                 // process that executes the BAT so WaitForExitAsync observes its
                 // real completion and exit code.
-                start = BuildDefaultTerminalStartInfo(path);
+                start = BuildDefaultTerminalStartInfo(path, terminalTranscript);
             }
             else if (wsl2)
             {
@@ -220,12 +241,23 @@ public sealed class JobWindow : Window
             completionMonitor = MonitorCompletionsAsync(completionCancellation.Token);
             status.Text = openInDefaultTerminal ? "Running in your default terminal · " + path : wsl2 ? "Running in WSL2 Ubuntu · " + path : "Running · " + log;
             await process.WaitForExitAsync();
+            string transcriptText = string.Empty;
+            if (terminalTranscript != null)
+            {
+                try
+                {
+                    transcriptText = File.Exists(terminalTranscript) ? await File.ReadAllTextAsync(terminalTranscript) : string.Empty;
+                    foreach (string line in transcriptText.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)) Append(line);
+                }
+                catch (Exception ex) { Append("The terminal transcript could not be read: " + ex.Message); }
+            }
             // A marker can be written immediately before the child exits. Drain
             // once before cancelling the watcher so the final game is reflected
             // without waiting for a second launch or folder scan.
             await DrainCompletionsAsync();
             LastExitCode = process.ExitCode;
-            status.Text = cancelled ? "Stopped. Partial files were preserved." : process.ExitCode == 0 ? "Completed successfully · " + log : "Failed · exit code " + process.ExitCode + " · " + log;
+            if (process.ExitCode != 0 && ownsInstallation && !cancelled) RecoverInstallArtifacts(null);
+            status.Text = cancelled ? "Stopped. Temporary staging was cleaned; the previous installation was preserved." : process.ExitCode == 0 ? "Completed successfully · " + log : SummarizeFailure(transcriptText, process.ExitCode) + " · details: " + log;
             store.Log("Download process exit=" + process.ExitCode + "; cancelled=" + cancelled); Append(status.Text);
         }
         catch (Exception ex) { status.Text = "Could not complete: " + ex.Message; Append(status.Text); }
@@ -360,8 +392,58 @@ public sealed class JobWindow : Window
     }
     private async Task FinishStopCleanupAsync(TaskCompletionSource<bool> completion)
     {
-        try { await StopOwnedContainersAsync(); completion.TrySetResult(true); }
+        try
+        {
+            var activeProcess = process;
+            try { if (activeProcess is { HasExited: false }) await activeProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or TimeoutException) { Append("Process shutdown observation: " + ex.Message); }
+            await StopOwnedContainersAsync(); RecoverInstallArtifacts(null); completion.TrySetResult(true);
+        }
         catch (Exception ex) { completion.TrySetException(ex); }
+    }
+    private void RecoverInstallArtifacts(string? protectedOperationId)
+    {
+        if (completionDestination == null) return;
+        foreach (string id in completionGameIds)
+        {
+            int recovered = RecoverStaleInstallArtifacts(completionDestination, id, protectedOperationId);
+            if (recovered > 0) Append($"Recovered/cleaned {recovered} interrupted staging artifact(s) for {id}.");
+        }
+    }
+    internal static int RecoverStaleInstallArtifacts(string destination, string gameId, string? protectedOperationId = null)
+    {
+        string root = Path.GetFullPath(destination);
+        if (!Directory.Exists(root)) return 0;
+        if (protectedOperationId != null && !Guid.TryParseExact(protectedOperationId, "N", out _)) throw new ArgumentException("Invalid protected operation identity.", nameof(protectedOperationId));
+        string folderName = DockerScripts.InstallFolder(gameId);
+        string stagingRoot = Path.Combine(root, DockerScripts.StagingDirectoryName);
+        if (!Directory.Exists(stagingRoot)) return 0;
+        string installFolder = Path.Combine(root, folderName);
+        var candidates = Directory.EnumerateDirectories(stagingRoot, folderName + "-*", SearchOption.TopDirectoryOnly)
+            .Select(path => new { Path = path, Name = Path.GetFileName(path) })
+            .Select(item =>
+            {
+                string suffix = item.Name[(folderName.Length + 1)..];
+                bool backup = suffix.StartsWith("previous-", StringComparison.Ordinal);
+                string operation = backup ? suffix["previous-".Length..] : suffix;
+                return new { item.Path, Backup = backup, Operation = operation };
+            })
+            .Where(item => Guid.TryParseExact(item.Operation, "N", out _) && !string.Equals(item.Operation, protectedOperationId, StringComparison.Ordinal))
+            .ToArray();
+        int changed = 0;
+        var backups = candidates.Where(item => item.Backup).OrderByDescending(item => Directory.GetLastWriteTimeUtc(item.Path)).ToArray();
+        if (!Directory.Exists(installFolder) && backups.Length > 0)
+        {
+            Directory.Move(backups[0].Path, installFolder);
+            backups = backups.Skip(1).ToArray();
+            changed++;
+        }
+        foreach (var item in candidates.Where(item => !item.Backup).Concat(backups))
+        {
+            if (!Directory.Exists(item.Path)) continue;
+            Directory.Delete(item.Path, true); changed++;
+        }
+        return changed;
     }
     private async Task StopOwnedContainersAsync()
     {
