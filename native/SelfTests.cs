@@ -1893,6 +1893,15 @@ public partial class MainWindow
             Check("Idle pause is disabled; cards retain backup and restore", pauseButton is { IsEnabled: false }
                 && FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "BackupGame") != null
                 && FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "RestoreGame") != null);
+            // Every card must carry its own delete and speed entry point, not only a
+            // toolbar control that acts on the current selection.
+            var deleteOnCard = FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "DeleteGame");
+            var speedOnCard = FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "SpeedGame");
+            Check("Every card carries its own delete and speed buttons", deleteOnCard != null && speedOnCard != null);
+            // The tag must be that card's own game, so pressing it can never act on a
+            // different title than the one whose button was clicked.
+            Check("The per-card delete button is bound to its own game",
+                deleteOnCard?.Tag is Game taggedDelete && taggedDelete.Id == playStateGame.Id);
             Check("Idle cards reflect exact Wand eligibility while hiding force-exit controls", playButton?.Content?.ToString()?.Contains("Play", StringComparison.Ordinal) == true
                 && wandButton?.Visibility == (playStateGame.CanPlayWithWand ? Visibility.Visible : Visibility.Collapsed)
                 && exitButton?.Visibility == Visibility.Collapsed);

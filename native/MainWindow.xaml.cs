@@ -1259,6 +1259,57 @@ public partial class MainWindow : Window
     {
         if (sender is FrameworkElement { Tag: Game card }) { var game = card.ActionTarget ?? card; await RunGameSave(game.Id, game.Name, State.LaunchPaths.GetValueOrDefault(game.Id, ""), true); }
     }
+    /// <summary>Per-card speed control; opens the same dialog as the toolbar menu.</summary>
+    private void SpeedFromCard(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: Game card }) ShowSpeedDialog(card.ActionTarget ?? card);
+    }
+    /// <summary>
+    /// Per-card "Delete from all drives". The tag is the card's own game, so this acts
+    /// on the game whose button was pressed rather than on whatever is selected.
+    /// Planning and the confirmation both run before anything is removed, and
+    /// GameRemoval refuses any path it cannot prove is inside an allow-listed root.
+    /// </summary>
+    private async void DeleteFromCard(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: Game card }) return;
+        var game = card.ActionTarget ?? card;
+        try
+        {
+            var request = new GameRemovalRequest
+            {
+                GameId = game.Id,
+                GameName = game.Name,
+                MountPath = State.Settings.MountPath,
+                LocalFolders = State.LocalGames.TryGetValue(game.Id, out var local) && !string.IsNullOrWhiteSpace(local?.Folder)
+                    ? new[] { local!.Folder } : Array.Empty<string>(),
+                InstallationFolders = State.InstallationFolders.TryGetValue(game.Id, out var folder) && !string.IsNullOrWhiteSpace(folder)
+                    ? new[] { folder } : Array.Empty<string>(),
+                LaunchPath = State.LaunchPaths.GetValueOrDefault(game.Id, string.Empty)
+            };
+            // Planning touches disk and possibly Docker, so it never runs on the UI thread.
+            var plan = await Task.Run(() => GameRemoval.Plan(request));
+            if (plan.Targets.Count == 0)
+            {
+                StatusText.Text = "Nothing on disk belongs to " + game.Name + ".";
+                MessageBox.Show(this, "There is nothing on disk to delete for " + game.Name + ".",
+                    "Nothing to delete", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var confirm = MessageBox.Show(this,
+                GameRemoval.Describe(plan) + "\n\nDelete all of this permanently?",
+                "Delete " + game.Name, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) { StatusText.Text = "Delete cancelled."; return; }
+            StatusText.Text = "Deleting " + game.Name + "...";
+            var result = await GameRemoval.ExecuteAsync(plan, null, lifetime.Token);
+            Reload();
+            StatusText.Text = result.FailedCount > 0
+                ? $"Deleted {result.DeletedCount} item(s) for {game.Name}; {result.FailedCount} could not be removed."
+                : $"Deleted {result.DeletedCount} item(s) for {game.Name} ({result.SkippedCount} already absent).";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { ReportUiFailure("Delete for " + game.Name, ex); }
+    }
     private async Task RunGameSave(string id, string name, string executable, bool restore)
     {
         string? reserved = null;
@@ -1800,7 +1851,7 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
         var remove = new MenuItem { Header = "Delete from all drives" };
         remove.IsEnabled = game is not null;
-        remove.Click += (_, _) => { if (game is not null) DeleteGameAndLeftovers(game); };
+        remove.Click += (_, _) => { if (game is not null) DeleteFromCard(sender: new FrameworkElement { Tag = game }, e: new RoutedEventArgs()); };
         menu.Items.Add(remove);
         menu.Items.Add(new Separator());
         foreach (var item in BuildExportMenu().Items)
@@ -1808,42 +1859,6 @@ public partial class MainWindow : Window
         menu.PlacementTarget = (Button)sender; menu.IsOpen = true;
     }
 
-    private async void DeleteGameAndLeftovers(Game game)
-    {
-        try
-        {
-            var request = new GameRemovalRequest
-            {
-                GameId = game.Id,
-                GameName = game.Name,
-                MountPath = State.Settings.MountPath,
-                LocalFolders = State.LocalGames.TryGetValue(game.Id, out var local) && !string.IsNullOrWhiteSpace(local?.Folder)
-                    ? new[] { local!.Folder } : Array.Empty<string>(),
-                InstallationFolders = State.InstallationFolders.TryGetValue(game.Id, out var folder) && !string.IsNullOrWhiteSpace(folder)
-                    ? new[] { folder } : Array.Empty<string>(),
-                LaunchPath = State.LaunchPaths.GetValueOrDefault(game.Id, string.Empty)
-            };
-            // Planning touches disk and possibly Docker, so it never runs on the UI thread.
-            var plan = await Task.Run(() => GameRemoval.Plan(request));
-            if (plan.Targets.Count == 0)
-            {
-                StatusText.Text = "Nothing on disk belongs to " + game.Name + ".";
-                return;
-            }
-            var confirm = MessageBox.Show(this,
-                GameRemoval.Describe(plan) + "\n\nDelete all of this permanently?",
-                "Delete " + game.Name, MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes) { StatusText.Text = "Delete cancelled."; return; }
-            StatusText.Text = "Deleting " + game.Name + "...";
-            var result = await GameRemoval.ExecuteAsync(plan, null, lifetime.Token);
-            Reload();
-            StatusText.Text = result.FailedCount > 0
-                ? $"Deleted {result.DeletedCount} item(s) for {game.Name}; {result.FailedCount} could not be removed. See the log for details."
-                : $"Deleted {result.DeletedCount} item(s) for {game.Name} ({result.SkippedCount} already absent).";
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Error(ex); }
-    }
     private Game[] Selected() => projectedCards.Where(card => card.Selected)
         .Select(card => card.ActionTarget ?? card).DistinctBy(game => game.Id, StringComparer.Ordinal).ToArray();
     private Game[] SelectedForInstall() => projectedCards.Where(card => card.Selected)

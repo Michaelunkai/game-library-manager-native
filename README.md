@@ -37,13 +37,16 @@ no runtime to install: the bundle carries everything it needs.
 
 ### New in this release
 
-- **Delete from all drives.** Every card gets a *Game actions* menu with
-  **Delete from all drives**. It plans first and shows you exactly what it will
-  remove, then deletes the install folder, the install working directory, any
-  local or non-Docker copy, and Docker leftovers. It is containment-checked: a
-  path outside the allow-listed roots, a drive root, a user profile folder, or a
-  reparse point is refused rather than followed, so the entry point can never
-  widen a delete past the game's own files.
+- **Delete from all drives.** Every game card has its own
+  **Delete from all drives** button (alongside Backup, Restore and Speed). It
+  plans first and shows you exactly what it will remove, then deletes the install
+  folder, the install working directory, any local or non-Docker copy, and
+  Docker leftovers. It is containment-checked: a path outside the allow-listed
+  roots, a drive root, a user profile folder, or a reparse point is refused
+  rather than followed, so the entry point can never widen a delete past the
+  game's own files. The button is bound to its own card's game, so it can never
+  act on a different title than the one you pressed it on. A toolbar
+  **Game actions ▾** menu offers the same actions for the current selection.
 - **Zero-lag search and category switching.** Filtering resolves through a
   search index built once per catalog change instead of rescanning every card
   and touching disk on each keystroke. Measured on a 1,000-card catalog, a
@@ -183,9 +186,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 - The self-test suite runs **158 checks** covering identity, metadata, save
   backup/restore, durable installs, Wand dispatch, and the six capabilities
-  above. The offline WPF UI harness adds **86 checks**. Both are run against the
-  packaged executable by `verify-reliability.ps1`, which currently reports
-  `passed: true` across all 9 cases.
+  above. The offline WPF UI harness adds **88 checks**, including two that assert
+  every card really carries its own delete and speed buttons and that the delete
+  button is bound to its own game. Both run against the packaged executable via
+  `verify-reliability.ps1`, which currently reports `passed: true` across all 9
+  cases.
 - The 64-bit speed hook is compiled from `native\tools\gamespeed\gamespeed.c`
   with MinGW-w64 gcc (`gcc -m64 -O2 -Wall -Wextra -static-libgcc -shared -s`).
   Rebuild it after changing the C source. A 32-bit variant is not currently
