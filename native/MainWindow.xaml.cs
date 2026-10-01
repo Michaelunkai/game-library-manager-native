@@ -1258,6 +1258,14 @@ public partial class MainWindow : Window
         bool light = State.Settings.Theme == "light";
         var values = new Dictionary<string, string> { ["CanvasBrush"] = light ? "#F3F5F6" : "#101217", ["PanelBrush"] = light ? "#FFFFFF" : "#171B23", ["CardBrush"] = light ? "#E8EDF0" : "#1D222C", ["StrokeBrush"] = light ? "#C8D2D9" : "#303847", ["TextBrush"] = light ? "#17212D" : "#F2F5FA", ["MutedBrush"] = light ? "#536479" : "#A9B5C9", ["AccentBrush"] = light ? "#58B37F" : "#9CE7BB" };
         foreach (var entry in values) System.Windows.Application.Current.Resources[entry.Key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(entry.Value));
+        // FocusVisuals resolves the palette with StaticResource, which is evaluated when the
+        // dictionary is parsed, so it must be merged only after the brushes above exist -
+        // merging first would throw and stop the app from starting. Merging once is
+        // enough: the brushes are mutated in place on a theme toggle, not replaced, so
+        // already-parsed references keep resolving to the same objects.
+        var appResources = System.Windows.Application.Current.Resources;
+        if (!appResources.MergedDictionaries.Any(d => d is FocusVisuals))
+            appResources.MergedDictionaries.Add(new FocusVisuals());
     }
     private void Keyboard(object sender, System.Windows.Input.KeyEventArgs e)
     {
