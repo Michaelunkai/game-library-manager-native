@@ -74,8 +74,8 @@ function Write-Hero([string]$path) {
     $g.DrawString('F:\study\repos\game-library-manager-native\native', $f3, $w3, 90, 274)
 
     $labels = @(
-        'Delete from all drives', 'Zero-lag search', 'Tag hygiene',
-        'Accurate completion', 'Live backup + restore', 'Per-game speed bar'
+        'No scroll stutter', 'Delete from all drives', 'Zero-lag search',
+        'Accurate completion', 'Live backup', 'Per-game speed bar'
     )
     $x = 90; $y = 336
     $fb = New-Font 19
@@ -118,12 +118,12 @@ function Write-Features([string]$path) {
     $g.DrawString('Each capability is a dedicated engine with its own self-test file.', $fsub, (New-Brush 170 145 160 180), 80, 118)
 
     $cards = @(
+        @{ t = 'No scroll stutter'; d = 'LRU artwork caches, uniform card heights, debounced scroll work - no periodic freeze.'; k = 'fix' },
         @{ t = 'Delete from all drives'; d = 'Containment-checked plan over every drive and leftover; refuses roots, reparse points and escapes.'; k = 'slot 1' },
-        @{ t = 'Zero-lag filtering'; d = 'Prebuilt inverted index, cached queries, list-swap categories - no per-keystroke disk I/O.'; k = 'slot 2' },
         @{ t = 'Tag hygiene'; d = 'Curated non-game tags moved only into the seven hidden categories, never a visible one.'; k = 'slot 3' },
         @{ t = 'Accurate completion'; d = 'Percent out of 100 plus hours left, with explicit confidence and no fabricated totals.'; k = 'slot 4' },
         @{ t = 'Live backup + restore'; d = 'Quantised snapshot while the game runs; verify-then-quarantine restore with rollback.'; k = 'slots 5-6' },
-        @{ t = 'Per-game speed bar'; d = 'Scaled-clock hook with F1 +0.5, F2 -0.5, F3 normal, gated on a running game.'; k = 'slots 7-8' }
+        @{ t = 'Per-game speed bar'; d = 'Scaled-clock hook, F1 +0.5, F2 -0.5, F3 normal, gated on a running game.'; k = 'slots 7-8' }
     )
     $cw = 460; $ch = 250; $gap = 30
     foreach ($card in $cards) {
@@ -154,7 +154,7 @@ function Write-Features([string]$path) {
 
 # ------------------------------------------------------------ speed bar card
 function Write-Speed([string]$path) {
-    $w = 1400; $h = 620
+    $w = 1400; $h = 660
     $c = New-Canvas $w $h
     $bmp = $c[0]; $g = $c[1]
     Fill-VerticalGradient $g (New-Object System.Drawing.Rectangle(0, 0, $w, $h)) 255 15 18 26 255 9 11 16
@@ -202,6 +202,9 @@ function Write-Speed([string]$path) {
     }
     $fnote = New-Font 16
     $g.DrawString('Offline single-player titles launched from this library. The engine refuses any process it cannot positively identify.', $fnote, (New-Brush 150 130 145 165), 90, 500)
+    # measured scaling, corrected for timing-window overhead
+    $fmeas = New-Font 16
+    $g.DrawString('Measured against an uninjected parent clock:  1.000x  ·  2.004x  ·  0.501x  ·  4.004x', $fmeas, (New-Brush 210 190 205 225), 90, 536)
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose(); $g.Dispose()
 }
