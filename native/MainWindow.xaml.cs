@@ -1810,6 +1810,52 @@ public partial class MainWindow : Window
         (State.LaunchPaths.Count, State.InstallationFolders.Count, State.LocalGames.Count,
          State.PlayTimeSeconds.Count, State.LastPlayedUtc.Count);
 
+    /// <summary>
+    /// The user-facing entry point for tag hygiene. Non-game tags - films, TV, anime,
+    /// soundtracks, books, DLC, ROMs - are moved into the seven hidden categories
+    /// only. The dialog refuses to offer confirm for any plan that is not confined
+    /// to those categories, so the restriction is enforced at the last moment rather
+    /// than only in the taxonomy.
+    /// </summary>
+    private void ShowTagMigration()
+    {
+        try
+        {
+            // A category is one of the seven hidden destinations only when the app's own
+            // visibility rules mark it as hidden. Reading that from CategoryVisibility
+            // rather than hard-coding a list means the guard keeps working if the set
+            // ever changes.
+            var config = Sync.Effective(State);
+            var definitions = EffectiveCategories(config);
+            var hidden = definitions
+                .Where(category => CategoryVisibility.Get(State, config, category.Id) is { HideTab: true, HideGamesFromAll: true })
+                .Select(category => category.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var tagsByGame = State.GameTags
+                .Where(entry => entry.Value is { Count: > 0 })
+                .ToDictionary(entry => entry.Key, entry => (IReadOnlyList<string>)entry.Value, StringComparer.Ordinal);
+            var plan = TagMigrationService.Plan(new TagMigrationRequest(tagsByGame, hidden));
+            TagMigrationDialog.Show(this, plan, edits =>
+            {
+                try
+                {
+                    // The dialog only offers confirm for a safe plan, so this cannot
+                    // smuggle a visible-category change past the guard.
+                    if (!TagMigrationService.IsSafe(plan))
+                    {
+                        StatusText.Text = "Tag migration was refused: the plan was not confined to hidden categories.";
+                        return;
+                    }
+                    LocalCatalogEdits.Save(Store, State, edits.ToArray());
+                    Reload();
+                    StatusText.Text = "Moved " + plan.ChangedGameCount + " game(s) into hidden categories.";
+                }
+                catch (Exception ex) { Error(ex); }
+            });
+        }
+        catch (Exception ex) { Error(ex); }
+    }
+
     private static bool saveOperationProofIsActive(Func<string, bool, Task<GameSaveResult>>? proof) => proof is not null;
 
     private SaveOperationRequest SaveRequestForGame(string id, string name)
@@ -1876,6 +1922,9 @@ public partial class MainWindow : Window
         restore.IsEnabled = game is not null;
         restore.Click += (_, _) => { if (game is not null) RestoreGameSaves(game); };
         menu.Items.Add(restore);
+        var tidy = new MenuItem { Header = "Tidy non-game tags…" };
+        tidy.Click += (_, _) => ShowTagMigration();
+        menu.Items.Add(tidy);
         menu.Items.Add(new Separator());
         var remove = new MenuItem { Header = "Delete from all drives" };
         remove.IsEnabled = game is not null;
