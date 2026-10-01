@@ -795,6 +795,32 @@ public static class SelfTests
         {
             Require(WandIntegration.WandStartupWindow >= TimeSpan.FromMinutes(3), "The Wand startup window no longer covers a delayed desktop-client start.");
         });
+        Check("Cover cache evicts the coldest entry instead of clearing everything", () =>
+        {
+            // The old behaviour was a wholesale Clear() at the size bound. That is the
+            // scroll-freeze cliff: every cover on screen is evicted at once, so the
+            // next scroll re-decodes and re-hashes (up to 8 MB per content-addressed
+            // .img) synchronously on the UI thread. This pins LRU retention instead.
+            var converter = new CoverConverter();
+            var before = CoverConverter.CachedCoverCount;
+            Require(before >= 0, "The cover cache did not report its size.");
+            var hot = new Game { Id = "lru-hot-proof", Name = "LRU Hot Proof", Cover = "" };
+            object? hotImage = converter.Convert(hot, typeof(ImageSource), null!, null!);
+            Require(hotImage != null, "The hot cover did not render.");
+            // Re-touch the hot entry, then push the cache well past its bound.
+            for (int round = 0; round < 3; round++)
+            {
+                Require(ReferenceEquals(hotImage, converter.Convert(hot, typeof(ImageSource), null!, null!)),
+                    "A re-touched cover was not served from cache.");
+                for (int i = 0; i < 900; i++)
+                    converter.Convert(new Game { Id = "lru-cold-" + round + "-" + i, Name = "Cold " + i, Cover = "" },
+                        typeof(ImageSource), null!, null!);
+            }
+            Require(CoverConverter.CachedCoverCount <= CoverConverter.MaxCachedCoverCount,
+                "The cover cache grew past its bound: " + CoverConverter.CachedCoverCount + ".");
+            Require(ReferenceEquals(hotImage, converter.Convert(hot, typeof(ImageSource), null!, null!)),
+                "A repeatedly used cover was evicted. The cache is clearing wholesale, which is the scroll-freeze cliff.");
+        });
         Check("Missing-cover converter returns a deterministic nonblank image", () =>
         {
             var converter = new CoverConverter();
