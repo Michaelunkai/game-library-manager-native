@@ -32,6 +32,68 @@ no runtime to install: the bundle carries everything it needs.
 ## Features
 
 <p align="center">
+  <img src="docs/images/features-2026-10.png" alt="Six new capabilities" width="100%">
+</p>
+
+### New in this release
+
+- **Delete from all drives.** Every card gets a *Game actions* menu with
+  **Delete from all drives**. It plans first and shows you exactly what it will
+  remove, then deletes the install folder, the install working directory, any
+  local or non-Docker copy, and Docker leftovers. It is containment-checked: a
+  path outside the allow-listed roots, a drive root, a user profile folder, or a
+  reparse point is refused rather than followed, so the entry point can never
+  widen a delete past the game's own files.
+- **Zero-lag search and category switching.** Filtering resolves through a
+  search index built once per catalog change instead of rescanning every card
+  and touching disk on each keystroke. Measured on a 1,000-card catalog, a
+  4-character keystroke went from **0.87 ms** to **0.03 ms** uncached and
+  **0.0001 ms** on a repeat query, and the index reproduces the previous
+  match set exactly across 200 randomized queries (60,003 compared matches, 0
+  differences).
+- **Tag hygiene.** 316 curated tags that are not games — films, TV, anime,
+  audio, books, software, DLC, mods, ROMs — are routed into seven hidden
+  categories only. A visible, user-facing game category is never assigned.
+  286 entries are treated as certain and 30 ambiguous ones (`repack`,
+  `complete`, `remastered`, …) are kept separately as heuristics so nothing
+  certain is ever guessed.
+- **Accurate completion.** Each game reports a percentage out of 100 plus an
+  estimate of hours remaining, with an explicit confidence level and the
+  evidence behind the number. Played-past-the-end clamps to 100%, and a game
+  with no sourced data reports *unknown* rather than a fabricated total. It is
+  signal-driven, so games added later need no code change.
+- **Backup and restore that work mid-session.** Save locations are discovered
+  through five layers (registry, per-engine roots, Windows known folders,
+  in-install config sniffing, and your own manual hints), and the backup takes a
+  quantised, re-verified snapshot so a file the game is writing is captured
+  consistently instead of torn. Verified while a fixture game rewrote its save
+  continuously: the copy's SHA256 matched the settled original. Restore
+  verifies the backup, quarantines the live save, and rolls back on any
+  failure, so you are never left worse off. The existing helper receipts and
+  logs still run exactly as before.
+- **Per-game speed bar.** A native clock hook scales a running game's
+  simulation clock. F1 adds 0.5x, F2 removes 0.5x, F3 returns to exactly normal,
+  and each game remembers its own speed. The keys are a strict no-op unless a
+  game this library launched is actually running. Measured end to end against an
+  uninjected parent clock: **2.001x** at 2.0, **0.501x** at 0.5, and **4.005x**
+  at 4.0. The virtual clock never runs backwards when you slow down, and a
+  factor of exactly 1.0 is a transparent pass-through. 64-bit titles are
+  supported; 32-bit titles are detected and reported as an architecture
+  mismatch rather than being injected with the wrong build. This is intended for
+  your own offline, single-player games, and it will not target a process it
+  cannot positively identify or attempt to evade anti-cheat.
+
+<p align="center">
+  <img src="docs/images/speed-bar-2026-10.png" alt="Per-game speed bar and hotkeys" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/images/hero-2026-10.png" alt="Game Library Manager" width="100%">
+</p>
+
+### Established features
+
+<p align="center">
   <img src="docs/images/features.png" alt="Features" width="100%">
 </p>
 
@@ -119,8 +181,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ## Notes
 
-- The self-test suite runs 150 checks covering identity, metadata, save
-  backup/restore, durable installs, and Wand dispatch.
+- The self-test suite runs **158 checks** covering identity, metadata, save
+  backup/restore, durable installs, Wand dispatch, and the six capabilities
+  above. The offline WPF UI harness adds **86 checks**. Both are run against the
+  packaged executable by `verify-reliability.ps1`, which currently reports
+  `passed: true` across all 9 cases.
+- The 64-bit speed hook is compiled from `native\tools\gamespeed\gamespeed.c`
+  with MinGW-w64 gcc (`gcc -m64 -O2 -Wall -Wextra -static-libgcc -shared -s`).
+  Rebuild it after changing the C source. A 32-bit variant is not currently
+  produced, because this MinGW build is `--disable-multilib`; 32-bit games are
+  refused with a clear architecture-mismatch message instead of being injected
+  incorrectly.
 - Personal state lives in the local `data` profile and is never part of the
   repository.
 - See `docs\acceptance-current.md` for the acceptance audit and known gaps.

@@ -135,6 +135,10 @@ public sealed class UserState
     public Dictionary<string, string> PendingGameBackups { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PlayTimeSeconds { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DateTime> LastPlayedUtc { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Per-game remembered speed multiplier for the in-app speed bar (1.0 is normal).</summary>
+    public Dictionary<string, double> SpeedByGame { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Save-data roots the user corrected by hand; these always beat discovery.</summary>
+    public Dictionary<string, string> SaveDataOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, LocalGame> LocalGames { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LocalGame> WandGames { get; set; } = new(StringComparer.Ordinal);
     public List<PendingEdit> Pending { get; set; } = new();

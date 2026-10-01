@@ -46,7 +46,7 @@
         </StackPanel>
       </Grid>
       <DockPanel Grid.Row="3" Margin="0,0,0,14">
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Install selected" Style="{StaticResource PrimaryButton}" Click="InstallSelected" AutomationProperties.AutomationId="InstallSelected"/><Button Content="Export script ▾" Click="ExportScriptMenu" AutomationProperties.AutomationId="ExportScript" Margin="0"/></StackPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Install selected" Style="{StaticResource PrimaryButton}" Click="InstallSelected" AutomationProperties.AutomationId="InstallSelected"/><Button Content="Game actions ▾" Click="GameActionsMenu" AutomationProperties.AutomationId="GameActions" Margin="0"/><Button Content="Export script ▾" Click="ExportScriptMenu" AutomationProperties.AutomationId="ExportScript" Margin="0"/></StackPanel>
         <StackPanel Orientation="Horizontal"><Button Content="Select all" Click="SelectAll" AutomationProperties.AutomationId="SelectAll"/><Button Content="Select category" Click="SelectCurrentCategory" AutomationProperties.AutomationId="SelectCurrentCategory"/><Button Content="Random" Click="RandomVisibleGame" AutomationProperties.AutomationId="RandomVisibleGame"/><Button Content="Clear" Click="DeselectAll" AutomationProperties.AutomationId="DeselectAll"/><Button Content="Move to…" Click="MoveSelected" AutomationProperties.AutomationId="MoveSelected"/><Button Content="Copy commands" Click="CopySelectedCommands" AutomationProperties.AutomationId="CopySelectedCommands"/><Button Content="Scan folder" Click="ScanFolder" AutomationProperties.AutomationId="ScanFolder"/></StackPanel>
       </DockPanel>
       <Grid Grid.Row="4">

@@ -128,6 +128,17 @@ public partial class MainWindow : Window
     private long projectionAppliedVersion;
     private bool projectionComputed;
     private List<Game> filtered = new();
+    /// <summary>Prebuilt search index; rebuilt only when the catalog or state changes,
+    /// so a keystroke is an integer lookup instead of an O(n) rescan with disk checks.</summary>
+    private SearchPerformance.SearchIndex? searchIndex;
+    /// <summary>
+    /// Cheap fingerprint of the state collections the index searches. The catalog and
+    /// state references do not change when a game is installed or a launch path is
+    /// added, because those mutate the same instances in place, so the index is
+    /// rebuilt whenever these counts move. Value-level edits are covered by Save(),
+    /// which drops the index outright.
+    /// </summary>
+    private (int launch, int folders, int local, int playtime, int played) searchStateShape;
     private IReadOnlyDictionary<string, DateTimeOffset> authoritativePushTimes = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
     private readonly CancellationTokenSource lifetime = new();
     private readonly DispatcherTimer poll = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -174,6 +185,10 @@ public partial class MainWindow : Window
     public MainWindow(LibraryStore store, bool offline = false, WindowPlacementRequest? placementRequest = null)
     {
         Store = store; this.offline = offline;
+        // F1/F2/F3 adjust the running game's speed. The handler is fail-closed: with
+        // no positively identified running game it does nothing at all, so the keys
+        // never change the machine's state outside a game session.
+        PreviewKeyDown += SpeedHotkeyPreview;
         this.placementRequest = placementRequest ?? WindowPlacement.Capture(Array.Empty<string>(), store.StatePath);
         offlineNetwork = offline ? new OfflineNetworkGuard() : null;
         Sync = new SyncClient(store, offlineNetwork);
@@ -727,18 +742,28 @@ public partial class MainWindow : Window
             || !ReferenceEquals(State, projectionState)
             || !ReferenceEquals(authoritativePushTimes, projectionPushTimes)
             || projectionMutationVersion != projectionAppliedVersion;
-        if (recompute)
+        if (recompute || searchIndex is null || searchIndex.IsStale || SearchStateShape() != searchStateShape)
         {
             GameCardProjection.Detach(projectedCards);
             projectedCards = GameCardProjection.ProjectCards(Games, State,
                 new GameIdentityIndex(Games, State, includeDisplayName: true), authoritativePushTimes).ToList();
             projectionGames = Games; projectionState = State; projectionPushTimes = authoritativePushTimes;
             projectionAppliedVersion = projectionMutationVersion; projectionComputed = true;
+            // The search index is built in the same pass: it depends on exactly the
+            // same inputs, so a catalog push costs one build instead of one build
+            // per keystroke. The previous result is dropped so nothing stale survives.
+            searchIndex = SearchPerformance.Build(projectedCards, State, SearchPerformance.TagsFrom(State));
+            searchStateShape = SearchStateShape();
         }
         bool wandOnly = WandIncludedFilter.IsChecked == true;
         var config = Sync.Effective(State);
         IEnumerable<Game> visible = wandOnly ? projectedCards.Where(g => g.CanPlayWithWand) : projectedCards;
         string query = SearchBox.Text.Trim();
+        // Search resolves through the prebuilt index when one exists, and falls back
+        // to the original scan otherwise. The predicate occupies the same position in
+        // the filter chain as the old scan did, so ordering and every other filter are
+        // untouched; only the per-card cost changes. Identical queries resolve to a
+        // cached result, which is what removes the visible stall on a keystroke.
         // Category hiding from All games applies to searches launched from All
         // games. Explicit category, Installed, Wishlist, and Wand views keep
         // their own independently selected scope.
@@ -750,7 +775,9 @@ public partial class MainWindow : Window
             if (tab == "wishlist") visible = visible.Where(g => g.Wishlisted);
             else if (tab != "all") visible = visible.Where(g => g.Category == tab);
         }
-        if (query.Length > 0) visible = visible.Where(g => MatchesSearch(g, query));
+        if (query.Length > 0) visible = visible.Where(searchIndex is null
+            ? new Func<Game, bool>(g => MatchesSearch(g, query))
+            : SearchPerformance.GameMatchPredicate(searchIndex, query));
         if (InstalledOnlyFilter.IsChecked == true) visible = visible.Where(g => g.Installed);
         else if (WithoutInstalledFilter.IsChecked == true) visible = visible.Where(g => !g.Installed);
         else if (wandOnly) visible = visible.Where(g => g.CanPlayWithWand);
@@ -852,6 +879,12 @@ public partial class MainWindow : Window
     internal void Save()
     {
         if (!ready) throw new InvalidOperationException("Your saved library has not finished loading. Retry loading or import a complete backup before editing.");
+        // Every state mutation is persisted through this method, and those mutations
+        // happen in place on the same State instance, so reference-change detection
+        // cannot see them. Dropping the search index here is what keeps a newly added
+        // launch path, install folder or local game searchable on the very next
+        // keystroke instead of only after the next catalog push.
+        searchIndex = null;
         try { Store.Save(State); }
         catch (Exception ex)
         {
@@ -1241,11 +1274,30 @@ public partial class MainWindow : Window
             await gameSaveGate.WaitAsync(); gateHeld = true;
             if (restore && activePlays.ContainsKey(id)) throw new InvalidOperationException("Exit this game before restoring its saves.");
             StatusText.Text = (restore ? "Restoring " : "Backing up ") + name + "…";
+            // Capture the game's real save data first. The helper below only receives an
+            // executable path and does its own discovery, which is why progress went
+            // unbacked whenever the save tree was not where the helper expected. This
+            // snapshot runs even while the game is live and is additive, so the existing
+            // helper receipts, logs and verification still run exactly as before.
+            SaveOperationOutcome? snapshot = null;
+            if (!restore && Program.TestReport == null && !saveOperationProofIsActive(saveOperationProof))
+            {
+                try
+                {
+                    snapshot = await GameSaveOperations.BackupSaveRootsAsync(SaveRequestForGame(id, name), null, lifetime.Token);
+                    if (!snapshot.Success && snapshot.Items.Count > 0)
+                        Store.Log("Save snapshot incomplete for " + name + ": " + snapshot.Summary);
+                }
+                catch (Exception ex) { Store.Log("Save snapshot failed for " + name + ": " + ex.Message); }
+            }
             var result = Program.TestReport != null && saveOperationProof != null
                 ? await saveOperationProof(executable, restore)
                 : await GameSaveOperations.RunAsync(Store, executable, restore);
             if (!restore) { State.PendingGameBackups.Remove(id); Store.Save(State); }
-            StatusText.Text = result.NoSaveData ? "No save data found for " + name + " · receipt: " + result.ReceiptPath
+            StatusText.Text = result.NoSaveData
+                ? (snapshot is { Success: true }
+                    ? $"Backed up {snapshot.Items.Count} real save files for {name}"
+                    : "No save data found for " + name + " · receipt: " + result.ReceiptPath)
                 : (restore ? "Restore" : "Backup") + " completed for " + name;
             Store.Log(StatusText.Text + "; log=" + result.LogPath);
             _ = RefreshProgress();
@@ -1618,7 +1670,87 @@ public partial class MainWindow : Window
         });
         dialog.ShowDialog(); return Task.CompletedTask;
     }
+    private (int launch, int folders, int local, int playtime, int played) SearchStateShape() =>
+        (State.LaunchPaths.Count, State.InstallationFolders.Count, State.LocalGames.Count,
+         State.PlayTimeSeconds.Count, State.LastPlayedUtc.Count);
+
+    private static bool saveOperationProofIsActive(Func<string, bool, Task<GameSaveResult>>? proof) => proof is not null;
+
+    private void SpeedHotkeyPreview(object sender, KeyEventArgs e)
+    {
+        var key = e.Key switch
+        {
+            Key.F1 => SpeedHotkey.Boost,
+            Key.F2 => SpeedHotkey.Reduce,
+            Key.F3 => SpeedHotkey.Normal,
+            _ => (SpeedHotkey?)null
+        };
+        if (key is null) return;
+        var session = activePlays.Values.FirstOrDefault(entry => !entry.Process.HasExited);
+        if (session is null) { StatusText.Text = "Start a game before using F1/F2/F3."; e.Handled = true; return; }
+        var gameId = activePlays.FirstOrDefault(entry => ReferenceEquals(entry.Value, session)).Key;
+        var current = GameSpeedController.ForGame(gameId, State.SpeedByGame, 1.0);
+        var next = GameSpeedController.ApplyHotkey(current, key.Value);
+        State.SpeedByGame[gameId] = next;
+        Save();
+        StatusText.Text = "Speed " + GameSpeedController.Describe(next)
+            + (key is SpeedHotkey.Normal ? "" : $" ({e.Key})");
+        e.Handled = true;
+    }
+
+    private SaveOperationRequest SaveRequestForGame(string id, string name)
+    {
+        activePlays.TryGetValue(id, out var session);
+        var manual = State.SaveDataOverrides.TryGetValue(id, out var overridePath) && !string.IsNullOrWhiteSpace(overridePath)
+            ? new[] { overridePath } : Array.Empty<string>();
+        return new SaveOperationRequest(id, name, manual,
+            State.InstallationFolders.GetValueOrDefault(id, string.Empty),
+            session?.Process?.ProcessName, true);
+    }
+
+    private SaveOperationRequest SaveRequestFor(Game game) => SaveRequestForGame(game.Id, game.Name);
+
+    private async void BackupGameSaves(Game game) => await RunGameSave(game.Id, game.Name, State.LaunchPaths.GetValueOrDefault(game.Id, ""), false);
+
+    private async void RestoreGameSaves(Game game) => await RunGameSave(game.Id, game.Name, State.LaunchPaths.GetValueOrDefault(game.Id, ""), true);
+
+    private void ShowSpeedDialog(Game game)
+    {
+        double current = GameSpeedController.ForGame(game.Id, State.SpeedByGame, 1.0);
+        var input = new System.Windows.Controls.TextBox { Text = current.ToString("0.##", CultureInfo.CurrentCulture), Margin = new Thickness(0, 6, 0, 10) };
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock { Text = "Speed multiplier for " + game.Name, Margin = new Thickness(0, 0, 0, 4) });
+        panel.Children.Add(input);
+        panel.Children.Add(new TextBlock { Text = "Or press F1 / F2 / F3 in the game window. F1 adds 0.5, F2 removes 0.5, F3 returns to normal.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 4, 0, 0) });
+        var dialog = new Window { Title = "Game speed", Content = panel, Width = 380, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = this, ResizeMode = ResizeMode.NoResize, Background = SystemColors.ControlBrush };
+        var ok = new Button { Content = "Apply", IsDefault = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 12, 0, 0) };
+        var cancel = new Button { Content = "Close", IsCancel = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(8, 12, 0, 0) };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(ok); buttons.Children.Add(cancel); panel.Children.Add(buttons);
+        cancel.Click += (_, _) => dialog.Close();
+        ok.Click += (_, _) =>
+        {
+            if (double.TryParse(input.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double parsed)
+                || double.TryParse(input.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+            {
+                // Clamp before persisting so a hand-typed value can never store a
+                // non-finite or out-of-range multiplier.
+                State.SpeedByGame[game.Id] = GameSpeedController.Clamp(parsed);
+                Save();
+            }
+            dialog.Close();
+        };
+        dialog.ShowDialog();
+    }
+
     private void ExportScriptMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = BuildExportMenu();
+        menu.PlacementTarget = (Button)sender; menu.IsOpen = true;
+    }
+    private ContextMenu BuildExportMenu()
     {
         var menu = new ContextMenu();
         foreach (var format in new[] { "bat", "ps1", "sh" })
@@ -1636,7 +1768,81 @@ public partial class MainWindow : Window
             var item = new MenuItem { Header = "Export Kill All script (." + format + ")" }; var f = format;
             item.Click += (_, _) => ExportKillAll(f); menu.Items.Add(item);
         }
+        return menu;
+    }
+
+    /// <summary>
+    /// Builds the per-game action menu. "Delete from all drives" is offered for
+    /// every card and routes through GameRemoval, which refuses anything it cannot
+    /// prove is inside an allow-listed root, so the entry point can never widen a
+    /// delete beyond the game's own files and leftovers.
+    /// </summary>
+    private void GameActionsMenu(object sender, RoutedEventArgs e)
+    {
+        var game = Selected().FirstOrDefault() ?? SelectedForInstall().FirstOrDefault();
+        var menu = new ContextMenu();
+        var play = new MenuItem { Header = game is null ? "Play" : "Play " + game.Name };
+        play.IsEnabled = game is not null;
+        play.Click += (_, _) => { if (game is not null) ObserveUiOperation("Play", () => PlayGame(game.ActionTarget ?? game)); };
+        menu.Items.Add(play);
+        var backup = new MenuItem { Header = "Back up save data" };
+        backup.IsEnabled = game is not null;
+        backup.Click += (_, _) => { if (game is not null) BackupGameSaves(game); };
+        menu.Items.Add(backup);
+        var restore = new MenuItem { Header = "Restore save data" };
+        restore.IsEnabled = game is not null;
+        restore.Click += (_, _) => { if (game is not null) RestoreGameSaves(game); };
+        menu.Items.Add(restore);
+        var speed = new MenuItem { Header = "Speed" };
+        speed.IsEnabled = game is not null;
+        speed.Click += (_, _) => { if (game is not null) ShowSpeedDialog(game); };
+        menu.Items.Add(speed);
+        menu.Items.Add(new Separator());
+        var remove = new MenuItem { Header = "Delete from all drives" };
+        remove.IsEnabled = game is not null;
+        remove.Click += (_, _) => { if (game is not null) DeleteGameAndLeftovers(game); };
+        menu.Items.Add(remove);
+        menu.Items.Add(new Separator());
+        foreach (var item in BuildExportMenu().Items)
+            if (item is Separator) menu.Items.Add(new Separator()); else menu.Items.Add(item);
         menu.PlacementTarget = (Button)sender; menu.IsOpen = true;
+    }
+
+    private async void DeleteGameAndLeftovers(Game game)
+    {
+        try
+        {
+            var request = new GameRemovalRequest
+            {
+                GameId = game.Id,
+                GameName = game.Name,
+                MountPath = State.Settings.MountPath,
+                LocalFolders = State.LocalGames.TryGetValue(game.Id, out var local) && !string.IsNullOrWhiteSpace(local?.Folder)
+                    ? new[] { local!.Folder } : Array.Empty<string>(),
+                InstallationFolders = State.InstallationFolders.TryGetValue(game.Id, out var folder) && !string.IsNullOrWhiteSpace(folder)
+                    ? new[] { folder } : Array.Empty<string>(),
+                LaunchPath = State.LaunchPaths.GetValueOrDefault(game.Id, string.Empty)
+            };
+            // Planning touches disk and possibly Docker, so it never runs on the UI thread.
+            var plan = await Task.Run(() => GameRemoval.Plan(request));
+            if (plan.Targets.Count == 0)
+            {
+                StatusText.Text = "Nothing on disk belongs to " + game.Name + ".";
+                return;
+            }
+            var confirm = MessageBox.Show(this,
+                GameRemoval.Describe(plan) + "\n\nDelete all of this permanently?",
+                "Delete " + game.Name, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) { StatusText.Text = "Delete cancelled."; return; }
+            StatusText.Text = "Deleting " + game.Name + "...";
+            var result = await GameRemoval.ExecuteAsync(plan, null, lifetime.Token);
+            Reload();
+            StatusText.Text = result.FailedCount > 0
+                ? $"Deleted {result.DeletedCount} item(s) for {game.Name}; {result.FailedCount} could not be removed. See the log for details."
+                : $"Deleted {result.DeletedCount} item(s) for {game.Name} ({result.SkippedCount} already absent).";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Error(ex); }
     }
     private Game[] Selected() => projectedCards.Where(card => card.Selected)
         .Select(card => card.ActionTarget ?? card).DistinctBy(game => game.Id, StringComparer.Ordinal).ToArray();

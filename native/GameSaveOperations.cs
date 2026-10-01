@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -111,7 +112,64 @@ internal static class GameSaveOperations
         finally { gate.Release(); }
     }
 
-    internal static void EnsureGameNotRunning(string executable)
+    /// <summary>
+    /// Bridges save-root discovery (SaveDataLocator) into the backup/restore
+    /// coordinator. The coordinator deliberately knows nothing about how a game's
+    /// save location is found; this adapter is the single wiring point, so a
+    /// future locator improvement needs no change in the coordinator.
+    /// </summary>
+    internal sealed class SaveRootProvider : ISaveRootProvider
+    {
+        internal static readonly SaveRootProvider Instance = new();
+        public IReadOnlyList<string> GetRoots(SaveOperationRequest request)
+        {
+            if (request is null) return Array.Empty<string>();
+            var located = SaveDataLocator.Locate(new SaveLocationRequest
+            {
+                GameId = request.GameId,
+                DisplayName = request.GameName,
+                InstallFolder = request.InstallFolder,
+                ProcessName = request.RunningProcessName ?? string.Empty,
+                ManualHintPaths = Array.Empty<string>()
+            });
+            var selected = SaveDataLocator.Select(located, FileSystemSaveEvidenceProbe.Instance);
+            var roots = new List<string>();
+            // Roots already supplied by the caller win: the user may have corrected
+            // a path by hand, and an explicit override must never be second-guessed.
+            roots.AddRange(request.SaveRoots);
+            if (selected is not null && !roots.Any(existing =>
+                    existing.Equals(selected.Root, StringComparison.OrdinalIgnoreCase)))
+                roots.Add(selected.Root);
+            return roots;
+        }
+    }
+
+    /// <summary>
+    /// Snapshots a game's real save data. Unlike <see cref="RunAsync"/> this is
+    /// safe to call while the game is running: the coordinator copies a quantised
+    /// image and re-verifies it, so progress written moments before the click is
+    /// captured rather than silently lost.
+    /// </summary>
+    internal static Task<SaveOperationOutcome> BackupSaveRootsAsync(SaveOperationRequest request,
+        IProgress<SaveOperationProgress>? progress = null, CancellationToken ct = default) =>
+        SaveRestoreCoordinator.BackupAsync(request, SaveRootProvider.Instance,
+            new FileSystemBackupWriter(), BackupRoot, progress, ct, RunningGamePolicy.Snapshot);
+
+    internal static Task<SaveOperationOutcome> RestoreSaveRootsAsync(SaveOperationRequest request,
+        IProgress<SaveOperationProgress>? progress = null, CancellationToken ct = default) =>
+        SaveRestoreCoordinator.RestoreAsync(request, SaveRootProvider.Instance,
+            new FileSystemBackupWriter(), BackupRoot, progress, ct, RunningGamePolicy.Refuse);
+
+    /// <summary>
+    /// Resolves whether the game behind <paramref name="executable"/> is running so
+    /// save operations can pick a policy. This used to hard-throw and refuse to
+    /// touch saves while the game was alive, which is why a backup taken during a
+    /// session silently lost progress. The user explicitly wants backup to work
+    /// against a running game, so the decision is returned instead of enforced:
+    /// callers use the Snapshot policy, which copies a quantised, re-verified
+    /// image of the save tree via SaveRestoreCoordinator.
+    /// </summary>
+    internal static RunningGameState InspectRunningGame(string executable)
     {
         string fullPath = Path.GetFullPath(executable);
         foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(fullPath)))
@@ -123,17 +181,42 @@ internal static class GameSaveOperations
                     if (process.HasExited) continue;
                     string? runningPath = process.MainModule?.FileName;
                     if (string.IsNullOrWhiteSpace(runningPath))
-                        throw new InvalidOperationException("A same-named process could not be identified; restore remains blocked for safety.");
+                        return RunningGameState.Unidentifiable(fullPath);
                     if (Path.GetFullPath(runningPath).Equals(fullPath, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Exit this game before restoring its saves: " + fullPath);
+                        return RunningGameState.Running(fullPath, process.Id, process.ProcessName);
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
-                    throw new InvalidOperationException("A same-named process could not be identified; restore remains blocked for safety.");
+                    return RunningGameState.Unidentifiable(fullPath);
                 }
-                catch (InvalidOperationException) { throw; }
+                catch (InvalidOperationException) { return RunningGameState.Unidentifiable(fullPath); }
             }
         }
+        return RunningGameState.NotRunning(fullPath);
+    }
+
+    internal static void EnsureGameNotRunning(string executable)
+    {
+        var running = InspectRunningGame(executable);
+        if (running.IsRunning)
+            throw new InvalidOperationException("This game is still running (PID " + running.ProcessId
+                + "). Restoring over a live session is blocked for safety; wait for it to exit. "
+                + "Backups are unaffected and may be taken while the game runs.");
+        if (running.IsUnidentifiable)
+            throw new InvalidOperationException("A same-named process could not be identified; restore remains blocked for safety.");
+    }
+
+    internal enum RunningGameStatus { NotRunning, Running, Unidentifiable }
+
+    /// <summary>Fail-closed observation of the game behind an executable path.</summary>
+    internal readonly record struct RunningGameState(RunningGameStatus Status, string ExecutablePath,
+        int ProcessId = 0, string ProcessName = "")
+    {
+        public bool IsRunning => Status == RunningGameStatus.Running;
+        public bool IsUnidentifiable => Status == RunningGameStatus.Unidentifiable;
+        internal static RunningGameState NotRunning(string path) => new(RunningGameStatus.NotRunning, path);
+        internal static RunningGameState Running(string path, int pid, string name) => new(RunningGameStatus.Running, path, pid, name);
+        internal static RunningGameState Unidentifiable(string path) => new(RunningGameStatus.Unidentifiable, path);
     }
 
     private static async Task<GameSaveResult> RunHelperAsync(LibraryStore store, string executable, bool restore, bool verifyOnly,
