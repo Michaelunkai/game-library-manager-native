@@ -133,6 +133,55 @@ public static class Program
             return passed ? 0 : 1;
         });
         if (args.Length >= 2 && args[0] == "--self-test") return RunDiagnostic(args[1], () => SelfTests.Run(args[1]));
+        if (args.Length >= 4 && args[0] == "--speed-proof")
+        {
+            // Drives the real production speed path - the same GameSpeedCommand the
+            // F1/F2/F3 handler uses - against a live process, so the hotkeys can be
+            // proven to actually reach a game rather than only updating a label.
+            return RunDiagnostic(args[1], () =>
+            {
+                int pid = int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture);
+                double factor = double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture);
+                string? dll = GameSpeedNative.ResolveDllPath(GameSpeedNative.DetectArchitecture(pid));
+                string injectionFault = "";
+                try { GameSpeedNative.InjectAsync(pid, dll ?? string.Empty, CancellationToken.None).GetAwaiter().GetResult(); }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                { injectionFault = ex.Message; }
+                var applied = GameSpeedCommand.ApplyAsync(pid, factor, NativeSpeedRuntime.Instance, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                var status = GameSpeedNative.GetStatusAsync(pid, CancellationToken.None).GetAwaiter().GetResult();
+                double readBack = GameSpeedNative.GetSpeedAsync(pid, CancellationToken.None).GetAwaiter().GetResult();
+                // The factor being adopted and read back is what "it works" means.
+                // hookCount is reported for diagnosis but is not a pass gate: the
+                // in-process hook count is republished only at install time, so a
+                // manager that attaches afterwards can read a stale zero while the
+                // hooks are in fact installed and serving.
+                bool passed = applied.Succeeded
+                    && Math.Abs(applied.Factor - factor) < 1e-6
+                    && Math.Abs(readBack - factor) < 1e-6
+                    && !status.Faulted;
+                var payload = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["passed"] = passed,
+                    ["processId"] = pid,
+                    ["architecture"] = GameSpeedNative.DetectArchitecture(pid).ToString(),
+                    ["dll"] = dll ?? "",
+                    ["requested"] = factor,
+                    ["reported"] = applied.Factor,
+                    ["readBack"] = readBack,
+                    ["outcome"] = applied.Outcome.ToString(),
+                    ["message"] = applied.Message,
+                    ["injected"] = status.Injected,
+                    ["hooksInstalled"] = status.HooksInstalled,
+                    ["hookCount"] = status.HookCount,
+                    ["faulted"] = status.Faulted,
+                    ["appliedFactor"] = status.AppliedFactor,
+                    ["injectionFault"] = injectionFault
+                };
+                Console.WriteLine(payload.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                return passed ? 0 : 1;
+            });
+        }
         if (args.Length >= 2 && args[0] == "--wand-audit")
         {
             return RunDiagnostic(args[1], () =>

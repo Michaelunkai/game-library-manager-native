@@ -1,15 +1,15 @@
 ﻿{
     "schemaVersion":  1,
-    "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+    "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
     "phase":  "Target",
-    "startedUtc":  "2026-10-01T00:50:22.6179782+00:00",
-    "finishedUtc":  "2026-10-01T00:51:59.4565021+00:00",
+    "startedUtc":  "2026-10-01T01:16:11.9991356+00:00",
+    "finishedUtc":  "2026-10-01T01:17:50.0925563+00:00",
     "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-    "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-    "executableSha256After":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-    "evidencePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4",
+    "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+    "executableSha256After":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+    "evidencePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71",
     "scope":  "full-reliability",
-    "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
+    "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
     "passed":  true,
     "tests":  [
                   {
@@ -38,820 +38,825 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\package-manifest.json"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\package-manifest.json"
                                     ]
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "self-test",
-                      "startedUtc":  "2026-10-01T00:50:25.1557167+00:00",
-                      "finishedUtc":  "2026-10-01T00:50:52.6102329+00:00",
+                      "startedUtc":  "2026-10-01T01:16:14.5544677+00:00",
+                      "finishedUtc":  "2026-10-01T01:16:42.5103260+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  26584,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  25472,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  30,
-                      "receiptWaitElapsedMilliseconds":  15,
+                      "receiptWaitElapsedMilliseconds":  10,
                       "receiptLoaded":  true,
                       "passed":  true,
                       "checks":  [
                                      {
                                          "name":  "Atomic state replacement waits for a transiently locked rollback file",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:25.6039139Z"
+                                         "at":  "2026-10-01T01:16:15.01243Z"
                                      },
                                      {
                                          "name":  "Game removal deletes only contained targets and refuses escapes, roots and reparse points",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:25.6706206Z"
+                                         "at":  "2026-10-01T01:16:15.0625144Z"
                                      },
                                      {
                                          "name":  "Search index matches the existing filter exactly while serving keystrokes from cache",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:26.3902442Z"
+                                         "at":  "2026-10-01T01:16:15.7807814Z"
                                      },
                                      {
                                          "name":  "Non-game tags map only into the seven hidden categories and never into a visible one",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:26.3969687Z"
+                                         "at":  "2026-10-01T01:16:15.7875102Z"
                                      },
                                      {
                                          "name":  "Completion percent and hours remaining are clamped, confident and never fabricated",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:26.4183736Z"
+                                         "at":  "2026-10-01T01:16:15.8084134Z"
                                      },
                                      {
                                          "name":  "Save-data discovery finds the real per-game path through registry, engine and known-folder layers",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:26.4691607Z"
+                                         "at":  "2026-10-01T01:16:15.861722Z"
                                      },
                                      {
                                          "name":  "Backup snapshots a consistent save while the game runs and restore rolls back on failure",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:27.0540499Z"
+                                         "at":  "2026-10-01T01:16:16.3655108Z"
                                      },
                                      {
                                          "name":  "Speed ladder and F1/F2/F3 hotkeys act only on a positively identified running game",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:27.0596577Z"
+                                         "at":  "2026-10-01T01:16:16.3708885Z"
+                                     },
+                                     {
+                                         "name":  "Speed hotkeys really inject the hook and send the factor to the running game",
+                                         "passed":  true,
+                                         "at":  "2026-10-01T01:16:16.3730182Z"
                                      },
                                      {
                                          "name":  "Native speed engine selects the matching architecture and re-bases the scaled clock without a jump",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:29.1061932Z"
+                                         "at":  "2026-10-01T01:16:18.4148946Z"
                                      },
                                      {
                                          "name":  "Install-job manifest reads survive concurrent replacement",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:35.4015561Z"
+                                         "at":  "2026-10-01T01:16:24.7128626Z"
                                      },
                                      {
                                          "name":  "Install progress parses live byte and file percentages",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:41.5999475Z"
+                                         "at":  "2026-10-01T01:16:30.9269485Z"
                                      },
                                      {
                                          "name":  "Many games install in parallel with their own folders",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.012986Z"
+                                         "at":  "2026-10-01T01:16:31.3391468Z"
                                      },
                                      {
                                          "name":  "Version-only Docker tags cannot impersonate numeric game titles",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.0653575Z"
+                                         "at":  "2026-10-01T01:16:31.3931613Z"
                                      },
                                      {
                                          "name":  "Corroborated installed catalog titles reject unrelated metadata",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.0686588Z"
+                                         "at":  "2026-10-01T01:16:31.3962508Z"
                                      },
                                      {
                                          "name":  "Canonical source grouping preserves installed and newer published versions",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2009729Z"
+                                         "at":  "2026-10-01T01:16:31.5235787Z"
                                      },
                                      {
                                          "name":  "Duplicate display names collapse to the most recently pushed tag",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2024687Z"
+                                         "at":  "2026-10-01T01:16:31.5250358Z"
                                      },
                                      {
                                          "name":  "Saved playable installations remain visible when their source registration disappears",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2042099Z"
+                                         "at":  "2026-10-01T01:16:31.5268979Z"
                                      },
                                      {
                                          "name":  "2D classification respects protected assignments, evidence, and undo",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2701963Z"
+                                         "at":  "2026-10-01T01:16:31.5951332Z"
                                      },
                                      {
                                          "name":  "Metadata evidence preserves scoped accepted values and audits mismatches",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2958322Z"
+                                         "at":  "2026-10-01T01:16:31.6225545Z"
                                      },
                                      {
                                          "name":  "Maximum download size excludes unknown and oversized catalog entries",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2959786Z"
+                                         "at":  "2026-10-01T01:16:31.6228198Z"
                                      },
                                      {
                                          "name":  "Unknown pause state holds played time until a reliable sample returns",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2962002Z"
+                                         "at":  "2026-10-01T01:16:31.6231601Z"
                                      },
                                      {
                                          "name":  "Readable metadata queries preserve identity and retry semantics",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.2995621Z"
+                                         "at":  "2026-10-01T01:16:31.6273366Z"
                                      },
                                      {
                                          "name":  "Backup outcomes distinguish saved data, no saves, and failures",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3001588Z"
+                                         "at":  "2026-10-01T01:16:31.6279895Z"
                                      },
                                      {
                                          "name":  "No-save backup result requires a physical receipt for the selected executable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3047322Z"
+                                         "at":  "2026-10-01T01:16:31.6329358Z"
                                      },
                                      {
                                          "name":  "Save receipt cannot follow an NTFS link outside the backup root",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3071748Z"
+                                         "at":  "2026-10-01T01:16:31.6355439Z"
                                      },
                                      {
                                          "name":  "Structured save results bind exit, game, operation, and verified outcome",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3137753Z"
+                                         "at":  "2026-10-01T01:16:31.6415444Z"
                                      },
                                      {
                                          "name":  "Structured save failures preserve helper diagnostics and operation log",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3186414Z"
+                                         "at":  "2026-10-01T01:16:31.6473364Z"
                                      },
                                      {
                                          "name":  "Backup manifest payload hashes and selected executable are verified",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3228207Z"
+                                         "at":  "2026-10-01T01:16:31.6517043Z"
                                      },
                                      {
                                          "name":  "Installer staging payloads never become installed library entries",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3318208Z"
+                                         "at":  "2026-10-01T01:16:31.6604465Z"
                                      },
                                      {
                                          "name":  "Installed reconciliation removes only absent directories within the available scanned library",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3348763Z"
+                                         "at":  "2026-10-01T01:16:31.6634179Z"
                                      },
                                      {
                                          "name":  "Exact scanner launcher matches recover alias install roots without guessing",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:42.3381651Z"
+                                         "at":  "2026-10-01T01:16:31.6667405Z"
                                      },
                                      {
                                          "name":  "Independent-source synchronization survives outages and preserves queues (34 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:43.0438729Z"
+                                         "at":  "2026-10-01T01:16:32.4001912Z"
                                      },
                                      {
                                          "name":  "Custom saved launchers recover exact catalog roots without becoming scan candidates",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:43.0541793Z"
+                                         "at":  "2026-10-01T01:16:32.4113652Z"
                                      },
                                      {
                                          "name":  "Ambiguous catalog names retain folder evidence for explicit launchers only",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:43.0585723Z"
+                                         "at":  "2026-10-01T01:16:32.4140208Z"
                                      },
                                      {
                                          "name":  "Installed file storage measurement (22 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:43.1061091Z"
+                                         "at":  "2026-10-01T01:16:32.4643137Z"
                                      },
                                      {
                                          "name":  "Persistent installed-storage receipts (10 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:43.1195186Z"
+                                         "at":  "2026-10-01T01:16:32.4811041Z"
                                      },
                                      {
                                          "name":  "Storage retries grow within bounds and aliases share measured folders",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:43.1199536Z"
+                                         "at":  "2026-10-01T01:16:32.4815407Z"
                                      },
                                      {
                                          "name":  "Independent synchronization retry backoff (23 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:44.7899613Z"
+                                         "at":  "2026-10-01T01:16:34.4158995Z"
                                      },
                                      {
                                          "name":  "Read-only shared fallback and polling cadence (12 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:44.9859822Z"
+                                         "at":  "2026-10-01T01:16:34.6187671Z"
                                      },
                                      {
                                          "name":  "Namespace enumeration retains complete caches (29 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:45.1037777Z"
+                                         "at":  "2026-10-01T01:16:34.7394186Z"
                                      },
                                      {
                                          "name":  "Repository-qualified game identities (9 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:45.1110687Z"
+                                         "at":  "2026-10-01T01:16:34.7462453Z"
                                      },
                                      {
                                          "name":  "Metadata outage cooldown is shared across games and clients (8 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:45.1171322Z"
+                                         "at":  "2026-10-01T01:16:34.7522293Z"
                                      },
                                      {
                                          "name":  "Windows catalog edits survive restart and storage failure (7 scenarios)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:45.1248224Z"
+                                         "at":  "2026-10-01T01:16:34.7630857Z"
                                      },
                                      {
                                          "name":  "Native pause suspends a real process tree, resumes it, rejects stale identity, and recovers on disconnect",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.4675674Z"
+                                         "at":  "2026-10-01T01:16:36.0300964Z"
                                      },
                                      {
                                          "name":  "Save backup queue persists exact executable identity across restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.4707786Z"
+                                         "at":  "2026-10-01T01:16:36.0336772Z"
                                      },
                                      {
                                          "name":  "Game progress preserves unknown values, validates numbers, and displays shared estimates",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.4737677Z"
+                                         "at":  "2026-10-01T01:16:36.038286Z"
                                      },
                                      {
                                          "name":  "Default profile resolves beside the distribution on the bundle drive",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.4748902Z"
+                                         "at":  "2026-10-01T01:16:36.0391719Z"
                                      },
                                      {
                                          "name":  "Healthy repository updates survive sibling failure, restart and later complete recovery",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.5015655Z"
+                                         "at":  "2026-10-01T01:16:36.067827Z"
                                      },
                                      {
                                          "name":  "Docker login reuses encrypted PowerShell credentials and rejects damaged records",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.5068192Z"
+                                         "at":  "2026-10-01T01:16:36.0737154Z"
                                      },
                                      {
                                          "name":  "Docker token exchange uses the supported API and sanitized authentication failures",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.5081088Z"
+                                         "at":  "2026-10-01T01:16:36.0749891Z"
                                      },
                                      {
                                          "name":  "Sync distinguishes missing Docker credentials and shared-service quota without leaking credentials",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.5089412Z"
+                                         "at":  "2026-10-01T01:16:36.075686Z"
                                      },
                                      {
                                          "name":  "Original personal history and legacy fields survive release reloads and remote category changes",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.5180712Z"
+                                         "at":  "2026-10-01T01:16:36.0858836Z"
                                      },
                                      {
                                          "name":  "Windowless diagnostic failures return a report without escaping",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:46.5290088Z"
+                                         "at":  "2026-10-01T01:16:36.0976578Z"
                                      },
                                      {
                                          "name":  "Packaged catalog extraction",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7546356Z"
+                                         "at":  "2026-10-01T01:16:39.5315826Z"
                                      },
                                      {
                                          "name":  "Packaged catalog and every cover remain available offline",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7753705Z"
+                                         "at":  "2026-10-01T01:16:39.5522744Z"
                                      },
                                      {
                                          "name":  "Packaged supported Wand registrations remain available without a profile dependency",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7767837Z"
+                                         "at":  "2026-10-01T01:16:39.5536815Z"
                                      },
                                      {
                                          "name":  "Wand registration discovery retains cached rows and eventually retries a new database root",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7797628Z"
+                                         "at":  "2026-10-01T01:16:39.5574295Z"
                                      },
                                      {
                                          "name":  "Command launchers track their exact child executable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7823021Z"
+                                         "at":  "2026-10-01T01:16:39.5602296Z"
                                      },
                                      {
                                          "name":  "Exact Wand registrations resolve catalog ids and nested runtime executables without title guessing",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7851287Z"
+                                         "at":  "2026-10-01T01:16:39.5631113Z"
                                      },
                                      {
                                          "name":  "Wand library matching rejects same-folder title collisions",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7852136Z"
+                                         "at":  "2026-10-01T01:16:39.5631958Z"
                                      },
                                      {
                                          "name":  "Activity logging never blocks the caller on an unavailable log file",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7862181Z"
+                                         "at":  "2026-10-01T01:16:39.5644238Z"
                                      },
                                      {
                                          "name":  "Packaged Wand same-route recovery remains self-contained",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7865858Z"
+                                         "at":  "2026-10-01T01:16:39.5649559Z"
                                      },
                                      {
                                          "name":  "Wand active trainer and exited Tophat evidence remain distinct",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7885828Z"
+                                         "at":  "2026-10-01T01:16:39.5679552Z"
                                      },
                                      {
                                          "name":  "Exact-case Docker tags remain distinct",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7886551Z"
+                                         "at":  "2026-10-01T01:16:39.5680328Z"
                                      },
                                      {
                                          "name":  "Punctuation-distinct Docker tags retain independent image identities and metadata",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7887457Z"
+                                         "at":  "2026-10-01T01:16:39.5681237Z"
                                      },
                                      {
                                          "name":  "Docker Hub 403 fallback remains usable without claiming fresh tags",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7887857Z"
+                                         "at":  "2026-10-01T01:16:39.5681656Z"
                                      },
                                      {
                                          "name":  "Docker refresh reuses only a recent same-repository unchanged complete snapshot",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7889759Z"
+                                         "at":  "2026-10-01T01:16:39.5683453Z"
                                      },
                                      {
                                          "name":  "New Docker tags retain verified size/date without inventing playtime",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.789069Z"
+                                         "at":  "2026-10-01T01:16:39.568438Z"
                                      },
                                      {
                                          "name":  "Offline transport rejects requests without opening a network connection",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7910109Z"
+                                         "at":  "2026-10-01T01:16:39.5708644Z"
                                      },
                                      {
                                          "name":  "Unavailable automatic artwork is deferred across restart without hiding manual retry",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7936683Z"
+                                         "at":  "2026-10-01T01:16:39.573305Z"
                                      },
                                      {
                                          "name":  "Rejected discovered metadata honors its retry barrier",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7939766Z"
+                                         "at":  "2026-10-01T01:16:39.5736579Z"
                                      },
                                      {
                                          "name":  "Wand delayed startup remains asynchronous and tolerant",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.7941281Z"
+                                         "at":  "2026-10-01T01:16:39.5738229Z"
                                      },
                                      {
                                          "name":  "Cover cache evicts the coldest entry instead of clearing everything",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.9897817Z"
+                                         "at":  "2026-10-01T01:16:39.7758373Z"
                                      },
                                      {
                                          "name":  "Missing-cover converter returns a deterministic nonblank image",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.9909703Z"
+                                         "at":  "2026-10-01T01:16:39.7770397Z"
                                      },
                                      {
                                          "name":  "Atomic save and restart preserve preferences",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:49.994265Z"
+                                         "at":  "2026-10-01T01:16:39.7795929Z"
                                      },
                                      {
                                          "name":  "Damaged state recovers a preserved backup",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0006839Z"
+                                         "at":  "2026-10-01T01:16:39.7860551Z"
                                      },
                                      {
                                          "name":  "Path traversal is rejected",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0008075Z"
+                                         "at":  "2026-10-01T01:16:39.7861767Z"
                                      },
                                      {
                                          "name":  "Invalid rating import is rejected",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0008982Z"
+                                         "at":  "2026-10-01T01:16:39.7862669Z"
                                      },
                                      {
                                          "name":  "Unknown state schema is rejected",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0009498Z"
+                                         "at":  "2026-10-01T01:16:39.7863187Z"
                                      },
                                      {
                                          "name":  "Disjoint shared changes merge without losing website fields",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.001088Z"
+                                         "at":  "2026-10-01T01:16:39.7864573Z"
                                      },
                                      {
                                          "name":  "Same-field concurrent change becomes a conflict",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0011523Z"
+                                         "at":  "2026-10-01T01:16:39.7865203Z"
                                      },
                                      {
                                          "name":  "Interrupted acknowledged writes are idempotent",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0011925Z"
+                                         "at":  "2026-10-01T01:16:39.7865616Z"
                                      },
                                      {
                                          "name":  "Offline edits survive restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.008371Z"
+                                         "at":  "2026-10-01T01:16:39.7936552Z"
                                      },
                                      {
                                          "name":  "Reconnect publishes and verifies queued changes",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.029032Z"
+                                         "at":  "2026-10-01T01:16:39.81446Z"
                                      },
                                      {
                                          "name":  "Unauthorized writes retain their queue",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0411371Z"
+                                         "at":  "2026-10-01T01:16:39.8271781Z"
                                      },
                                      {
                                          "name":  "Native defaults match the Windows website contract",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.041241Z"
+                                         "at":  "2026-10-01T01:16:39.8272782Z"
                                      },
                                      {
                                          "name":  "Category order can move individually without losing the other tabs",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0418327Z"
+                                         "at":  "2026-10-01T01:16:39.8278116Z"
                                      },
                                      {
                                          "name":  "Wand protocol integration resolves an exact catalog title",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0466479Z"
+                                         "at":  "2026-10-01T01:16:39.8321591Z"
                                      },
                                      {
                                          "name":  "Wand protocol preflight blocks busy and unknown states without claiming attachment",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.047588Z"
+                                         "at":  "2026-10-01T01:16:39.8329786Z"
                                      },
                                      {
                                          "name":  "Wand launch dispatch is single-shot across CDP, URI fallback, late process, and cold readiness",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0537456Z"
+                                         "at":  "2026-10-01T01:16:39.8394181Z"
                                      },
                                      {
                                          "name":  "Unity version fingerprints resolve only their paired game executable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0570474Z"
+                                         "at":  "2026-10-01T01:16:39.842371Z"
                                      },
                                      {
                                          "name":  "Wand custom-install request preserves the exact executable location",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0584733Z"
+                                         "at":  "2026-10-01T01:16:39.844204Z"
                                      },
                                      {
                                          "name":  "Play with Wand requires an existing exact Wand registration",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0635459Z"
+                                         "at":  "2026-10-01T01:16:39.84934Z"
                                      },
                                      {
                                          "name":  "Wand resolution uses the stable game id and executable aliases",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.06369Z"
+                                         "at":  "2026-10-01T01:16:39.8494734Z"
                                      },
                                      {
                                          "name":  "Wand cached version paths choose the exact executable from an ambiguous install",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0699534Z"
+                                         "at":  "2026-10-01T01:16:39.8557445Z"
                                      },
                                      {
                                          "name":  "Wand resolution prefers a nested shipping binary over a tiny root bootstrap",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0725464Z"
+                                         "at":  "2026-10-01T01:16:39.8596061Z"
                                      },
                                      {
                                          "name":  "Wand launch detects only a safe same-name root bootstrap for a nested catalog binary",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0754583Z"
+                                         "at":  "2026-10-01T01:16:39.8618355Z"
                                      },
                                      {
                                          "name":  "Wand title matching rejects generic parent and substring collisions",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.0756075Z"
+                                         "at":  "2026-10-01T01:16:39.8619802Z"
                                      },
                                      {
                                          "name":  "Play with Wand fails closed instead of starting an unmodified fallback",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.2518225Z"
+                                         "at":  "2026-10-01T01:16:39.9850857Z"
                                      },
                                      {
                                          "name":  "Wand overlay diagnostics bind IPC and hook markers to one PID without proving trainer attachment",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.2521027Z"
+                                         "at":  "2026-10-01T01:16:39.9853772Z"
                                      },
                                      {
                                          "name":  "Play time persists and is exposed on installed games",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.2956937Z"
+                                         "at":  "2026-10-01T01:16:40.0293773Z"
                                      },
                                      {
                                          "name":  "Playing state exposes the visible play and forced-exit controls",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.2958818Z"
+                                         "at":  "2026-10-01T01:16:40.0295592Z"
                                      },
                                      {
                                          "name":  "Wand launch cleanup releases handles without terminating a running game",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.45409Z"
+                                         "at":  "2026-10-01T01:16:40.1964408Z"
                                      },
                                      {
                                          "name":  "Explicit Exit requests process-tree termination without blocking the UI",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4605184Z"
+                                         "at":  "2026-10-01T01:16:40.2034374Z"
                                      },
                                      {
                                          "name":  "AHK frozen-process state requires counted exact identities",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4617646Z"
+                                         "at":  "2026-10-01T01:16:40.204631Z"
                                      },
                                      {
                                          "name":  "AHK resume recovers only the exact paused process window",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4645121Z"
+                                         "at":  "2026-10-01T01:16:40.2075084Z"
                                      },
                                      {
                                          "name":  "AHK pause reads fail closed and missing files mean running",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4663536Z"
+                                         "at":  "2026-10-01T01:16:40.2096129Z"
                                      },
                                      {
                                          "name":  "Active playtime excludes a frozen interval and resumes",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.466473Z"
+                                         "at":  "2026-10-01T01:16:40.2097251Z"
                                      },
                                      {
                                          "name":  "Repeated installs deduplicate by exact game and destination",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4665151Z"
+                                         "at":  "2026-10-01T01:16:40.2097653Z"
                                      },
                                      {
                                          "name":  "Concurrent install reservations allow one same-game writer and independent writers",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4677179Z"
+                                         "at":  "2026-10-01T01:16:40.2110147Z"
                                      },
                                      {
                                          "name":  "Native sort modes match all website sort categories and keep unknown values last",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4709612Z"
+                                         "at":  "2026-10-01T01:16:40.2142284Z"
                                      },
                                      {
                                          "name":  "PowerShell, BAT and shell scripts preserve exact tags",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4761177Z"
+                                         "at":  "2026-10-01T01:16:40.2163351Z"
                                      },
                                      {
                                          "name":  "Duplicate selections collapse to one install identity",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.476203Z"
+                                         "at":  "2026-10-01T01:16:40.2164215Z"
                                      },
                                      {
                                          "name":  "Shell completion markers expand the destination variable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4763484Z"
+                                         "at":  "2026-10-01T01:16:40.2165609Z"
                                      },
                                      {
                                          "name":  "Multi-game install scripts isolate each completion marker",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4771008Z"
+                                         "at":  "2026-10-01T01:16:40.2173701Z"
                                      },
                                      {
                                          "name":  "Windows installs hand off a reviewed BAT job to the visible default terminal",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4784476Z"
+                                         "at":  "2026-10-01T01:16:40.2186957Z"
                                      },
                                      {
                                          "name":  "Per-game install failures stay bounded and identify the affected game",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4787435Z"
+                                         "at":  "2026-10-01T01:16:40.2189928Z"
                                      },
                                      {
                                          "name":  "Concurrent install jobs receive unique script and log paths",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4792392Z"
+                                         "at":  "2026-10-01T01:16:40.2197795Z"
                                      },
                                      {
                                          "name":  "Same-game installs to different destinations receive isolated Docker identities",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4793285Z"
+                                         "at":  "2026-10-01T01:16:40.2198699Z"
                                      },
                                      {
                                          "name":  "A 1259-game BAT export stays below Windows command-line limits",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.490112Z"
+                                         "at":  "2026-10-01T01:16:40.2325154Z"
                                      },
                                      {
                                          "name":  "Case-distinct Docker tags use different Windows directories",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4901644Z"
+                                         "at":  "2026-10-01T01:16:40.2325668Z"
                                      },
                                      {
                                          "name":  "Untrusted Docker identities cannot inject shell commands",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4902962Z"
+                                         "at":  "2026-10-01T01:16:40.2326924Z"
                                      },
                                      {
                                          "name":  "Invalid mount paths are rejected",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4903588Z"
+                                         "at":  "2026-10-01T01:16:40.2327603Z"
                                      },
                                      {
                                          "name":  "Stop scripts affect only selected owned container names",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4904303Z"
+                                         "at":  "2026-10-01T01:16:40.2328256Z"
                                      },
                                      {
                                          "name":  "Docker cleanup refuses mismatched ownership metadata",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4909022Z"
+                                         "at":  "2026-10-01T01:16:40.2332628Z"
                                      },
                                      {
                                          "name":  "Kill All export needs no selection and BAT preserves its PowerShell payload",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4930021Z"
+                                         "at":  "2026-10-01T01:16:40.2346917Z"
                                      },
                                      {
                                          "name":  "Installed scanner avoids installers and ambiguous executables",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4960048Z"
+                                         "at":  "2026-10-01T01:16:40.2375664Z"
                                      },
                                      {
                                          "name":  "Local folder size sums nested files and leaves missing paths unknown",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4985029Z"
+                                         "at":  "2026-10-01T01:16:40.2401502Z"
                                      },
                                      {
                                          "name":  "Card metadata labels registry size as a download estimate",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.4986056Z"
+                                         "at":  "2026-10-01T01:16:40.2402495Z"
                                      },
                                      {
                                          "name":  "Canonical punctuation variants do not hide an installed game",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.5008674Z"
+                                         "at":  "2026-10-01T01:16:40.2428124Z"
                                      },
                                      {
                                          "name":  "Catalog scanner chooses real game binaries and rejects emulator payloads",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.5497844Z"
+                                         "at":  "2026-10-01T01:16:40.2532013Z"
                                      },
                                      {
                                          "name":  "Legacy hashed install folders still resolve their exact game executable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.557918Z"
+                                         "at":  "2026-10-01T01:16:40.2565231Z"
                                      },
                                      {
                                          "name":  "Completion markers are exact and cannot cross-identify games",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.5667906Z"
+                                         "at":  "2026-10-01T01:16:40.261471Z"
                                      },
                                      {
                                          "name":  "Incomplete game folder cannot launch a bundled runtime utility",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.5687724Z"
+                                         "at":  "2026-10-01T01:16:40.2633649Z"
                                      },
                                      {
                                          "name":  "Unknown installed games survive local state reload without becoming Docker tags",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.5965857Z"
+                                         "at":  "2026-10-01T01:16:40.289771Z"
                                      },
                                      {
                                          "name":  "Ambiguous local launchers are retained for explicit choice",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.5985604Z"
+                                         "at":  "2026-10-01T01:16:40.2917737Z"
                                      },
                                      {
                                          "name":  "A library-root launcher cannot hide installed child games",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6005053Z"
+                                         "at":  "2026-10-01T01:16:40.2934673Z"
                                      },
                                      {
                                          "name":  "Local game discovery excludes web helpers and repack menus without guessing between games",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.61117Z"
+                                         "at":  "2026-10-01T01:16:40.3048848Z"
                                      },
                                      {
                                          "name":  "Completed-download scan excludes support-only payloads and unrelated folders",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6147943Z"
+                                         "at":  "2026-10-01T01:16:40.3090754Z"
                                      },
                                      {
                                          "name":  "Downloaded scans recover a legacy folder that omits an initial article",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6164876Z"
+                                         "at":  "2026-10-01T01:16:40.3104773Z"
                                      },
                                      {
                                          "name":  "Metadata alias matching accepts curated aliases and rejects generic title collisions",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6167271Z"
+                                         "at":  "2026-10-01T01:16:40.3107145Z"
                                      },
                                      {
                                          "name":  "Metadata never treats shared title words as sequel or spinoff identity",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6169262Z"
+                                         "at":  "2026-10-01T01:16:40.3109139Z"
                                      },
                                      {
                                          "name":  "Explicit non-game catalog entries cannot inherit unrelated completion metadata",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6570122Z"
+                                         "at":  "2026-10-01T01:16:40.3522991Z"
                                      },
                                      {
                                          "name":  "GMenu versions use publisher repository titles without weakening metadata identity",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6779009Z"
+                                         "at":  "2026-10-01T01:16:40.3731727Z"
                                      },
                                      {
                                          "name":  "Metadata time and downloaded cover survive offline restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6862423Z"
+                                         "at":  "2026-10-01T01:16:40.3812479Z"
                                      },
                                      {
                                          "name":  "Verified catalog identities repair cross-title launchers without losing user edits",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.6943669Z"
+                                         "at":  "2026-10-01T01:16:40.3887556Z"
                                      },
                                      {
                                          "name":  "Duration verification requires canonical provider identity and labels unverified estimates",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.694737Z"
+                                         "at":  "2026-10-01T01:16:40.389124Z"
                                      },
                                      {
                                          "name":  "Unsourced and stale completion hours remain eligible for automatic verification",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.7018254Z"
+                                         "at":  "2026-10-01T01:16:40.3964484Z"
                                      },
                                      {
                                          "name":  "Damaged cover files repair atomically and cached fallbacks recover without restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.7153158Z"
+                                         "at":  "2026-10-01T01:16:40.4104197Z"
                                      },
                                      {
                                          "name":  "Installer markers resolve local metadata identity without stripping title numbers",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:50.7932632Z"
+                                         "at":  "2026-10-01T01:16:40.4879933Z"
                                      },
                                      {
                                          "name":  "GOG primary manifests resolve future local games without changing personal labels",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:51.2211139Z"
+                                         "at":  "2026-10-01T01:16:40.9594254Z"
                                      },
                                      {
                                          "name":  "Periodic local scans preserve custom game names across restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:51.2268638Z"
+                                         "at":  "2026-10-01T01:16:40.9644611Z"
                                      },
                                      {
                                          "name":  "Local platform identity resolves canonical metadata without changing personal fields",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.1801631Z"
+                                         "at":  "2026-10-01T01:16:41.9604998Z"
                                      },
                                      {
                                          "name":  "Steam fallback survives hosted outage and rejects sequel metadata",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.3842598Z"
+                                         "at":  "2026-10-01T01:16:42.216481Z"
                                      },
                                      {
                                          "name":  "Later curated catalog time supersedes a cached genre estimate",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.4258903Z"
+                                         "at":  "2026-10-01T01:16:42.2780263Z"
                                      },
                                      {
                                          "name":  "Partial metadata refresh preserves source labels for unchanged fields",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.4748529Z"
+                                         "at":  "2026-10-01T01:16:42.3424498Z"
                                      },
                                      {
                                          "name":  "Import waits for deferred sync and survives its final save and restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.4906539Z"
+                                         "at":  "2026-10-01T01:16:42.362673Z"
                                      },
                                      {
                                          "name":  "Import rechecks queued edits after a deferred sync before replacing state",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.5001583Z"
+                                         "at":  "2026-10-01T01:16:42.3749973Z"
                                      },
                                      {
                                          "name":  "Cancelling an import waiting for sync preserves the current library",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:50:52.5105716Z"
+                                         "at":  "2026-10-01T01:16:42.3851014Z"
                                      }
                                  ],
                       "failures":  [
@@ -861,26 +866,26 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\self-test.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\self-test.stderr.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\self-test.json"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\self-test.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\self-test.stderr.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\self-test.json"
                                     ],
                       "exitCode":  0
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "storage-sync-proof",
-                      "startedUtc":  "2026-10-01T00:50:52.6169324+00:00",
-                      "finishedUtc":  "2026-10-01T00:50:55.5307098+00:00",
+                      "startedUtc":  "2026-10-01T01:16:42.5191518+00:00",
+                      "finishedUtc":  "2026-10-01T01:16:45.5564917+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  27716,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  11792,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  30,
-                      "receiptWaitElapsedMilliseconds":  1,
+                      "receiptWaitElapsedMilliseconds":  2,
                       "receiptLoaded":  true,
                       "passed":  true,
                       "checks":  [
@@ -893,43 +898,43 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\storage-sync-proof.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\storage-sync-proof.stderr.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\storage-sync-proof.json"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\storage-sync-proof.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\storage-sync-proof.stderr.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\storage-sync-proof.json"
                                     ],
                       "exitCode":  0
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "install-job-proof",
-                      "startedUtc":  "2026-10-01T00:50:55.5327097+00:00",
-                      "finishedUtc":  "2026-10-01T00:50:56.1160315+00:00",
+                      "startedUtc":  "2026-10-01T01:16:45.5572559+00:00",
+                      "finishedUtc":  "2026-10-01T01:16:46.1263590+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  13764,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  29352,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  30,
-                      "receiptWaitElapsedMilliseconds":  1,
+                      "receiptWaitElapsedMilliseconds":  0,
                       "receiptLoaded":  true,
                       "passed":  true,
                       "checks":  [
                                      {
                                          "name":  "durable manifest round-trip and unknown fields",
                                          "passed":  true,
-                                         "evidence":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-fixtures\\install-job-fixtures-ab2e841cf2fc4b48b0b811ed2fe2c3ac\\jobs\\74ca8e3d0af24237acc52a6f792f3b56\\job.json"
+                                         "evidence":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-fixtures\\install-job-fixtures-cf1793ace066465ea4b299740186d322\\jobs\\f2624d78fc3d49289ef4b16035950dd6\\job.json"
                                      },
                                      {
                                          "name":  "terminal progress preserves bytes, files, Docker layers, and safe control gating",
                                          "passed":  true,
-                                         "evidence":  "03:50:55.646  [Pull/progress] a1b2c3d4: Downloading 4.0MB/8.0MB | 50 B/100 B | 2/4 files estimated | 50.000% [############------------] | layers: a1b2c3d4=Downloading 4.0MB/8.0MB; e5f6a7b8=Extracting; safe-control-state-matrix=True"
+                                         "evidence":  "04:16:45.672  [Pull/progress] a1b2c3d4: Downloading 4.0MB/8.0MB | 50 B/100 B | 2/4 files estimated | 50.000% [############------------] | layers: a1b2c3d4=Downloading 4.0MB/8.0MB; e5f6a7b8=Extracting; safe-control-state-matrix=True"
                                      },
                                      {
                                          "name":  "durable control request and response deduplication",
                                          "passed":  true,
-                                         "evidence":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-fixtures\\install-job-fixtures-ab2e841cf2fc4b48b0b811ed2fe2c3ac\\jobs\\74ca8e3d0af24237acc52a6f792f3b56\\controls"
+                                         "evidence":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-fixtures\\install-job-fixtures-cf1793ace066465ea4b299740186d322\\jobs\\f2624d78fc3d49289ef4b16035950dd6\\controls"
                                      },
                                      {
                                          "name":  "case-sensitive source identity and digest-scoped paths",
@@ -939,7 +944,7 @@
                                      {
                                          "name":  "scanner selects full-digest install and exact operation receipt while preserving legacy preference",
                                          "passed":  true,
-                                         "evidence":  "default=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-fixtures\\install-job-fixtures-ab2e841cf2fc4b48b0b811ed2fe2c3ac\\scanner\\docker-owner-library-AgainstTheStorm-2041cd6d3e5722cb-sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; legacy=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-fixtures\\install-job-fixtures-ab2e841cf2fc4b48b0b811ed2fe2c3ac\\scanner\\docker-owner-library-AgainstTheStorm-2041cd6d3e5722cb; job=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-fixtures\\install-job-fixtures-ab2e841cf2fc4b48b0b811ed2fe2c3ac\\scanner\\docker-owner-library-AgainstTheStorm-2041cd6d3e5722cb-sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; wrong-operation-count=0"
+                                         "evidence":  "default=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-fixtures\\install-job-fixtures-cf1793ace066465ea4b299740186d322\\scanner\\docker-owner-library-AgainstTheStorm-2041cd6d3e5722cb-sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; legacy=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-fixtures\\install-job-fixtures-cf1793ace066465ea4b299740186d322\\scanner\\docker-owner-library-AgainstTheStorm-2041cd6d3e5722cb; job=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-fixtures\\install-job-fixtures-cf1793ace066465ea4b299740186d322\\scanner\\docker-owner-library-AgainstTheStorm-2041cd6d3e5722cb-sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; wrong-operation-count=0"
                                      },
                                      {
                                          "name":  "target capability preserves WSL legacy route",
@@ -964,22 +969,22 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-job-proof.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-job-proof.stderr.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\install-job-proof.json"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-job-proof.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-job-proof.stderr.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\install-job-proof.json"
                                     ],
                       "exitCode":  0
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "ui-test",
-                      "startedUtc":  "2026-10-01T00:50:56.1190383+00:00",
-                      "finishedUtc":  "2026-10-01T00:51:54.8920318+00:00",
+                      "startedUtc":  "2026-10-01T01:16:46.1263590+00:00",
+                      "finishedUtc":  "2026-10-01T01:17:45.4542245+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  23628,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  7036,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  30,
@@ -990,442 +995,442 @@
                                      {
                                          "name":  "Packaged WPF window visible with taskbar identity",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0379809Z"
+                                         "at":  "2026-10-01T01:16:50.3824088Z"
                                      },
                                      {
                                          "name":  "Tray icon and useful menu created",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0380139Z"
+                                         "at":  "2026-10-01T01:16:50.3824583Z"
                                      },
                                      {
                                          "name":  "A locked profile prevents a false successful-save result",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0475569Z"
+                                         "at":  "2026-10-01T01:16:50.3928349Z"
                                      },
                                      {
                                          "name":  "Unsaved changes prevent shutdown without cancelling the running window",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0502744Z"
+                                         "at":  "2026-10-01T01:16:50.3959238Z"
                                      },
                                      {
                                          "name":  "Saving recovers after storage becomes available and survives readback",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0584674Z"
+                                         "at":  "2026-10-01T01:16:50.404422Z"
                                      },
                                      {
                                          "name":  "Editing controls stay disabled until the saved profile loads",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0713526Z"
+                                         "at":  "2026-10-01T01:16:50.4183023Z"
                                      },
                                      {
                                          "name":  "Saving before initialization is rejected",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0713532Z"
+                                         "at":  "2026-10-01T01:16:50.418303Z"
                                      },
                                      {
                                          "name":  "Premature save and close preserve the existing profile byte for byte",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.0713533Z"
+                                         "at":  "2026-10-01T01:16:50.4183031Z"
                                      },
                                      {
                                          "name":  "Details saves the first category change",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433868Z"
+                                         "at":  "2026-10-01T01:16:51.1192286Z"
                                      },
                                      {
                                          "name":  "Details can move a game back in the same open dialog",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433883Z"
+                                         "at":  "2026-10-01T01:16:51.1192327Z"
                                      },
                                      {
                                          "name":  "Invalid tags leave every in-memory personal field unchanged",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433883Z"
+                                         "at":  "2026-10-01T01:16:51.1192328Z"
                                      },
                                      {
                                          "name":  "Rejected personal edits cannot leak into a later save",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433884Z"
+                                         "at":  "2026-10-01T01:16:51.1192329Z"
                                      },
                                      {
                                          "name":  "A failed Details save leaves all personal fields unchanged",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433884Z"
+                                         "at":  "2026-10-01T01:16:51.1192329Z"
                                      },
                                      {
                                          "name":  "A failed Details save leaves the durable profile unchanged",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433885Z"
+                                         "at":  "2026-10-01T01:16:51.119233Z"
                                      },
                                      {
                                          "name":  "Retry commits rating tags installed flag and category together",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433885Z"
+                                         "at":  "2026-10-01T01:16:51.1192331Z"
                                      },
                                      {
                                          "name":  "Saved Details edits survive refresh and an independent profile load",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.7433886Z"
+                                         "at":  "2026-10-01T01:16:51.1192331Z"
                                      },
                                      {
                                          "name":  "Uninstalled cards hide all play controls",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.930264Z"
+                                         "at":  "2026-10-01T01:16:51.3360865Z"
                                      },
                                      {
                                          "name":  "Uninstalled games cannot launch through a direct play action",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9308475Z"
+                                         "at":  "2026-10-01T01:16:51.3369241Z"
                                      },
                                      {
                                          "name":  "Missing installed measurements explain availability without inventing a size",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9313933Z"
+                                         "at":  "2026-10-01T01:16:51.337742Z"
                                      },
                                      {
                                          "name":  "Installed cards expose play and pause controls",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9418871Z"
+                                         "at":  "2026-10-01T01:16:51.3564292Z"
                                      },
                                      {
                                          "name":  "Installed file size is bound to a measured installation folder",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9420152Z"
+                                         "at":  "2026-10-01T01:16:51.3565743Z"
                                      },
                                      {
                                          "name":  "Incomplete installed size is explicitly labeled",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9422958Z"
+                                         "at":  "2026-10-01T01:16:51.3568559Z"
                                      },
                                      {
                                          "name":  "Idle pause is disabled; cards retain backup and restore",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9425181Z"
+                                         "at":  "2026-10-01T01:16:51.3570954Z"
                                      },
                                      {
                                          "name":  "Every card carries its own delete and speed buttons",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9425496Z"
+                                         "at":  "2026-10-01T01:16:51.3571388Z"
                                      },
                                      {
                                          "name":  "The per-card delete button is bound to its own game",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.9425511Z"
+                                         "at":  "2026-10-01T01:16:51.3571404Z"
                                      },
                                      {
                                          "name":  "Idle cards reflect exact Wand eligibility while hiding force-exit controls",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:00.942593Z"
+                                         "at":  "2026-10-01T01:16:51.357182Z"
                                      },
                                      {
                                          "name":  "A real running process changes Play to Playing, exposes Exit, and accrues playtime",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:01.3788164Z"
+                                         "at":  "2026-10-01T01:16:51.7961328Z"
                                      },
                                      {
                                          "name":  "Pause click confirms suspension and changes text and color",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:01.5017541Z"
+                                         "at":  "2026-10-01T01:16:51.9068464Z"
                                      },
                                      {
                                          "name":  "Native pause holds the playtime ledger",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:02.6043487Z"
+                                         "at":  "2026-10-01T01:16:53.0230503Z"
                                      },
                                      {
                                          "name":  "Resume click restores color and active timing",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:03.7700802Z"
+                                         "at":  "2026-10-01T01:16:54.1897316Z"
                                      },
                                      {
                                          "name":  "A finished real process restores Play and hides the force-exit control",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:03.7815306Z"
+                                         "at":  "2026-10-01T01:16:54.2012702Z"
                                      },
                                      {
                                          "name":  "A process that exits during Wand confirmation is ignored without stale tracking",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:03.7942473Z"
+                                         "at":  "2026-10-01T01:16:54.214186Z"
                                      },
                                      {
                                          "name":  "Restore refuses a running game without invoking the helper",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:03.8623547Z"
+                                         "at":  "2026-10-01T01:16:54.2814096Z"
                                      },
                                      {
-                                         "name":  "Normal process exit dispatches exactly one durable exact-game backup (calls=1, durable=True, path=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile\\process-fixture\\TrackedGame.exe)",
+                                         "name":  "Normal process exit dispatches exactly one durable exact-game backup (calls=1, durable=True, path=F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile\\process-fixture\\TrackedGame.exe)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8561055Z"
+                                         "at":  "2026-10-01T01:16:55.3387396Z"
                                      },
                                      {
                                          "name":  "Failed backup remains queued across restart",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8590491Z"
+                                         "at":  "2026-10-01T01:16:55.3417296Z"
                                      },
                                      {
                                          "name":  "Successful backup retry clears the durable queue",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8636332Z"
+                                         "at":  "2026-10-01T01:16:55.3465472Z"
                                      },
                                      {
                                          "name":  "Confirmed no-save outcome displays its physical receipt and clears retry queue",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8680496Z"
+                                         "at":  "2026-10-01T01:16:55.3541323Z"
                                      },
                                      {
                                          "name":  "Recoverable operation failures stay non-modal and leave the library interactive",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8681392Z"
+                                         "at":  "2026-10-01T01:16:55.3542542Z"
                                      },
                                      {
                                          "name":  "Search filters native list",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8879098Z"
+                                         "at":  "2026-10-01T01:16:55.3751695Z"
                                      },
                                      {
                                          "name":  "Select all operates on filtered items",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8882778Z"
+                                         "at":  "2026-10-01T01:16:55.3756734Z"
                                      },
                                      {
                                          "name":  "Clear selection works",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8884384Z"
+                                         "at":  "2026-10-01T01:16:55.3759845Z"
                                      },
                                      {
                                          "name":  "Empty view is recoverable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8898671Z"
+                                         "at":  "2026-10-01T01:16:55.3779985Z"
                                      },
                                      {
                                          "name":  "Reset restores results",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8909854Z"
+                                         "at":  "2026-10-01T01:16:55.3791778Z"
                                      },
                                      {
                                          "name":  "Website parity controls exist in the native action bar",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8911167Z"
+                                         "at":  "2026-10-01T01:16:55.3793217Z"
                                      },
                                      {
                                          "name":  "Select category chooses visible entries without changing assignments",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8914343Z"
+                                         "at":  "2026-10-01T01:16:55.3796602Z"
                                      },
                                      {
                                          "name":  "Random selection comes from the current eligible view",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.8992375Z"
+                                         "at":  "2026-10-01T01:16:55.3875843Z"
                                      },
                                      {
                                          "name":  "Maximum download filter excludes unknown sizes",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9019706Z"
+                                         "at":  "2026-10-01T01:16:55.3908319Z"
                                      },
                                      {
                                          "name":  "Search crosses categories without changing catalog privacy",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9047073Z"
+                                         "at":  "2026-10-01T01:16:55.3936909Z"
                                      },
                                      {
                                          "name":  "All games search respects Hide games from All games",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9049625Z"
+                                         "at":  "2026-10-01T01:16:55.3939531Z"
                                      },
                                      {
                                          "name":  "Docker URL is searchable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9051205Z"
+                                         "at":  "2026-10-01T01:16:55.3941147Z"
                                      },
                                      {
                                          "name":  "Catalog statistics stay constant while filtering",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9051208Z"
+                                         "at":  "2026-10-01T01:16:55.394115Z"
                                      },
                                      {
                                          "name":  "Installed launcher path is searchable",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9053548Z"
+                                         "at":  "2026-10-01T01:16:55.3943556Z"
                                      },
                                      {
                                          "name":  "Installed view remains limited during global search",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9061001Z"
+                                         "at":  "2026-10-01T01:16:55.3951668Z"
                                      },
                                      {
                                          "name":  "Installed-only control composes with global search",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9065049Z"
+                                         "at":  "2026-10-01T01:16:55.3956216Z"
                                      },
                                      {
                                          "name":  "Without-installed control excludes installed games",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9069615Z"
+                                         "at":  "2026-10-01T01:16:55.3961026Z"
                                      },
                                      {
                                          "name":  "Wand-included control shows the complete registered set across category privacy",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9081541Z"
+                                         "at":  "2026-10-01T01:16:55.3974232Z"
                                      },
                                      {
                                          "name":  "Reset clears installed filters",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9085264Z"
+                                         "at":  "2026-10-01T01:16:55.3977522Z"
                                      },
                                      {
                                          "name":  "Lowest rating sort uses ascending scores with unrated games last",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:04.9120276Z"
+                                         "at":  "2026-10-01T01:16:55.4030825Z"
                                      },
                                      {
                                          "name":  "No-cover cards render a deterministic nonblank initial fallback",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.0164812Z"
+                                         "at":  "2026-10-01T01:16:55.5270612Z"
                                      },
                                      {
                                          "name":  "Cover statistics count cached artwork but exclude fallback cards",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.0164817Z"
+                                         "at":  "2026-10-01T01:16:55.5270617Z"
                                      },
                                      {
                                          "name":  "Theme switches",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.0397276Z"
+                                         "at":  "2026-10-01T01:16:55.5543629Z"
                                      },
                                      {
                                          "name":  "Minimize / hide retains tray",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.0461432Z"
+                                         "at":  "2026-10-01T01:16:55.5599457Z"
                                      },
                                      {
                                          "name":  "Restore returns window",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.051456Z"
+                                         "at":  "2026-10-01T01:16:55.5626227Z"
                                      },
                                      {
                                          "name":  "Progress window captures real process output and nonzero exit",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.3079055Z"
+                                         "at":  "2026-10-01T01:16:55.8224553Z"
                                      },
                                      {
                                          "name":  "Failed process completion fires once after stopping without marking installation successful",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.3079065Z"
+                                         "at":  "2026-10-01T01:16:55.822456Z"
                                      },
                                      {
                                          "name":  "Install marker updates are delivered before the batch process exits",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:05.6501865Z"
+                                         "at":  "2026-10-01T01:16:56.2390476Z"
                                      },
                                      {
                                          "name":  "Offline native category creation saves locally without admin sign-in",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.6169274Z"
+                                         "at":  "2026-10-01T01:16:59.2083521Z"
                                      },
                                      {
                                          "name":  "Offline native rename and independent visibility controls save local edits",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.7285821Z"
+                                         "at":  "2026-10-01T01:16:59.3411615Z"
                                      },
                                      {
                                          "name":  "Category edits survive a state reload",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.7288524Z"
+                                         "at":  "2026-10-01T01:16:59.3415063Z"
                                      },
                                      {
                                          "name":  "Offline local edits never request network access or change the shared queue",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.7290399Z"
+                                         "at":  "2026-10-01T01:16:59.3417831Z"
                                      },
                                      {
                                          "name":  "Wand checkbox refreshes current registrations and displays their count",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.8148342Z"
+                                         "at":  "2026-10-01T01:16:59.4568741Z"
                                      },
                                      {
                                          "name":  "Wand membership additions update visible count",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.8391813Z"
+                                         "at":  "2026-10-01T01:16:59.4946657Z"
                                      },
                                      {
                                          "name":  "Wand-only rows and enriched metadata survive library reload",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.9073591Z"
+                                         "at":  "2026-10-01T01:16:59.5738232Z"
                                      },
                                      {
                                          "name":  "New Wand identities remain eligible for automatic metadata",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.9076894Z"
+                                         "at":  "2026-10-01T01:16:59.5741889Z"
                                      },
                                      {
                                          "name":  "An empty current Wand library clears the previous count",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.9220241Z"
+                                         "at":  "2026-10-01T01:16:59.5960936Z"
                                      },
                                      {
                                          "name":  "Removing Wand membership preserves installed library data",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:08.9221142Z"
+                                         "at":  "2026-10-01T01:16:59.5962034Z"
                                      },
                                      {
                                          "name":  "Automatic completion-time updates reorder Time to Beat (Low–High)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:09.0545727Z"
+                                         "at":  "2026-10-01T01:16:59.7879083Z"
                                      },
                                      {
                                          "name":  "Automatic Time to Beat (Low–High) reorder retains search selection and personal state",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:09.0545732Z"
+                                         "at":  "2026-10-01T01:16:59.787909Z"
                                      },
                                      {
                                          "name":  "Automatic completion-time updates reorder Time to Beat (High–Low)",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:09.0545732Z"
+                                         "at":  "2026-10-01T01:16:59.7879091Z"
                                      },
                                      {
                                          "name":  "Automatic Time to Beat (High–Low) reorder retains search selection and personal state",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:09.0545733Z"
+                                         "at":  "2026-10-01T01:16:59.7879092Z"
                                      },
                                      {
                                          "name":  "Every future-entry fixture reaches automatic metadata eligibility",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:09.0903621Z"
+                                         "at":  "2026-10-01T01:16:59.833685Z"
                                      },
                                      {
                                          "name":  "Off-screen installed additions receive metadata before older repository entries",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:44.2405054Z"
+                                         "at":  "2026-10-01T01:17:34.9765252Z"
                                      },
                                      {
                                          "name":  "Automatic loop enriches catalog Docker installed and Wand entries without manual refresh",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:44.2407371Z"
+                                         "at":  "2026-10-01T01:17:34.9768582Z"
                                      },
                                      {
                                          "name":  "Unavailable metadata does not block other entries and persists its retry",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:44.2409299Z"
+                                         "at":  "2026-10-01T01:17:34.9775269Z"
                                      },
                                      {
                                          "name":  "Automatic enrichment survives state and catalog reload for every entry path",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:44.2449759Z"
+                                         "at":  "2026-10-01T01:17:34.985732Z"
                                      },
                                      {
                                          "name":  "Automatic metadata repairs a damaged shared cover after reload without manual refresh",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:54.2878754Z"
+                                         "at":  "2026-10-01T01:17:45.0325498Z"
                                      },
                                      {
                                          "name":  "Artwork-only recovery preserves previously verified completion hours and their timestamp",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:54.2880091Z"
+                                         "at":  "2026-10-01T01:17:45.0327558Z"
                                      },
                                      {
                                          "name":  "Search, combined filter and statistics fit the minimum native window",
                                          "passed":  true,
-                                         "at":  "2026-10-01T00:51:54.3924347Z"
+                                         "at":  "2026-10-01T01:17:45.3248634Z"
                                      }
                                  ],
                       "failures":  [
@@ -1435,22 +1440,22 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\ui-test.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\ui-test.stderr.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\ui-test.json"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\ui-test.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\ui-test.stderr.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\ui-test.json"
                                     ],
                       "exitCode":  0
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "native-pause-proof",
-                      "startedUtc":  "2026-10-01T00:51:54.8945312+00:00",
-                      "finishedUtc":  "2026-10-01T00:51:56.2862965+00:00",
+                      "startedUtc":  "2026-10-01T01:17:45.4552262+00:00",
+                      "finishedUtc":  "2026-10-01T01:17:46.8495794+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  19364,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  11632,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  30,
@@ -1471,22 +1476,22 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\native-pause-proof.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\native-pause-proof.stderr.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\native-pause-proof.json"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\native-pause-proof.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\native-pause-proof.stderr.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\native-pause-proof.json"
                                     ],
                       "exitCode":  0
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "reass-fixture",
-                      "startedUtc":  "2026-10-01T00:51:56.2876802+00:00",
-                      "finishedUtc":  "2026-10-01T00:51:58.3650550+00:00",
+                      "startedUtc":  "2026-10-01T01:17:46.8525800+00:00",
+                      "finishedUtc":  "2026-10-01T01:17:48.9759783+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  29232,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  25772,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  0,
@@ -1503,21 +1508,21 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\reass-fixture.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\reass-fixture.stderr.txt"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\reass-fixture.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\reass-fixture.stderr.txt"
                                     ],
                       "exitCode":  0
                   },
                   {
                       "schemaVersion":  1,
-                      "runId":  "3f5572f5281342c896c53c5b33db5bd4",
+                      "runId":  "adc50a7e30ab48459c1621b6e79a5e71",
                       "testName":  "gameprogress-python",
-                      "startedUtc":  "2026-10-01T00:51:58.3690572+00:00",
-                      "finishedUtc":  "2026-10-01T00:51:58.9333841+00:00",
+                      "startedUtc":  "2026-10-01T01:17:48.9812550+00:00",
+                      "finishedUtc":  "2026-10-01T01:17:49.5637444+00:00",
                       "executablePath":  "F:\\study\\repos\\game-library-manager-native\\native\\dist\\GameLibrary.exe",
-                      "executableSha256":  "F3BA724AD34DA77551CC36BB48FF193CCEC33F20F0CF1779A6C859879072513E",
-                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\isolated-profile",
-                      "processId":  22744,
+                      "executableSha256":  "46983C203F1A9549DE977F7F6D064760ED6D85500C1331338CEDEEC7B1F4B466",
+                      "profilePath":  "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\isolated-profile",
+                      "processId":  28340,
                       "processExited":  true,
                       "timedOut":  false,
                       "receiptWaitDeadlineSeconds":  0,
@@ -1534,8 +1539,8 @@
 
                                                ],
                       "artifacts":  [
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\gameprogress-python.stdout.txt",
-                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\3f5572f5281342c896c53c5b33db5bd4\\gameprogress-python.stderr.txt"
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\gameprogress-python.stdout.txt",
+                                        "F:\\study\\repos\\game-library-manager-native\\evidence\\verification\\target\\adc50a7e30ab48459c1621b6e79a5e71\\gameprogress-python.stderr.txt"
                                     ],
                       "exitCode":  0
                   },

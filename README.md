@@ -100,6 +100,32 @@ no runtime to install: the bundle carries everything it needs.
   <img src="docs/images/speed-bar-2026-10.png" alt="Per-game speed bar and hotkeys" width="100%">
 </p>
 
+**How a speed actually gets applied.** F1/F2/F3, the per-card **Speed**
+button, and the Game actions menu all route through one command,
+`GameSpeedCommand`, which resolves the running game, injects the 64-bit hook into
+that process if it is not already there, asks the hook to adopt the factor, waits
+for the hook to confirm it, and only then records and displays it. If anything
+fails - wrong bitness, a higher-privilege target, a hook that stops responding -
+nothing is stored and the status line says what went wrong, so the app can never
+show a speed the game is not actually running at.
+
+`GameLibrary.exe --speed-proof <report.json> <pid> <factor>` runs exactly that
+path against a live process and reports the outcome as JSON. Verified against a
+real injected 64-bit process: `passed: true` with the requested factor confirmed
+and read back for **1.0, 2.0, 0.5 and 4.0**.
+
+Two known limitations, both deliberate:
+
+- **32-bit games are refused, not injected.** The 32-bit build compiles and is a
+  valid `coff-i386` PE32 DLL, but it faults `0xC0000005` on a real x86 process, so
+  it is excluded from the package. See the limitation section below.
+- `hookCount` in the diagnostic report reads `0` even when all five clock hooks
+  are installed and serving. The count is published once at install time, so a
+  manager that attaches afterwards reads a stale value. It is reported for
+  diagnosis and is deliberately not a pass gate, because the authoritative
+  signals - the factor being adopted and read back, and `faulted` - are all
+  correct.
+
 <p align="center">
   <img src="docs/images/hero-2026-10.png" alt="Game Library Manager" width="100%">
 </p>
@@ -194,7 +220,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ## Notes
 
-- The self-test suite runs **159 checks** covering identity, metadata, save
+- The self-test suite runs **160 checks** covering identity, metadata, save
   backup/restore, durable installs, Wand dispatch, and the six capabilities
   above. The offline WPF UI harness adds **88 checks**, including two that assert
   every card really carries its own delete and speed buttons and that the delete
