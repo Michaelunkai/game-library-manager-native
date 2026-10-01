@@ -221,10 +221,6 @@ public partial class MainWindow : Window
     public MainWindow(LibraryStore store, bool offline = false, WindowPlacementRequest? placementRequest = null)
     {
         Store = store; this.offline = offline;
-        // F1/F2/F3 adjust the running game's speed. The handler is fail-closed: with
-        // no positively identified running game it does nothing at all, so the keys
-        // never change the machine's state outside a game session.
-        PreviewKeyDown += SpeedHotkeyPreview;
         this.placementRequest = placementRequest ?? WindowPlacement.Capture(Array.Empty<string>(), store.StatePath);
         offlineNetwork = offline ? new OfflineNetworkGuard() : null;
         Sync = new SyncClient(store, offlineNetwork);
@@ -1292,9 +1288,6 @@ public partial class MainWindow : Window
             game.ProgressLabel = match?.Label ?? (game.PlayedHours > 0 || game.IsPlaying ? "Progress needs a matching verified backup" : "");
             game.ProgressDetail = match?.Detail ?? "A current, matching save backup is needed to estimate campaign progress.";
             game.Notify(nameof(Game.ProgressLabel)); game.Notify(nameof(Game.ProgressDetail));
-            // Keep the visible speed truthful on every refresh, so the card never shows
-            // a stale value after the list is rebuilt.
-            RefreshSpeedLabel(game.Id);
         }
     }
     private readonly SemaphoreSlim gameSaveGate = new(1, 1);
@@ -1305,11 +1298,6 @@ public partial class MainWindow : Window
     private async void RestoreFromCard(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: Game card }) { var game = card.ActionTarget ?? card; await RunGameSave(game.Id, game.Name, State.LaunchPaths.GetValueOrDefault(game.Id, ""), true); }
-    }
-    /// <summary>Per-card speed control; opens the same dialog as the toolbar menu.</summary>
-    private void SpeedFromCard(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: Game card }) ShowSpeedDialog(card.ActionTarget ?? card);
     }
     /// <summary>
     /// Per-card "Delete from all drives". The tag is the card's own game, so this acts
@@ -1774,114 +1762,6 @@ public partial class MainWindow : Window
 
     private static bool saveOperationProofIsActive(Func<string, bool, Task<GameSaveResult>>? proof) => proof is not null;
 
-    private void SpeedHotkeyPreview(object sender, KeyEventArgs e)
-    {
-        var key = e.Key switch
-        {
-            Key.F1 => SpeedHotkey.Boost,
-            Key.F2 => SpeedHotkey.Reduce,
-            Key.F3 => SpeedHotkey.Normal,
-            _ => (SpeedHotkey?)null
-        };
-        if (key is null) return;
-        e.Handled = true;
-        // The gate is this library's own set of running plays, so the keys can only
-        // ever act on a game launched from here - never an arbitrary process, and
-        // never anything at all when no game is running.
-        if (!TryGetRunningPlay(out var play))
-        {
-            StatusText.Text = "Start a game before using F1/F2/F3.";
-            return;
-        }
-        _ = ApplySpeedToRunningPlay(play.gameId, play.gameName, play.processId, key);
-    }
-
-    private readonly record struct RunningPlay(string gameId, string gameName, int processId);
-
-    /// <summary>
-    /// Recomputes a game's visible speed and pushes it to the card immediately.
-    /// Called on every hotkey press and dialog change, and whenever the list is
-    /// rebuilt, so the number on the card is always the number that will be used -
-    /// it does not depend on the game running.
-    /// </summary>
-    private void RefreshSpeedLabel(string gameId, double? appliedFactor = null, string? detail = null)
-    {
-        Game? game = Games.FirstOrDefault(g => string.Equals(g.Id, gameId, StringComparison.Ordinal));
-        if (game is null) return;
-        double factor = appliedFactor ?? GameSpeedController.ForGame(gameId, State.SpeedByGame, GameSpeedNative.NormalFactor);
-        bool running = TryGetRunningPlay(out var play) && string.Equals(play.gameId, gameId, StringComparison.Ordinal);
-        string shown = GameSpeedController.Describe(factor);
-        game.SpeedLabel = running || appliedFactor is not null ? "Speed " + shown : "Speed " + shown;
-        game.SpeedApplied = appliedFactor is not null;
-        game.SpeedDetail = detail ?? (running
-            ? "Running at " + shown + ". F1 adds 0.5x, F2 removes 0.5x, F3 returns to exactly normal."
-            : "Set to " + shown + ". It is applied as soon as the game starts; F1 / F2 / F3 work while it runs.");
-        game.Notify(nameof(Game.SpeedLabel));
-        game.Notify(nameof(Game.SpeedDetail));
-        game.Notify(nameof(Game.SpeedApplied));
-    }
-
-    /// <summary>Refreshes the visible speed for every known game.</summary>
-    private void RefreshAllSpeedLabels()
-    {
-        foreach (var game in Games) RefreshSpeedLabel(game.Id);
-    }
-
-    private bool TryGetRunningPlay(out RunningPlay play)
-    {
-        foreach (var entry in activePlays)
-        {
-            Process? process = entry.Value.Process;
-            if (process is null) continue;
-            try
-            {
-                if (process.HasExited) continue;
-                int id = process.Id;
-                if (id <= 0) continue;
-                string name = Games.FirstOrDefault(g => string.Equals(g.Id, entry.Key, StringComparison.Ordinal))?.Name ?? entry.Key;
-                play = new RunningPlay(entry.Key, name, id);
-                return true;
-            }
-            catch (InvalidOperationException) { }
-        }
-        play = default;
-        return false;
-    }
-
-    /// <summary>
-    /// Applies a speed to the running game and only records it once the hook has
-    /// confirmed it, so the status text can never claim a speed the game is not
-    /// actually running at. Re-prompting with the confirmed value keeps repeated F1
-    /// presses walking the ladder instead of stalling on an unconfirmed one.
-    /// </summary>
-    private async Task ApplySpeedToRunningPlay(string gameId, string gameName, int processId, SpeedHotkey? hotkey, double? explicitFactor = null)
-    {
-        double current = GameSpeedController.ForGame(gameId, State.SpeedByGame, GameSpeedNative.NormalFactor);
-        double target = explicitFactor ?? GameSpeedController.ApplyHotkey(current, hotkey!.Value);
-
-        // Show the pending value straight away, so the card reflects the change in
-        // the same instant the key is pressed rather than after the hook answers.
-        RefreshSpeedLabel(gameId, target, "Applying " + GameSpeedController.Describe(target) + "…");
-
-        var result = await GameSpeedCommand.ApplyAsync(processId, target, NativeSpeedRuntime.Instance, lifetime.Token);
-        if (result.Succeeded)
-        {
-            State.SpeedByGame[gameId] = result.Factor;
-            Save();
-            // The value the hook confirmed is what gets shown, so the card can never
-            // display a speed the game is not actually running at.
-            RefreshSpeedLabel(gameId, result.Factor);
-            StatusText.Text = result.Message + " (" + gameName + ")";
-        }
-        else
-        {
-            // Revert the card to the speed actually in force and say why, so a failed
-            // press is never silent.
-            RefreshSpeedLabel(gameId);
-            StatusText.Text = result.Message + " (" + gameName + ")";
-        }
-    }
-
     private SaveOperationRequest SaveRequestForGame(string id, string name)
     {
         activePlays.TryGetValue(id, out var session);
@@ -1897,61 +1777,6 @@ public partial class MainWindow : Window
     private async void BackupGameSaves(Game game) => await RunGameSave(game.Id, game.Name, State.LaunchPaths.GetValueOrDefault(game.Id, ""), false);
 
     private async void RestoreGameSaves(Game game) => await RunGameSave(game.Id, game.Name, State.LaunchPaths.GetValueOrDefault(game.Id, ""), true);
-
-    private void ShowSpeedDialog(Game game)
-    {
-        var live = TryGetRunningPlay(out var play) && play.gameId == game.Id;
-        double current = GameSpeedController.ForGame(game.Id, State.SpeedByGame, GameSpeedNative.NormalFactor);
-        var input = new System.Windows.Controls.TextBox { Text = current.ToString("0.##", CultureInfo.CurrentCulture), Margin = new Thickness(0, 6, 0, 10) };
-        var panel = new StackPanel();
-        panel.Children.Add(new TextBlock { Text = "Speed multiplier for " + game.Name, Margin = new Thickness(0, 0, 0, 4) });
-        panel.Children.Add(input);
-        panel.Children.Add(new TextBlock
-        {
-            Text = live
-                ? "Or press F1 / F2 / F3 now. F1 adds 0.5x, F2 removes 0.5x, F3 returns to exactly normal. Keys work while this game is running."
-                : "This game is not running, so a speed can be set now and will be applied the next time it starts. F1 / F2 / F3 only work while a game is running.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.75,
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-        var dialog = new Window { Title = "Game speed", Content = panel, Width = 380, SizeToContent = SizeToContent.Height,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = this, ResizeMode = ResizeMode.NoResize, Background = SystemColors.ControlBrush };
-        var ok = new Button { Content = live ? "Apply now" : "Save", IsDefault = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 12, 0, 0) };
-        var cancel = new Button { Content = "Close", IsCancel = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(8, 12, 0, 0) };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        buttons.Children.Add(ok); buttons.Children.Add(cancel); panel.Children.Add(buttons);
-        cancel.Click += (_, _) => dialog.Close();
-        ok.Click += async (_, _) =>
-        {
-            if (!(double.TryParse(input.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double parsed)
-                || double.TryParse(input.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)))
-            {
-                StatusText.Text = "Enter a speed such as 1.5 or 2.";
-                return;
-            }
-            // Clamp before use so a hand-typed value can never store a non-finite or
-            // out-of-range multiplier.
-            double wanted = GameSpeedController.Clamp(parsed);
-            if (live)
-            {
-                // Applying to the live process is the whole point: report what actually
-                // happened rather than silently storing a number.
-                await ApplySpeedToRunningPlay(game.Id, game.Name, play.processId, null, wanted);
-            }
-            else
-            {
-                State.SpeedByGame[game.Id] = wanted;
-                Save();
-                // Not running, but the value is still shown immediately and will be
-                // applied the moment the game starts.
-                RefreshSpeedLabel(game.Id, wanted);
-                StatusText.Text = "Speed for " + game.Name + " set to " + GameSpeedController.Describe(wanted) + "; it applies when the game starts.";
-            }
-            dialog.Close();
-        };
-        dialog.ShowDialog();
-    }
 
     private void ExportScriptMenu(object sender, RoutedEventArgs e)
     {
@@ -2001,10 +1826,6 @@ public partial class MainWindow : Window
         restore.IsEnabled = game is not null;
         restore.Click += (_, _) => { if (game is not null) RestoreGameSaves(game); };
         menu.Items.Add(restore);
-        var speed = new MenuItem { Header = "Speed" };
-        speed.IsEnabled = game is not null;
-        speed.Click += (_, _) => { if (game is not null) ShowSpeedDialog(game); };
-        menu.Items.Add(speed);
         menu.Items.Add(new Separator());
         var remove = new MenuItem { Header = "Delete from all drives" };
         remove.IsEnabled = game is not null;

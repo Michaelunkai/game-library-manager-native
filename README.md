@@ -48,7 +48,7 @@ no runtime to install: the bundle carries everything it needs.
   virtualizing panel stops re-measuring mid-scroll, and scroll-driven metadata
   work is debounced until scrolling settles.
 - **Delete from all drives.** Every game card has its own
-  **Delete from all drives** button (alongside Backup, Restore and Speed). It
+  **Delete from all drives** button, alongside Backup and Restore. It
   plans first and shows you exactly what it will remove, then deletes the install
   folder, the install working directory, any local or non-Docker copy, and
   Docker leftovers. It is containment-checked: a path outside the allow-listed
@@ -84,62 +84,14 @@ no runtime to install: the bundle carries everything it needs.
   verifies the backup, quarantines the live save, and rolls back on any
   failure, so you are never left worse off. The existing helper receipts and
   logs still run exactly as before.
-- **Per-game speed bar.** A native clock hook scales a running game's
-  simulation clock. The keys are exact and repeatable, with no snapping to a
-  ladder and no accumulated rounding:
 
-  | key | effect | from 1.0x, ten presses |
-  |---|---|---|
-  | **F1** | **+0.5x every single press** | 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0 |
-  | **F2** | **−0.5x every single press** | 0.5, then the 0.05 floor and holds |
-  | **F3** | reset to **exactly 1.0x** | from 1.5, 7, 20 and 0.05 all give 1.0 |
-
-  F1 keeps climbing to **20.0x** (38 presses from normal) and F2 settles at
-  **0.05x**, the lowest factor the native hook accepts — 0.0x is refused on
-  purpose, because it would freeze a game solid rather than slow it. Half-step
-  arithmetic is exact in binary floating point, so however many times you press,
-  the value is precisely `1.0 + 0.5 × n` and never drifts.
-
-  Each game remembers its own speed, the card shows the live value at all times,
-  and the keys are a strict no-op unless a game this library launched is actually
-  running. Measured end to end against an uninjected parent clock: **2.004x** at
-  2.0, **0.501x** at 0.5, and **4.004x** at 4.0 (1.000x at 1.0). The virtual
-  clock never runs backwards when you slow down, and a factor of exactly 1.0 is a
-  transparent pass-through. 64-bit titles
-  are supported; **32-bit titles are refused, not injected** — see the limitation
-  below. This is intended for
-  your own offline, single-player games, and it will not target a process it
-  cannot positively identify or attempt to evade anti-cheat.
-
-<p align="center">
-  <img src="docs/images/speed-bar-2026-10.png" alt="Per-game speed bar and hotkeys" width="100%">
-</p>
-
-**How a speed actually gets applied.** F1/F2/F3, the per-card **Speed**
-button, and the Game actions menu all route through one command,
-`GameSpeedCommand`, which resolves the running game, injects the 64-bit hook into
-that process if it is not already there, asks the hook to adopt the factor, waits
-for the hook to confirm it, and only then records and displays it. If anything
-fails - wrong bitness, a higher-privilege target, a hook that stops responding -
-nothing is stored and the status line says what went wrong, so the app can never
-show a speed the game is not actually running at.
-
-`GameLibrary.exe --speed-proof <report.json> <pid> <factor>` runs exactly that
-path against a live process and reports the outcome as JSON. Verified against a
-real injected 64-bit process: `passed: true` with the requested factor confirmed
-and read back for **1.0, 2.0, 0.5 and 4.0**.
-
-Two known limitations, both deliberate:
-
-- **32-bit games are refused, not injected.** The 32-bit build compiles and is a
-  valid `coff-i386` PE32 DLL, but it faults `0xC0000005` on a real x86 process, so
-  it is excluded from the package. See the limitation section below.
-- `hookCount` in the diagnostic report reads `0` even when all five clock hooks
-  are installed and serving. The count is published once at install time, so a
-  manager that attaches afterwards reads a stale value. It is reported for
-  diagnosis and is deliberately not a pass gate, because the authoritative
-  signals - the factor being adopted and read back, and `faulted` - are all
-  correct.
+- **Fits any screen.** The window can be as narrow as 760 px, and the card
+  controls, filters and action rows all reflow rather than clip: the card's
+  action column is proportional with a floor, every card button stretches to its
+  column instead of overflowing, and the action and filter rows wrap. A
+  regression check measures the real card at 760, 1024, 1280 and 1920 px and
+  requires every clickable control to stay inside the card and sized, with no
+  horizontal scrollbar.
 
 <p align="center">
   <img src="docs/images/hero-2026-10.png" alt="Game Library Manager" width="100%">
@@ -235,40 +187,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ## Notes
 
-- The self-test suite runs **160 checks** covering identity, metadata, save
-  backup/restore, durable installs, Wand dispatch, and the six capabilities
-  above. The offline WPF UI harness adds **92 checks**, including two that assert
-  every card really carries its own delete and speed buttons and that the delete
-  button is bound to its own game. Both run against the packaged executable via
-  `verify-reliability.ps1`, which currently reports `passed: true` across all 9
-  cases.
-- The 64-bit speed hook is compiled from `native\tools\gamespeed\gamespeed.c`
-  with MinGW-w64 gcc (`gcc -m64 -O2 -Wall -Wextra -static-libgcc -shared -s`).
-  **Rebuild it after changing the C source** — a stale DLL silently lags the code.
-  See `native\tools\gamespeed\README.md` for both build commands, the export and
-  PE checks, the expected scaling table, and the measurement pitfall.
-
-## Known limitation: 32-bit games
-
-A 64-bit DLL cannot be injected into a 32-bit game, so a separate 32-bit build is
-required. The WinLibs MinGW-w64 used for x86-64 is `--disable-multilib`, so that
-build is now done with LLVM-MinGW `UCRT`, which ships an i686 sysroot:
-
-```
-i686-w64-mingw32-clang -shared -O2 -o gamespeed32.dll gamespeed.c -lkernel32
-```
-
-It compiles with no diagnostics and produces a genuine `coff-i386` / `PE32` DLL
-exporting all four functions. Against a real x86 process it installs all five
-hooks and applies the factor, then faults `0xC0000005`.
-
-**`gamespeed32.dll` is therefore excluded from the package** and a 32-bit game is
-reported as an architecture mismatch. Refusing a 32-bit game is recoverable;
-crashing it is not. The test suite asserts both that the file is absent from the
-build output and that the app refuses 32-bit, so the day the fault is fixed and
-the build is enabled, the suite fails loudly instead of quietly injecting
-something that faults. `native\tools\gamespeed\README.md` records the trace that
-pinpoints where the fault occurs and what to investigate next.
+- The self-test suite runs **157 checks** covering identity, metadata, save
+  backup/restore, durable installs, Wand dispatch, and the capabilities
+  above. The offline WPF UI harness adds **93 checks**, including ones that
+  assert every card carries its own delete button bound to its own game, and
+  that every clickable card control fits inside the card at 760, 1024, 1280 and
+  1920 px with no horizontal scrollbar. Both run against the packaged executable
+  via `verify-reliability.ps1`, which currently reports `passed: true` across all
+  9 cases.
 
 - Personal state lives in the local `data` profile and is never part of the
   repository.

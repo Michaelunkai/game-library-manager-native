@@ -40,9 +40,6 @@ public static class SelfTests
         Check("Completion percent and hours remaining are clamped, confident and never fabricated", () => CompletionProgressTests.Run(root));
         Check("Save-data discovery finds the real per-game path through registry, engine and known-folder layers", () => SaveDataLocatorTests.Run(root));
         Check("Backup snapshots a consistent save while the game runs and restore rolls back on failure", () => SaveRestoreCoordinatorTests.Run(root));
-        Check("Speed ladder and F1/F2/F3 hotkeys act only on a positively identified running game", () => GameSpeedControllerTests.Run(root));
-        Check("Speed hotkeys really inject the hook and send the factor to the running game", () => GameSpeedCommandTests.Run(root));
-        Check("Native speed engine selects the matching architecture and re-bases the scaled clock without a jump", () => GameSpeedNativeTests.Run(root));
         Check("Install-job manifest reads survive concurrent replacement", () => InstallJobConcurrencyTests.Run(root));
         Check("Install progress parses live byte and file percentages", () => InstallProgressTests.Run(root));
         Check("Many games install in parallel with their own folders", () => ParallelInstallTests.Run(root));
@@ -1824,8 +1821,20 @@ public partial class MainWindow
     {
         var checks = new List<object>();
         void Check(string name, bool passed) { checks.Add(new { name, passed, at = DateTime.UtcNow }); if (!passed) throw new InvalidOperationException("UI proof failed: " + name); }
-        static T? FindVisual<T>(DependencyObject? root, Func<T, bool> predicate) where T : DependencyObject
+        /// <summary>Gathers every visible Button under a container, for layout assertions.</summary>
+    static void CollectButtons(DependencyObject? root, List<Button> found)
+    {
+        if (root is null) return;
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
         {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is Button button) found.Add(button);
+            CollectButtons(child, found);
+        }
+    }
+
+    static T? FindVisual<T>(DependencyObject? root, Func<T, bool> predicate) where T : DependencyObject        {
             if (root == null) return null;
             if (root is T candidate && predicate(candidate)) return candidate;
             for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
@@ -1922,50 +1931,52 @@ public partial class MainWindow
                 && FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "RestoreGame") != null);
             // Every card must carry its own delete and speed entry point, not only a
             // toolbar control that acts on the current selection.
+            // Every card must carry its own delete button, and it must stay fully
+            // inside the card at any window width. A control that is merely present
+            // but clipped or pushed out of view is not "fitted".
             var deleteOnCard = FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "DeleteGame");
-            var speedOnCard = FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "SpeedGame");
-            Check("Every card carries its own delete and speed buttons", deleteOnCard != null && speedOnCard != null);
-            // The speed control must display the actual speed, not a generic "Speed"
-            // label, and it must be populated even though nothing is running here.
-            string? speedCaption = speedOnCard?.Content?.ToString();
-            Check("The speed control shows the game's actual speed rather than a generic label",
-                !string.IsNullOrWhiteSpace(speedCaption)
-                && !string.Equals(speedCaption, "Speed", StringComparison.Ordinal)
-                && speedCaption!.Contains("1.0x", StringComparison.Ordinal));
-            // A stored speed must be reflected on the card with no game running, because
-            // the value is applied when the game starts and the user needs to see it.
-            string storedSpeedId = playStateGame.Id;
-            double previousStoredSpeed = State.SpeedByGame.GetValueOrDefault(storedSpeedId, 1.0);
-            State.SpeedByGame[storedSpeedId] = 1.5;
-            try
-            {
-                RefreshSpeedLabel(storedSpeedId);
-                Check("A stored speed is shown on the card while no game is running",
-                    string.Equals(playStateGame.SpeedLabel, "Speed 1.5x", StringComparison.Ordinal)
-                    && speedOnCard?.Content?.ToString() == "Speed 1.5x");
-                // The hotkey result must show up as the same number the key computes.
-                double boosted = GameSpeedController.ApplyHotkey(1.5, SpeedHotkey.Boost);
-                RefreshSpeedLabel(storedSpeedId, boosted);
-                Check("F1 updates the visible speed immediately to the value it will apply",
-                    string.Equals(playStateGame.SpeedLabel, "Speed " + GameSpeedController.Describe(boosted), StringComparison.Ordinal));
-                double reduced = GameSpeedController.ApplyHotkey(boosted, SpeedHotkey.Reduce);
-                RefreshSpeedLabel(storedSpeedId, reduced);
-                double normal = GameSpeedController.ApplyHotkey(reduced, SpeedHotkey.Normal);
-                RefreshSpeedLabel(storedSpeedId, normal);
-                Check("F2 and F3 each update the visible speed immediately",
-                    string.Equals(playStateGame.SpeedLabel, "Speed " + GameSpeedController.Describe(normal), StringComparison.Ordinal)
-                    && Math.Abs(normal - 1.0) < 1e-9);
-            }
-            finally
-            {
-                if (Math.Abs(previousStoredSpeed - 1.0) < 1e-9) State.SpeedByGame.Remove(storedSpeedId);
-                else State.SpeedByGame[storedSpeedId] = previousStoredSpeed;
-                RefreshSpeedLabel(storedSpeedId);
-            }
-            // The tag must be that card's own game, so pressing it can never act on a
-            // different title than the one whose button was clicked.
+            Check("Every card carries its own delete button", deleteOnCard != null);
             Check("The per-card delete button is bound to its own game",
                 deleteOnCard?.Tag is Game taggedDelete && taggedDelete.Id == playStateGame.Id);
+
+            // Fit at every resolution: the user must never lose a control off the
+            // edge of the window. The card is measured and arranged directly at each
+            // target width, which is what actually exercises the card template's
+            // ability to fit rather than the window's own layout pass.
+            FrameworkElement? card = playStateContainer as FrameworkElement;
+            double? restoreWidth = card is null ? null : card.Width;
+            foreach (double width in new[] { 760.0, 1024.0, 1280.0, 1920.0 })
+            {
+                if (card is null) { Check("The card is a measurable element", false); break; }
+                card.Width = width;
+                card.Measure(new Size(width, double.PositiveInfinity));
+                card.Arrange(new Rect(0, 0, width, card.ActualHeight));
+                card.UpdateLayout();
+
+                var cardButtons = new List<Button>();
+                CollectButtons(playStateContainer, cardButtons);
+                // Buttons that are collapsed by design (Wand, force-exit) are not
+                // required to be sized; everything the user can actually click must be.
+                var clickable = cardButtons.Where(b => b.Visibility == Visibility.Visible).ToList();
+                bool allPresent = clickable.Count > 0;
+                bool allSized = clickable.All(b => b.ActualWidth > 0 && b.ActualHeight > 0);
+                double cardRight = card.ActualWidth;
+                bool allInside = clickable.All(b =>
+                {
+                    Point? left = b.TranslatePoint(new Point(0, 0), card);
+                    Point? right = b.TranslatePoint(new Point(b.ActualWidth, 0), card);
+                    return left is not null && right is not null
+                        && left.Value.X >= -0.5 && right.Value.X <= cardRight + 0.5;
+                });
+                Check("Card controls fit inside the card at " + width.ToString("0") + "px [clickable="
+                    + clickable.Count + " cardWidth=" + cardRight.ToString("0") + " sized=" + allSized + " inside=" + allInside + "]",
+                    allPresent && allSized && allInside && Math.Abs(cardRight - width) < 1.0);
+            }
+            if (card is not null && restoreWidth is double original) { card.Width = original; card.UpdateLayout(); }
+
+            // The card must never force a horizontal scrollbar in the real list.
+            var listScroll = FindVisual<System.Windows.Controls.ScrollViewer>(GameList, sv => sv.HorizontalScrollBarVisibility == System.Windows.Controls.ScrollBarVisibility.Visible);
+            Check("The library does not scroll horizontally", listScroll == null);
             Check("Idle cards reflect exact Wand eligibility while hiding force-exit controls", playButton?.Content?.ToString()?.Contains("Play", StringComparison.Ordinal) == true
                 && wandButton?.Visibility == (playStateGame.CanPlayWithWand ? Visibility.Visible : Visibility.Collapsed)
                 && exitButton?.Visibility == Visibility.Collapsed);

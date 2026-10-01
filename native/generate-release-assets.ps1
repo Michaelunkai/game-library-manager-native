@@ -1,8 +1,8 @@
-# Generates the release artwork for the six new library capabilities:
-# deletion, zero-lag filtering, tag hygiene, completion accuracy, live
-# backup/restore, and the per-game speed bar. Pure vector drawing (gradients,
-# rounded cards, glyphs, meters) so the output is crisp and reproducible and
-# never a screen capture.
+# Generates the release artwork for the library's current capabilities: smooth
+# scrolling, delete-from-all-drives, zero-lag search, tag hygiene, completion
+# accuracy, live backup/restore, and resolution-proof layout. Pure vector drawing
+# (gradients, rounded cards, glyphs, meters) so the output is crisp and
+# reproducible and never a screen capture.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -74,8 +74,8 @@ function Write-Hero([string]$path) {
     $g.DrawString('F:\study\repos\game-library-manager-native\native', $f3, $w3, 90, 274)
 
     $labels = @(
-        'No scroll stutter', 'Delete from all drives', 'Zero-lag search',
-        'Accurate completion', 'Live backup', 'Per-game speed bar'
+        'No scroll stutter', 'Fits any screen', 'Delete from all drives',
+        'Zero-lag search', 'Accurate completion', 'Live backup'
     )
     $x = 90; $y = 336
     $fb = New-Font 19
@@ -120,10 +120,10 @@ function Write-Features([string]$path) {
     $cards = @(
         @{ t = 'No scroll stutter'; d = 'LRU artwork caches, uniform card heights, debounced scroll work - no periodic freeze.'; k = 'fix' },
         @{ t = 'Delete from all drives'; d = 'Containment-checked plan over every drive and leftover; refuses roots, reparse points and escapes.'; k = 'slot 1' },
+        @{ t = 'Zero-lag search'; d = 'Index built once per catalog change; a keystroke is an integer lookup, not an O(n) rescan.'; k = 'slot 2' },
         @{ t = 'Tag hygiene'; d = 'Curated non-game tags moved only into the seven hidden categories, never a visible one.'; k = 'slot 3' },
         @{ t = 'Accurate completion'; d = 'Percent out of 100 plus hours left, with explicit confidence and no fabricated totals.'; k = 'slot 4' },
-        @{ t = 'Live backup + restore'; d = 'Quantised snapshot while the game runs; verify-then-quarantine restore with rollback.'; k = 'slots 5-6' },
-        @{ t = 'Per-game speed bar'; d = 'Scaled-clock hook, F1 +0.5, F2 -0.5, F3 normal, gated on a running game.'; k = 'slots 7-8' }
+        @{ t = 'Live backup + restore'; d = 'Quantised snapshot while the game runs; verify-then-quarantine restore with rollback.'; k = 'slots 5-6' }
     )
     $cw = 460; $ch = 250; $gap = 30
     foreach ($card in $cards) {
@@ -152,74 +152,16 @@ function Write-Features([string]$path) {
     $bmp.Dispose(); $g.Dispose()
 }
 
-# ------------------------------------------------------------ speed bar card
-function Write-Speed([string]$path) {
-    $w = 1400; $h = 660
-    $c = New-Canvas $w $h
-    $bmp = $c[0]; $g = $c[1]
-    Fill-VerticalGradient $g (New-Object System.Drawing.Rectangle(0, 0, $w, $h)) 255 15 18 26 255 9 11 16
-    $fh = New-Font 38 ([System.Drawing.FontStyle]::Bold)
-    $fl = New-Font 19
-    $g.DrawString('Per-game speed bar', $fh, (New-Brush 255 236 242 250), 70, 58)
-    $g.DrawString('Applies only while a game is actually running. F3 restores exact normal speed.', $fl, (New-Brush 175 150 165 185), 70, 108)
-
-    $steps = @(0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 16.0)
-    $tx = 90; $ty = 200; $tw = 1220; $th = 26
-    $track = New-RoundedPath $tx $ty $tw $th 13
-    $g.FillPath((New-Brush 255 46 54 70), $track)
-    $idx = 7
-    for ($i = 0; $i -lt $steps.Count; $i++) {
-        $px = $tx + ($tw * $i / ($steps.Count - 1))
-        $norm = ($i -eq 4)
-        $col = if ($i -lt 4) { @(120, 200, 255) } elseif ($i -gt 4) { @(255, 168, 120) } else { @(120, 255, 180) }
-        $b = New-Brush ($(if ($i -eq $idx) { 255 } else { 110 })) $col[0] $col[1] $col[2]
-        $g.FillEllipse($b, ($px - $(if ($i -eq $idx) { 13 } else { 9 })), ($ty + $th / 2 - $(if ($i -eq $idx) { 13 } else { 9 })), $(if ($i -eq $idx) { 26 } else { 18 }), $(if ($i -eq $idx) { 26 } else { 18 }))
-        $fb = New-Font 15
-        $lb = New-Brush $(if ($i -eq $idx) { 255 } else { 150 }) $col[0] $col[1] $col[2]
-        $txt = "{0}x" -f $steps[$i]
-        $tw2 = [float]$g.MeasureString($txt, $fb).Width
-        $g.DrawString($txt, $fb, $lb, ($px - $tw2 / 2), ($ty + $th + 18))
-    }
-    $sel = $tx + ($tw * $idx / ($steps.Count - 1))
-    Draw-GlowDot $g $sel ($ty + $th / 2) 26 60 255 168 120
-
-    # hotkey legend
-    $keys = @(
-        @{ k = 'F1'; v = '+0.5x'; d = '1.0x becomes exactly 1.5x' },
-        @{ k = 'F2'; v = '-0.5x'; d = '1.0x becomes exactly 0.5x' },
-        @{ k = 'F3'; v = 'normal'; d = 'always exactly 1.0x' }
-    )
-    $x = 90
-    foreach ($kd in $keys) {
-        Draw-Card $g $x 330 380 130 28 36 50 66
-        $fk = New-Font 34 ([System.Drawing.FontStyle]::Bold)
-        $fv = New-Font 24
-        $fd = New-Font 16
-        $g.DrawString($kd.k, $fk, (New-Brush 255 122 199 255), ($x + 26), 352)
-        $g.DrawString($kd.v, $fv, (New-Brush 255 235 241 250), ($x + 118), 360)
-        $g.DrawString($kd.d, $fd, (New-Brush 180 155 170 190), ($x + 26), 412)
-        $x += 400
-    }
-    $fnote = New-Font 16
-    $g.DrawString('Offline single-player titles launched from this library. The engine refuses any process it cannot positively identify.', $fnote, (New-Brush 150 130 145 165), 90, 500)
-    # measured scaling, corrected for timing-window overhead
-    $fmeas = New-Font 16
-    $g.DrawString('Measured against an uninjected parent clock:  1.000x  ·  2.004x  ·  0.501x  ·  4.004x', $fmeas, (New-Brush 210 190 205 225), 90, 536)
-    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-    $bmp.Dispose(); $g.Dispose()
-}
 
 $targets = @(
     @{ f = 'hero-2026-10.png'; s = 'hero' },
-    @{ f = 'features-2026-10.png'; s = 'features' },
-    @{ f = 'speed-bar-2026-10.png'; s = 'speed' }
+    @{ f = 'features-2026-10.png'; s = 'features' }
 )
 foreach ($t in $targets) {
     $p = Join-Path $outDir $t.f
     switch ($t.s) {
         'hero' { Write-Hero $p }
         'features' { Write-Features $p }
-        'speed' { Write-Speed $p }
     }
     "wrote $p"
 }
