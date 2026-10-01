@@ -41,6 +41,7 @@ public static class SelfTests
         Check("Save-data discovery finds the real per-game path through registry, engine and known-folder layers", () => SaveDataLocatorTests.Run(root));
         Check("Backup snapshots a consistent save while the game runs and restore rolls back on failure", () => SaveRestoreCoordinatorTests.Run(root));
         Check("Speed ladder and F1/F2/F3 hotkeys act only on a positively identified running game", () => GameSpeedControllerTests.Run(root));
+        Check("Speed hotkeys really inject the hook and send the factor to the running game", () => GameSpeedCommandTests.Run(root));
         Check("Native speed engine selects the matching architecture and re-bases the scaled clock without a jump", () => GameSpeedNativeTests.Run(root));
         Check("Install-job manifest reads survive concurrent replacement", () => InstallJobConcurrencyTests.Run(root));
         Check("Install progress parses live byte and file percentages", () => InstallProgressTests.Run(root));
