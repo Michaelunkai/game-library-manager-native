@@ -85,13 +85,41 @@ confirmed by reflection (drift exactly 0.000000 ms at 0.5/1.5/2.0/3.0/4.5).
 ## Final state
 
 - `dotnet build` - 0 errors, 0 warnings.
-- `--self-test` - **158 checks, 0 failures** (8 new).
-- `--ui-test` - **86 checks, 0 failures**.
+- `--self-test` - **159 checks, 0 failures** (9 new).
+- `--ui-test` - **88 checks, 0 failures**.
 - `verify-reliability.ps1 -Phase Target` - **`passed: true`**, 9/9 cases.
-- Speed hook measured from an uninjected parent clock: **2.001x / 0.501x / 4.005x**.
+- Speed hook measured from an uninjected parent clock: **1.0000x / 2.0042x /
+  0.5010x / 4.0039x**.
   An earlier "ratio 1.0002" reading was a measurement artifact - `Stopwatch` uses
   QPC, which the hook patches, so both sides were scaled.
-- Commit `5a871d2` pushed to `codex/native-reliability-fluent-redesign`.
-- Release `v1.3.0` with `GameLibrary-windows-x64.zip` (399,910,910 bytes,
-  SHA256 `D6E103AC9998DDEC35D42AB789B35CCC65A664FB494E015A6F1DE8612AB50B28`).
+- Release `v1.3.0` with `GameLibrary-windows-x64.zip`.
+
+## Follow-up work after the team completed
+
+### Scroll stutter (fixed)
+
+Scrolling periodically froze. Root cause was a latency cliff, not slow drawing:
+both artwork caches called `Clear()` at 2,500 entries, evicting every cover on
+screen at once, so the next scroll re-decoded each on the UI thread - and a cache
+miss on a content-addressed `.img` SHA256-hashes up to 8 MB. `ArtworkFile.Replaced`
+had the same cliff via an epoch bump. Both now evict LRU only. The progress line
+stopped wrapping (uniform card heights stop the virtualizing panel re-measuring),
+and scroll-driven metadata work is debounced on a 220 ms idle timer.
+New check pins the LRU retention.
+
+### 32-bit speed hook (investigated, deliberately not shipped)
+
+The WinLibs MinGW-w64 is `--disable-multilib`, so LLVM-MinGW `UCRT` was installed
+to provide an i686 sysroot. `gamespeed32.dll` builds with no diagnostics and is a
+genuine `coff-i386` / `PE32` DLL with all four exports. In a real x86 child it
+installs all five hooks and applies the factor, then faults `0xC0000005`; the
+diagnostic trace stops at `applied factorFp=131072 scaled=1` with no `HOOK` line,
+so the fault is inside `GameSpeed_Set` after installation.
+
+Shipping it would crash 32-bit games, so it is excluded from the package via
+`<None Remove="tools\gamespeed\gamespeed32.dll" />` and 32-bit is refused. The
+suite asserts both the absence of the file and the refusal, so enabling it later
+fails loudly. Full trace and next steps are in
+`native\tools\gamespeed\README.md`.
+
 

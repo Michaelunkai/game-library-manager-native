@@ -25,6 +25,11 @@
     <EmbeddedResource Include="Assets/catalog.sha256" />
     <Resource Include="Assets/GameLibrary.ico" />
     <Compile Remove="tests/**/*.cs" />
+    <!-- gamespeed32.dll compiles cleanly and installs all five hooks, but then faults
+         0xC0000005 on a real x86 process, so it is deliberately NOT shipped. Refusing a
+         32-bit game is recoverable; crashing it is not. The source and the exact build
+         command live in tools\gamespeed\README.md so the work can be resumed. -->
+    <None Remove="tools\gamespeed\gamespeed32.dll" />
     <None Update="tools\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="tools\wand-runtime\classic-level\prebuilds\win32-x64\classic-level.node" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>

@@ -37,6 +37,16 @@ no runtime to install: the bundle carries everything it needs.
 
 ### New in this release
 
+- **No scroll stutter.** Scrolling any tab used to freeze periodically. Both
+  artwork caches evicted by a wholesale `Clear()` at 2,500 entries, which threw
+  away every cover on screen at once and forced the next scroll to re-decode each
+  one on the UI thread — and a cache miss on a content-addressed `.img` file
+  SHA256-hashes the whole file, up to 8 MB. Once the cache filled, that
+  re-hash/re-decode storm repeated, which is exactly the periodic multi-second
+  stall. Both caches now evict only their least-recently-used entries. The
+  progress line no longer wraps, so every card is the same height and the
+  virtualizing panel stops re-measuring mid-scroll, and scroll-driven metadata
+  work is debounced until scrolling settles.
 - **Delete from all drives.** Every game card has its own
   **Delete from all drives** button (alongside Backup, Restore and Speed). It
   plans first and shows you exactly what it will remove, then deletes the install
@@ -78,11 +88,11 @@ no runtime to install: the bundle carries everything it needs.
   simulation clock. F1 adds 0.5x, F2 removes 0.5x, F3 returns to exactly normal,
   and each game remembers its own speed. The keys are a strict no-op unless a
   game this library launched is actually running. Measured end to end against an
-  uninjected parent clock: **2.001x** at 2.0, **0.501x** at 0.5, and **4.005x**
-  at 4.0. The virtual clock never runs backwards when you slow down, and a
-  factor of exactly 1.0 is a transparent pass-through. 64-bit titles are
-  supported; 32-bit titles are detected and reported as an architecture
-  mismatch rather than being injected with the wrong build. This is intended for
+  uninjected parent clock: **2.004x** at 2.0, **0.501x** at 0.5, and **4.004x**
+  at 4.0 (1.000x at 1.0). The virtual clock never runs backwards when you slow
+  down, and a factor of exactly 1.0 is a transparent pass-through. 64-bit titles
+  are supported; **32-bit titles are refused, not injected** — see the limitation
+  below. This is intended for
   your own offline, single-player games, and it will not target a process it
   cannot positively identify or attempt to evade anti-cheat.
 
@@ -184,7 +194,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ## Notes
 
-- The self-test suite runs **158 checks** covering identity, metadata, save
+- The self-test suite runs **159 checks** covering identity, metadata, save
   backup/restore, durable installs, Wand dispatch, and the six capabilities
   above. The offline WPF UI harness adds **88 checks**, including two that assert
   every card really carries its own delete and speed buttons and that the delete
@@ -193,10 +203,32 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   cases.
 - The 64-bit speed hook is compiled from `native\tools\gamespeed\gamespeed.c`
   with MinGW-w64 gcc (`gcc -m64 -O2 -Wall -Wextra -static-libgcc -shared -s`).
-  Rebuild it after changing the C source. A 32-bit variant is not currently
-  produced, because this MinGW build is `--disable-multilib`; 32-bit games are
-  refused with a clear architecture-mismatch message instead of being injected
-  incorrectly.
+  **Rebuild it after changing the C source** — a stale DLL silently lags the code.
+  See `native\tools\gamespeed\README.md` for both build commands, the export and
+  PE checks, the expected scaling table, and the measurement pitfall.
+
+## Known limitation: 32-bit games
+
+A 64-bit DLL cannot be injected into a 32-bit game, so a separate 32-bit build is
+required. The WinLibs MinGW-w64 used for x86-64 is `--disable-multilib`, so that
+build is now done with LLVM-MinGW `UCRT`, which ships an i686 sysroot:
+
+```
+i686-w64-mingw32-clang -shared -O2 -o gamespeed32.dll gamespeed.c -lkernel32
+```
+
+It compiles with no diagnostics and produces a genuine `coff-i386` / `PE32` DLL
+exporting all four functions. Against a real x86 process it installs all five
+hooks and applies the factor, then faults `0xC0000005`.
+
+**`gamespeed32.dll` is therefore excluded from the package** and a 32-bit game is
+reported as an architecture mismatch. Refusing a 32-bit game is recoverable;
+crashing it is not. The test suite asserts both that the file is absent from the
+build output and that the app refuses 32-bit, so the day the fault is fixed and
+the build is enabled, the suite fails loudly instead of quietly injecting
+something that faults. `native\tools\gamespeed\README.md` records the trace that
+pinpoints where the fault occurs and what to investigate next.
+
 - Personal state lives in the local `data` profile and is never part of the
   repository.
 - See `docs\acceptance-current.md` for the acceptance audit and known gaps.

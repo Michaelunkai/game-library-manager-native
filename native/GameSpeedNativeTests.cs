@@ -272,10 +272,35 @@ internal static class GameSpeedNativeTests
         Require(File.Exists(dll!) && new FileInfo(dll!).Length > 1024,
             "gamespeed64.dll is missing or too small to be the compiled hook library.");
 
-        string missing32 = Path.Combine(root, "gamespeed32.dll");
-        Require(GameSpeedNative.ResolveDllPath(GameSpeedArchitecture.X86, root) == null,
-            "A 32-bit hook library was resolved even though none was provided.");
-        Require(!File.Exists(missing32), "The test created a 32-bit hook library it did not compile.");
+        // A 32-bit build compiles and installs its hooks, but faults on a real x86
+        // process, so it is not shipped. The app must therefore report a 32-bit game
+        // as an architecture mismatch rather than injecting something that crashes it.
+        // These assertions pin that refusal, so the day the 32-bit hook is fixed and
+        // shipped they will fail loudly instead of silently doing nothing.
+        Require(GameSpeedNative.ResolveDllPath(GameSpeedArchitecture.X86) == null,
+            "A 32-bit hook library was resolved and is about to be injected into a 32-bit game that it crashes.");
+        string? dll32 = Path.Combine(AppContext.BaseDirectory, "tools", "gamespeed", "gamespeed32.dll");
+        Require(!File.Exists(dll32), "gamespeed32.dll is present in the output but is known to fault; it must not ship.");
+
+        // The resolver searches the supplied directory first, then falls back to the
+        // application directory. Prove that ordering, since a supplied directory that
+        // contains a decoy must win over the shipped build.
+        string decoy = Path.Combine(root, "tools", "gamespeed");
+        Directory.CreateDirectory(decoy);
+        string decoyFile = Path.Combine(decoy, "gamespeed64.dll");
+        File.Copy(dll!, decoyFile, true);
+        try
+        {
+            string? chosen = GameSpeedNative.ResolveDllPath(GameSpeedArchitecture.X64, root);
+            Require(chosen != null && chosen.Equals(Path.GetFullPath(decoyFile), StringComparison.OrdinalIgnoreCase),
+                "The resolver ignored the supplied directory: it chose " + chosen + " instead of the decoy.");
+        }
+        finally { File.Delete(decoyFile); }
+
+        // An architecture that is neither x86 nor x64 has no build and must resolve
+        // to nothing rather than falling back to the wrong-bitness file.
+        Require(GameSpeedNative.ResolveDllPath(GameSpeedArchitecture.Unknown) == null,
+            "An unknown architecture resolved to a hook library.");
     }
 
     /// <summary>A missing or wrong-bitness hook build is reported as ArchitectureMismatch.</summary>
