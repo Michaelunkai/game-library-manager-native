@@ -75,7 +75,7 @@
                   <Button Content="Backup" Click="BackupFromCard" Tag="{Binding}" AutomationProperties.AutomationId="BackupGame" Padding="6" Margin="0,0,3,0"/>
                   <Button Content="Restore" Click="RestoreFromCard" Tag="{Binding}" AutomationProperties.AutomationId="RestoreGame" Padding="6" Margin="3,0,0,0"/>
                 </UniformGrid>
-                <Button Content="Speed" Click="SpeedFromCard" Tag="{Binding}" AutomationProperties.AutomationId="SpeedGame" Padding="8,6" Margin="0,6,0,0" ToolTip="Set this game's speed. While the game runs, F1 adds 0.5x, F2 removes 0.5x and F3 returns to normal."/>
+                <Button Content="{Binding SpeedLabel}" Click="SpeedFromCard" Tag="{Binding}" AutomationProperties.AutomationId="SpeedGame" Padding="8,6" Margin="0,6,0,0" ToolTip="{Binding SpeedDetail}"/>
                 <Button Content="Delete from all drives" Click="DeleteFromCard" Tag="{Binding}" AutomationProperties.AutomationId="DeleteGame" Padding="8,6" Margin="0,6,0,0" Background="#7A2B2B" Foreground="White" ToolTip="Show exactly what will be removed, then delete this game and all of its leftovers from every drive."/>
                 <Button Content="Details  →" Click="OpenGameDetails" Tag="{Binding}" Padding="8,6" Margin="0,6,0,0"/>
               </StackPanel>

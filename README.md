@@ -222,7 +222,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 - The self-test suite runs **160 checks** covering identity, metadata, save
   backup/restore, durable installs, Wand dispatch, and the six capabilities
-  above. The offline WPF UI harness adds **88 checks**, including two that assert
+  above. The offline WPF UI harness adds **92 checks**, including two that assert
   every card really carries its own delete and speed buttons and that the delete
   button is bound to its own game. Both run against the packaged executable via
   `verify-reliability.ps1`, which currently reports `passed: true` across all 9
