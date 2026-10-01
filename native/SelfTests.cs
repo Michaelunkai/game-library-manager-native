@@ -34,6 +34,14 @@ public static class SelfTests
         void Reject(Action action) { try { action(); } catch (Exception ex) when (ex is ArgumentException or FormatException) { return; } throw new Exception("Invalid input was accepted."); }
         var store = new LibraryStore(root); var state = new UserState();
         Check("Atomic state replacement waits for a transiently locked rollback file", () => AtomicWriteTests.Run(root));
+        Check("Game removal deletes only contained targets and refuses escapes, roots and reparse points", () => GameRemovalTests.Run(root));
+        Check("Search index matches the existing filter exactly while serving keystrokes from cache", () => SearchPerformanceTests.Run(root));
+        Check("Non-game tags map only into the seven hidden categories and never into a visible one", () => TagTaxonomyTests.Run(root));
+        Check("Completion percent and hours remaining are clamped, confident and never fabricated", () => CompletionProgressTests.Run(root));
+        Check("Save-data discovery finds the real per-game path through registry, engine and known-folder layers", () => SaveDataLocatorTests.Run(root));
+        Check("Backup snapshots a consistent save while the game runs and restore rolls back on failure", () => SaveRestoreCoordinatorTests.Run(root));
+        Check("Speed ladder and F1/F2/F3 hotkeys act only on a positively identified running game", () => GameSpeedControllerTests.Run(root));
+        Check("Native speed engine selects the matching architecture and re-bases the scaled clock without a jump", () => GameSpeedNativeTests.Run(root));
         Check("Install-job manifest reads survive concurrent replacement", () => InstallJobConcurrencyTests.Run(root));
         Check("Install progress parses live byte and file percentages", () => InstallProgressTests.Run(root));
         Check("Many games install in parallel with their own folders", () => ParallelInstallTests.Run(root));

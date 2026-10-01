@@ -37,3 +37,8 @@
 /evidence/launcher-proof-*/
 /evidence/terminal-*/
 /test-data-*/
+
+# verify-reliability.ps1 writes a full per-case fixture tree (tens of thousands of
+# files). Only the summary is worth keeping, and it is committed explicitly.
+/evidence/verification/
+
