@@ -94,40 +94,63 @@ internal static class GameSpeedCommandTests
             Require(normal.Factor == 1.0, "F3 gave " + normal.Factor + " instead of exactly 1.0.");
         }
 
-        // Repeated F1 must walk the ladder and land on exact values, with no drift,
-        // and every press must really reach the process.
+        // Repeated F1 must be EXACTLY +0.5 every press, with no snapping to the ladder
+        // and no accumulated drift, and every press must really reach the process.
+        // The user asked for 1.0 -> 1.5 -> 2.0 -> 2.5 -> 3.0 ... however many presses.
         {
             var runtime = new FakeSpeedRuntime { Injected = true };
             double current = 1.0;
-            var seen = new List<double>();
-            for (int press = 0; press < 8; press++)
+            for (int press = 0; press < 20; press++)
             {
+                double before = current;
                 var step = GameSpeedCommand.ApplyHotkeyAsync(pid, current, SpeedHotkey.Boost, runtime, ct).GetAwaiter().GetResult();
                 Require(step.Succeeded, "F1 press " + press + " failed: " + step.Message);
+                Require(Math.Abs(step.Factor - (before + 0.5)) < 1e-9,
+                    "F1 press " + press + " gave " + step.Factor + " instead of " + (before + 0.5) + ".");
                 current = step.Factor;
-                seen.Add(current);
             }
-            double[] expected = { 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 16.0 };
-            for (int i = 0; i < expected.Length; i++)
-                Require(Math.Abs(seen[i] - expected[i]) < 1e-9,
-                    "F1 ladder press " + i + " produced " + seen[i] + " instead of " + expected[i] + ".");
+            Require(Math.Abs(current - 11.0) < 1e-9,
+                "Twenty F1 presses from 1.0x landed on " + current + " instead of exactly 11.0x.");
             int setCount = runtime.Calls.FindAll(call => call.StartsWith("Set:", StringComparison.Ordinal)).Count;
-            Require(setCount == 8, "Eight F1 presses produced " + setCount + " set calls, so some presses never reached the game.");
+            Require(setCount == 20, "Twenty F1 presses produced " + setCount + " set calls, so some presses never reached the game.");
         }
 
-        // Repeated F2 must never go below the floor or negative.
+        // Repeated F2 must be EXACTLY -0.5 every press, and must settle on the floor
+        // rather than reaching zero, which would freeze a game solid.
         {
             var runtime = new FakeSpeedRuntime { Injected = true };
             double current = 1.0;
-            for (int press = 0; press < 12; press++)
+            for (int press = 0; press < 10; press++)
             {
+                double before = current;
                 var step = GameSpeedCommand.ApplyHotkeyAsync(pid, current, SpeedHotkey.Reduce, runtime, ct).GetAwaiter().GetResult();
                 Require(step.Succeeded, "F2 press " + press + " failed: " + step.Message);
+                Require(Math.Abs(step.Factor - Math.Max(GameSpeedController.HotkeyMinMultiplier, before - 0.5)) < 1e-9,
+                    "F2 press " + press + " gave " + step.Factor + " instead of the expected half step down.");
                 current = step.Factor;
                 Require(current > 0, "F2 drove the speed to " + current + ".");
             }
-            Require(current >= GameSpeedController.MinMultiplier,
-                "F2 settled at " + current + ", below the supported floor.");
+            Require(Math.Abs(current - GameSpeedController.HotkeyMinMultiplier) < 1e-9,
+                "Ten F2 presses settled at " + current + " instead of the floor " + GameSpeedController.HotkeyMinMultiplier + ".");
+        }
+
+        // The hotkey range must not be the ladder range: the ladder tops out at 16x,
+        // which would stop F1 long before the hook's own ceiling.
+        Require(GameSpeedController.HotkeyMaxMultiplier > 16.0,
+            "The hotkey ceiling is not above the ladder's top step, so F1 would stop early.");
+        Require(GameSpeedController.HotkeyMinMultiplier > 0.0 && GameSpeedController.HotkeyMinMultiplier < 0.1,
+            "The hotkey floor must be above zero so a game is never frozen solid.");
+        // F1 must keep climbing past every ladder step.
+        {
+            double current = 1.0;
+            for (int press = 0; press < 32; press++) current = GameSpeedController.ApplyHotkey(current, SpeedHotkey.Boost);
+            Require(current > 16.0, "F1 stopped at " + current + ", which is the top of the old ladder.");
+        }
+        // F3 must return to exactly 1.0 from anywhere.
+        {
+            Require(Math.Abs(GameSpeedController.ApplyHotkey(16.5, SpeedHotkey.Normal) - 1.0) < 1e-9, "F3 did not reset exactly to 1.0.");
+            Require(Math.Abs(GameSpeedController.ApplyHotkey(GameSpeedController.HotkeyMinMultiplier, SpeedHotkey.Normal) - 1.0) < 1e-9,
+                "F3 did not reset exactly to 1.0 from the floor.");
         }
 
         // A game that is not running must be a clean no-op that changes nothing.

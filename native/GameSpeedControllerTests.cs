@@ -86,7 +86,9 @@ internal static class GameSpeedControllerTests
         double second = GameSpeedController.ApplyHotkey(atNormal, SpeedHotkey.Boost);
         Require(Near(second, 2.0), "A second F1 from 1.0 must give exactly 2.0x.");
         double third = GameSpeedController.ApplyHotkey(second, SpeedHotkey.Boost);
-        Require(Near(third, 3.0), "A third F1 from 1.0 must give exactly 3.0x.");
+        Require(Near(third, 2.5), "A third F1 from 1.0 must give exactly 2.5x, not 3.0x.");
+        double fourth = GameSpeedController.ApplyHotkey(third, SpeedHotkey.Boost);
+        Require(Near(fourth, 3.0), "A fourth F1 must give exactly 3.0x.");
     }
 
     private static void HotkeyReduce()
@@ -94,13 +96,13 @@ internal static class GameSpeedControllerTests
         double atNormal = GameSpeedController.ApplyHotkey(1.0, SpeedHotkey.Reduce);
         Require(Near(atNormal, 0.5), "F2 at 1.0 must give exactly 0.5x.");
         double second = GameSpeedController.ApplyHotkey(atNormal, SpeedHotkey.Reduce);
-        Require(Near(second, 0.1) || Near(second, 0.25), "A second F2 from 0.5 must land on the next lower ladder step (0.25 or 0.1).");
-        Require(second >= GameSpeedController.MinMultiplier, "F2 must never go below the ladder minimum.");
+        Require(Near(second, 0.05), "A second F2 from 0.5 must give the 0.05x floor, not a ladder step.");
+        Require(second >= GameSpeedController.HotkeyMinMultiplier, "F2 must never go below the floor.");
     }
 
     private static void HotkeyNormal()
     {
-        foreach (double start in new[] { 16.0, 0.1, 0.5, 2.0, 1.5, 1.0, double.NaN, double.PositiveInfinity })
+        foreach (double start in new[] { 20.0, 16.0, 0.05, 0.5, 2.0, 1.5, 1.0, double.NaN, double.PositiveInfinity })
         {
             Require(Near(GameSpeedController.ApplyHotkey(start, SpeedHotkey.Normal), 1.0),
                 "F3 must always give exactly 1.0x, including from " + start + ".");
@@ -109,41 +111,48 @@ internal static class GameSpeedControllerTests
 
     private static void HotkeyBounds()
     {
-        Require(Near(GameSpeedController.ApplyHotkey(GameSpeedController.MaxMultiplier, SpeedHotkey.Boost),
-            GameSpeedController.MaxMultiplier), "F1 at the maximum must not exceed the maximum.");
-        Require(Near(GameSpeedController.ApplyHotkey(GameSpeedController.MinMultiplier, SpeedHotkey.Reduce),
-            GameSpeedController.MinMultiplier), "F2 at the minimum must not go below the minimum.");
+        Require(Near(GameSpeedController.ApplyHotkey(GameSpeedController.HotkeyMaxMultiplier, SpeedHotkey.Boost),
+            GameSpeedController.HotkeyMaxMultiplier), "F1 at the maximum must not exceed the maximum.");
+        Require(Near(GameSpeedController.ApplyHotkey(GameSpeedController.HotkeyMinMultiplier, SpeedHotkey.Reduce),
+            GameSpeedController.HotkeyMinMultiplier), "F2 at the minimum must not go below the minimum.");
         double fromNaN = GameSpeedController.ApplyHotkey(double.NaN, SpeedHotkey.Boost);
-        Require(double.IsFinite(fromNaN) && fromNaN >= GameSpeedController.MinMultiplier && fromNaN <= GameSpeedController.MaxMultiplier,
+        Require(double.IsFinite(fromNaN) && fromNaN >= GameSpeedController.HotkeyMinMultiplier && fromNaN <= GameSpeedController.HotkeyMaxMultiplier,
             "A hotkey applied to non-finite input must produce a finite in-range value.");
     }
 
     private static void NoDriftAcrossRepeats()
     {
-        IReadOnlyList<double> steps = GameSpeedController.DefaultSteps();
-
+        // The user's requirement: F1 is +0.5 on EVERY press, however many, with no
+        // snapping to the ladder and no accumulated rounding. The ladder remains for
+        // the slider, but the hotkeys are plain half-step arithmetic.
         double faster = 1.0;
-        var seen = new List<double>();
-        for (int press = 0; press < 20; press++)
+        for (int press = 0; press < 38; press++)
+        {
+            double expected = Math.Min(GameSpeedController.HotkeyMaxMultiplier, 1.0 + 0.5 * (press + 1));
+            faster = GameSpeedController.ApplyHotkey(faster, SpeedHotkey.Boost);
+            Require(Near(faster, expected), "F1 press " + (press + 1) + " gave " + faster + " instead of exactly " + expected + ".");
+        }
+        Require(Near(faster, GameSpeedController.HotkeyMaxMultiplier),
+            "Repeated F1 must reach the hotkey ceiling and hold there, not stop at the ladder top.");
+        // F1 must never move backwards and must never fall.
+        faster = 1.0;
+        double previous = faster;
+        for (int press = 0; press < 38; press++)
         {
             faster = GameSpeedController.ApplyHotkey(faster, SpeedHotkey.Boost);
-            Require(steps.Any(step => Near(step, faster)), "F1 must always land on a ladder value (no drift).");
-            if (seen.Count > 0) Require(faster >= seen[^1] - 1e-9, "F1 must never move the bar backwards.");
-            seen.Add(faster);
+            Require(faster >= previous - 1e-9, "F1 moved backwards from " + previous + " to " + faster + ".");
+            previous = faster;
         }
-        Require(Near(seen[0], 1.5) && Near(seen[1], 2.0) && Near(seen[2], 3.0),
-            "Repeated F1 from 1.0 must produce 1.5, 2.0, 3.0 with no accumulated rounding.");
-        Require(Near(seen[^1], GameSpeedController.MaxMultiplier), "Repeated F1 must eventually reach the ladder maximum and hold there.");
 
         double slower = 1.0;
         for (int press = 0; press < 20; press++)
         {
+            double expected = Math.Max(GameSpeedController.HotkeyMinMultiplier, 1.0 - 0.5 * (press + 1));
             slower = GameSpeedController.ApplyHotkey(slower, SpeedHotkey.Reduce);
-            Require(slower >= GameSpeedController.MinMultiplier, "F2 must never go below the ladder minimum.");
+            Require(Near(slower, expected), "F2 press " + (press + 1) + " gave " + slower + " instead of exactly " + expected + ".");
             Require(slower > 0, "F2 must never produce a zero or negative multiplier.");
-            Require(steps.Any(step => Near(step, slower)), "F2 must always land on a ladder value (no drift).");
         }
-        Require(Near(slower, GameSpeedController.MinMultiplier), "Repeated F2 must settle at the ladder minimum.");
+        Require(Near(slower, GameSpeedController.HotkeyMinMultiplier), "Repeated F2 must settle at the floor and hold.");
     }
 
     private static void NavigationLandsOnLadder()

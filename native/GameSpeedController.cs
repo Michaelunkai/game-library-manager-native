@@ -169,13 +169,35 @@ internal static class GameSpeedController
 
     private static double Shift(double current, double delta)
     {
-        double value = Clamp(current);
-        double snapped = StepAt(IndexOfNearest(value + delta));
-        if (delta > 0)
-            return snapped > value + Epsilon ? snapped : NextFaster(value);
-        if (delta < 0)
-            return snapped < value - Epsilon ? snapped : NextSlower(value);
-        return value;
+        double value = HotkeyClamp(current);
+        // Exact repeated step, NOT a snap to the ladder. The user presses F1 to go
+        // half a step faster every single time, so 1.0 -> 1.5 -> 2.0 -> 2.5 -> 3.0
+        // with no rounding and no drift, however many presses. Snapping to the
+        // ladder here made repeated F1 jump by 1.0 and then 2.0, which is why
+        // holding the key down appeared to stop making the game faster.
+        return HotkeyClamp(value + delta);
+    }
+
+    /// <summary>
+    /// The bounds a hotkey may reach. The floor is deliberately above zero: a factor
+    /// of 0 would freeze a game solid, and 0.05 is the lowest value the native hook
+    /// accepts. The ceiling is the highest the hook accepts, so F1 keeps making
+    //  progress for far longer than the ladder's top step would allow.
+    /// </summary>
+    internal const double HotkeyMinMultiplier = 0.05;
+    internal const double HotkeyMaxMultiplier = 20.0;
+
+    /// <summary>
+    /// Clamps for the hotkey path only. Half-step arithmetic is exact in binary
+    /// floating point, so repeated presses never accumulate error; this only stops
+    /// the factor leaving the range the native hook can actually apply.
+    /// </summary>
+    internal static double HotkeyClamp(double multiplier)
+    {
+        if (!double.IsFinite(multiplier)) return NormalMultiplier;
+        if (multiplier < HotkeyMinMultiplier) return HotkeyMinMultiplier;
+        if (multiplier > HotkeyMaxMultiplier) return HotkeyMaxMultiplier;
+        return multiplier;
     }
 
     internal static bool ShouldApply(SpeedTarget? target) => target is not null;

@@ -85,12 +85,27 @@ no runtime to install: the bundle carries everything it needs.
   failure, so you are never left worse off. The existing helper receipts and
   logs still run exactly as before.
 - **Per-game speed bar.** A native clock hook scales a running game's
-  simulation clock. F1 adds 0.5x, F2 removes 0.5x, F3 returns to exactly normal,
-  and each game remembers its own speed. The keys are a strict no-op unless a
-  game this library launched is actually running. Measured end to end against an
-  uninjected parent clock: **2.004x** at 2.0, **0.501x** at 0.5, and **4.004x**
-  at 4.0 (1.000x at 1.0). The virtual clock never runs backwards when you slow
-  down, and a factor of exactly 1.0 is a transparent pass-through. 64-bit titles
+  simulation clock. The keys are exact and repeatable, with no snapping to a
+  ladder and no accumulated rounding:
+
+  | key | effect | from 1.0x, ten presses |
+  |---|---|---|
+  | **F1** | **+0.5x every single press** | 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0 |
+  | **F2** | **−0.5x every single press** | 0.5, then the 0.05 floor and holds |
+  | **F3** | reset to **exactly 1.0x** | from 1.5, 7, 20 and 0.05 all give 1.0 |
+
+  F1 keeps climbing to **20.0x** (38 presses from normal) and F2 settles at
+  **0.05x**, the lowest factor the native hook accepts — 0.0x is refused on
+  purpose, because it would freeze a game solid rather than slow it. Half-step
+  arithmetic is exact in binary floating point, so however many times you press,
+  the value is precisely `1.0 + 0.5 × n` and never drifts.
+
+  Each game remembers its own speed, the card shows the live value at all times,
+  and the keys are a strict no-op unless a game this library launched is actually
+  running. Measured end to end against an uninjected parent clock: **2.004x** at
+  2.0, **0.501x** at 0.5, and **4.004x** at 4.0 (1.000x at 1.0). The virtual
+  clock never runs backwards when you slow down, and a factor of exactly 1.0 is a
+  transparent pass-through. 64-bit titles
   are supported; **32-bit titles are refused, not injected** — see the limitation
   below. This is intended for
   your own offline, single-player games, and it will not target a process it
