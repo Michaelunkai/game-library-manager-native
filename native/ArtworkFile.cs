@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Threading;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -36,12 +38,44 @@ internal static class ArtworkFile
                 }
             }
             replacements[path] = ++sequence;
-            cache.Remove(path);
+            Interlocked.Increment(ref generation);
         }
     }
-    internal static string Revision(string path)
+    /// <summary>
+    /// NOT memoized, deliberately. A revision comes from file stat fields, and anything
+    /// outside this process can rewrite a cover file - a user, a repair tool, a sync
+    /// client - without ever calling Replaced. Memoizing made the cache blind to those
+    /// writers, and the self-test caught it: a cover damaged by an external write was
+    /// never detected, so the automatic repair never ran. A real stat here is far below
+    /// the SHA-256 that used to sit on this path; correctness wins.
+    /// </summary>
+
+    /// <summary>
+    /// Bumped every time artwork is replaced. Cover caching keys on this rather than on
+    /// the revision string, because a repaired file can have byte-identical stat fields:
+    /// NTFS timestamp tunnelling and coarse clocks preserve size, mtime and ctime across
+    /// a same-length replacement, so a revision-keyed cache would keep serving the stale
+    /// fallback. A replacement is an explicit event, so keying on it is both cheaper and
+    /// correct where stat-based keying cannot be.
+    /// </summary>
+    internal static long Generation => Interlocked.Read(ref generation);
+    private static long generation;
+
+    /// <summary>
+    /// NOT memoized, deliberately. A revision comes from file stat fields, and anything
+    /// outside this process can rewrite a cover file - a user, a repair tool, a sync
+    /// client - without ever calling Replaced. Memoizing made the cache blind to those
+    /// writers and the self-test caught it: a cover damaged by an external write was
+    /// never detected, so the automatic repair never ran. A real stat here costs far
+    /// less than the SHA-256 that used to sit on this path, and correctness wins.
+    /// </summary>
+    internal static string Revision(string path) => ComputeRevision(path);
+
+    /// <summary>No-op: there is no memo left to invalidate.</summary>
+    internal static void Invalidate(string path) { }
+
+    private static string ComputeRevision(string path)
     {
-        if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path)) return "";
         try
         {
             var file = new FileInfo(path);
@@ -57,7 +91,12 @@ internal static class ArtworkFile
         if (revision is "" or "missing" or "unreadable" || path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase)) return null;
         lock (cache)
         {
-            if (cache.TryGetValue(path, out var known) && known.Revision == revision) { TrackUse(path); return known.Image; }
+            // A memoized revision cannot observe deletion, because nothing tells the
+            // cache that a file was removed. Existence is the one check that is both
+            // cheap enough to run on every conversion and sufficient to catch it: a
+            // single existence probe instead of the FileInfo stat plus SHA-256 that
+            // made this the dominant cost of the worst scroll steps.
+            if (cache.TryGetValue(path, out var known) && known.Revision == revision && File.Exists(path)) { TrackUse(path); return known.Image; }
         }
         BitmapSource? image = null;
         try

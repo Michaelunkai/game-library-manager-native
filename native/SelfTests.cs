@@ -33,11 +33,23 @@ public static class SelfTests
         void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
         void Reject(Action action) { try { action(); } catch (Exception ex) when (ex is ArgumentException or FormatException) { return; } throw new Exception("Invalid input was accepted."); }
         var store = new LibraryStore(root); var state = new UserState();
+        Check("Motion policy keeps scroll and filter surfaces unanimated", () => MotionPolicyTests.Run(root));
+        Check("Card realization stays inside the frame budget and a slow card is caught", () => CardRenderCostTests.Run(root));
+        Check("Keyboard focus order puts the primary action first and the destructive one last", () => FocusPolicyTests.Run(root));
+        Check("Focus visuals use palette colours only, 6px radius and 4px spacing", () => FocusVisualsContractTests.Run(root));
+        Check("Card layout fits at every supported DPI scale", () => DpiPolicyTests.Run(root));
+        Check("Palette and spacing in markup are the only values DESIGN.md permits", () => ThemeTokensTests.Run(root));
+        Check("Every non-happy card state names what happened and what to do", () => CardStatePresenterTests.Run(root));
+        Check("OS animation and scroll settings are read live and never written", () => OsSettingsBridgeTests.Run(root));
+        Check("Tag migration plans only move tags into the seven hidden categories", () => TagMigrationServiceTests.Run(root));
+        Check("The tag migration confirmation refuses any plan that is not safe", () => TagMigrationDialogTests.Run(root));
+        Check("Progress matching is correct and scales linearly, not quadratically", () => GameProgressIndexTests.Run(root));
         Check("Atomic state replacement waits for a transiently locked rollback file", () => AtomicWriteTests.Run(root));
         Check("Game removal deletes only contained targets and refuses escapes, roots and reparse points", () => GameRemovalTests.Run(root));
         Check("Search index matches the existing filter exactly while serving keystrokes from cache", () => SearchPerformanceTests.Run(root));
         Check("Non-game tags map only into the seven hidden categories and never into a visible one", () => TagTaxonomyTests.Run(root));
-        Check("Completion percent and hours remaining are clamped, confident and never fabricated", () => CompletionProgressTests.Run(root));
+            Check("Completion percent and hours remaining are clamped, confident and never fabricated", () => CompletionProgressTests.Run(root));
+            Check("Completion labels are short, truthful and never wrap a card to two lines", () => CompletionPresenterTests.Run(root));
         Check("Save-data discovery finds the real per-game path through registry, engine and known-folder layers", () => SaveDataLocatorTests.Run(root));
         Check("Backup snapshots a consistent save while the game runs and restore rolls back on failure", () => SaveRestoreCoordinatorTests.Run(root));
         Check("Install-job manifest reads survive concurrent replacement", () => InstallJobConcurrencyTests.Run(root));
