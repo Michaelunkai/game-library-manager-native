@@ -43,15 +43,6 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public bool IsPauseStateUnknown { get; set; }
     [JsonIgnore] public string ProgressLabel { get; set; } = "";
     [JsonIgnore] public string ProgressDetail { get; set; } = "";
-    /// <summary>
-    /// The speed this game is actually set to, always visible whether or not it is
-    /// running. Shown on the card itself so the user never has to open a dialog to
-    /// find out what the current speed is, and updated the instant it changes.
-    /// </summary>
-    [JsonIgnore] public string SpeedLabel { get; set; } = "";
-    [JsonIgnore] public string SpeedDetail { get; set; } = "";
-    /// <summary>True when SpeedLabel reflects a factor the hook has confirmed.</summary>
-    [JsonIgnore] public bool SpeedApplied { get; set; }
     // This is deliberately an exact, locally verified Wand registration rather
     // than a broad catalog match. The UI must never advertise a mod launch for
     // a game that Wand does not already know at this executable path.
@@ -144,8 +135,6 @@ public sealed class UserState
     public Dictionary<string, string> PendingGameBackups { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PlayTimeSeconds { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DateTime> LastPlayedUtc { get; set; } = new(StringComparer.Ordinal);
-    /// <summary>Per-game remembered speed multiplier for the in-app speed bar (1.0 is normal).</summary>
-    public Dictionary<string, double> SpeedByGame { get; set; } = new(StringComparer.Ordinal);
     /// <summary>Save-data roots the user corrected by hand; these always beat discovery.</summary>
     public Dictionary<string, string> SaveDataOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, LocalGame> LocalGames { get; set; } = new(StringComparer.Ordinal);

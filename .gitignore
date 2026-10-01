@@ -42,3 +42,5 @@
 # files). Only the summary is worth keeping, and it is committed explicitly.
 /evidence/verification/
 
+evidence/ui-*.png
+
