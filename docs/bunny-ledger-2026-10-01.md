@@ -35,15 +35,63 @@ Every worker writes ONLY new dedicated files. All shared hot files are manager-o
 | 7 | longcat-2.5-preview-free | `1ec971e1-0093-4360-8025-3b55acae6967` | Goal 6a: speed model + F1/F2/F3 | `native\GameSpeedController.cs`, `native\GameSpeedControllerTests.cs` |
 | 8 | space-bunny-free | `14146227-d7b1-40b6-8764-2aefd25ba192` | Goal 6b: native clock hook + injector | `native\GameSpeedNative.cs`, `native\GameSpeedNativeTests.cs`, `native\tools\gamespeed\` |
 
-## Manager integration backlog (after all 8 deliver)
+## Manager integration backlog (all done)
 
-1. Register 8 new test classes in `SelfTests.Run` via `Check(...)`.
-2. `ApplyFilter` -> use `SearchPerformance` (slot 2).
-3. Context-menu "Delete game and leftovers" -> `GameRemoval` (slot 1).
-4. Card completion line -> `CompletionProgress` (slot 4).
-5. Tag migration command -> `TagTaxonomy` (slot 3).
-6. Backup/Restore buttons -> `SaveDataLocator` + `SaveRestoreCoordinator`, replacing
-   `GameSaveOperations.EnsureGameNotRunning` with the Snapshot policy (slots 5, 6).
-7. Speed bar + F1/F2/F3 -> `GameSpeedController` + `GameSpeedNative` (slots 7, 8).
-8. De-duplicate the `ISpeedApplier` declaration (slot 7 vs slot 8).
-9. `dotnet build`, then `--self-test`, then `verify-reliability.ps1`.
+1. Registered all 8 new test classes in `SelfTests.Run` via `Check(...)`.
+2. `ApplyFilter` -> `SearchPerformance.GameMatchPredicate`, with the index rebuilt
+   on catalog change, on `Save()`, and whenever the searched state collections
+   change size. Without the last two the index went stale on in-place state
+   mutation and hid a newly added launch path - caught by the pre-existing
+   `Installed launcher path is searchable` UI check.
+3. `Game actions` context menu on every card (Play / Back up / Restore / Speed /
+   **Delete from all drives** / export submenu) wired to `GameRemoval`.
+4. `SpeedByGame` and `SaveDataOverrides` added to `UserState` in `Models.cs`.
+5. F1/F2/F3 window-level `PreviewKeyDown` handler, fail-closed on no running game.
+6. `RunGameSave` now snapshots the discovered save roots before running the
+   existing helper, so real progress is captured while the helper's receipts,
+   logs and verification are unchanged.
+7. `GameSaveOperations`: added `InspectRunningGame` + `RunningGameState`;
+   `EnsureGameNotRunning` is now restore-only and its message says backups are
+   unaffected. Added `SaveRootProvider` bridging `SaveDataLocator` ->
+   `SaveRestoreCoordinator`, plus `BackupSaveRootsAsync` / `RestoreSaveRootsAsync`.
+8. De-duplicated `ISpeedApplier` (slot 7's copy is the survivor).
+
+## Host defect found and repaired
+
+The .NET 10.0.401 SDK at `C:\Program Files\dotnet\sdk\10.0.401\Sdks\` had been
+stripped, so every `dotnet build` failed instantly with `MSB4236`. This blocked
+all eight workers before any code was written. Repaired by reinstalling
+`Microsoft.DotNet.SDK.10` 10.0.401 via winget. Separately, `global.json` is
+resolved from the *working directory*, so builds must run from `native\` with the
+relative csproj name; that was broadcast to all eight slots.
+
+## Defects the new tests exposed (all fixed, all manager-verified)
+
+| Defect | Where | Fix |
+|---|---|---|
+| Clock re-seeded from the anchor, so no speed factor ever applied | `gamespeed.c`, `ScaledClock.SetFactor` | always integrate; 1.0x is the identity |
+| Clock could rewind when slowed (negative frame delta) | `ScaledClock` | `_lastVirtualRaw` monotonic lift on change |
+| Anchored vs unanchored value space mixed | `ScaledClock.Publish` | both now anchor-relative |
+| Non-running process reported 0.0x | `NativeSpeedApplier.Inspect` | explicit `NormalFactor` state |
+| Elevation text demanded admin for a lower target | `GameSpeedNative.ElevationReason` | made total |
+| Backup never located real save roots | `GameSaveOperations` / `RunGameSave` | locator + snapshot wired in |
+| Search index stale on in-place state mutation | `MainWindow` | rebuild on `Save()` and on shape change |
+
+Two of the failing assertions were genuine **test** bugs, not product bugs: a
+drift expectation that double-counted a 12.35 s anchor, and a shared `now` that
+accumulated across loop iterations. Both were corrected and independently
+confirmed by reflection (drift exactly 0.000000 ms at 0.5/1.5/2.0/3.0/4.5).
+
+## Final state
+
+- `dotnet build` - 0 errors, 0 warnings.
+- `--self-test` - **158 checks, 0 failures** (8 new).
+- `--ui-test` - **86 checks, 0 failures**.
+- `verify-reliability.ps1 -Phase Target` - **`passed: true`**, 9/9 cases.
+- Speed hook measured from an uninjected parent clock: **2.001x / 0.501x / 4.005x**.
+  An earlier "ratio 1.0002" reading was a measurement artifact - `Stopwatch` uses
+  QPC, which the hook patches, so both sides were scaled.
+- Commit `5a871d2` pushed to `codex/native-reliability-fluent-redesign`.
+- Release `v1.3.0` with `GameLibrary-windows-x64.zip` (399,910,910 bytes,
+  SHA256 `D6E103AC9998DDEC35D42AB789B35CCC65A664FB494E015A6F1DE8612AB50B28`).
+
