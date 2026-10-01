@@ -11,12 +11,30 @@ internal static class ArtworkFile
 {
     private static readonly Dictionary<string, (string Revision, BitmapSource? Image)> cache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, long> replacements = new(StringComparer.OrdinalIgnoreCase);
-    private static long sequence, epoch;
+    private static readonly LinkedList<string> replacementLru = new();
+    private static readonly Dictionary<string, LinkedListNode<string>> replacementLruIndex = new(StringComparer.OrdinalIgnoreCase);
+    private static long sequence;
     internal static void Replaced(string path)
     {
         lock (cache)
         {
-            if (replacements.Count >= 2500) { replacements.Clear(); epoch = ++sequence; }
+            // Evict the least-recently-used replacement marker instead of clearing them
+            // all and bumping the epoch. Bumping the epoch invalidates every cached
+            // revision at once, which forces a full re-hash and re-decode of every
+            // visible cover - the same scroll-freeze cliff as before.
+            if (replacementLruIndex.TryGetValue(path, out var node)) { replacementLru.Remove(node); replacementLru.AddFirst(node); }
+            else
+            {
+                replacementLruIndex[path] = replacementLru.AddFirst(path);
+                while (replacementLru.Count > MaxCachedArtwork)
+                {
+                    var oldest = replacementLru.Last;
+                    if (oldest is null) break;
+                    replacementLru.RemoveLast();
+                    replacementLruIndex.Remove(oldest.Value);
+                    replacements.Remove(oldest.Value);
+                }
+            }
             replacements[path] = ++sequence;
             cache.Remove(path);
         }
@@ -28,7 +46,7 @@ internal static class ArtworkFile
         {
             var file = new FileInfo(path);
             lock (cache)
-                return file.Exists ? $"{file.Length}:{file.LastWriteTimeUtc.Ticks}:{file.CreationTimeUtc.Ticks}:{epoch}:{replacements.GetValueOrDefault(path)}" : "missing";
+                return file.Exists ? $"{file.Length}:{file.LastWriteTimeUtc.Ticks}:{file.CreationTimeUtc.Ticks}:{replacements.GetValueOrDefault(path)}" : "missing";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return "unreadable"; }
     }
@@ -39,7 +57,7 @@ internal static class ArtworkFile
         if (revision is "" or "missing" or "unreadable" || path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase)) return null;
         lock (cache)
         {
-            if (cache.TryGetValue(path, out var known) && known.Revision == revision) return known.Image;
+            if (cache.TryGetValue(path, out var known) && known.Revision == revision) { TrackUse(path); return known.Image; }
         }
         BitmapSource? image = null;
         try
@@ -61,10 +79,51 @@ internal static class ArtworkFile
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidOperationException or FormatException or System.Runtime.InteropServices.COMException) { }
         lock (cache)
         {
-            if (cache.Count >= 2500) cache.Clear();
+            // Eviction is LRU, driven by TrackUse below; never a wholesale Clear.
             cache[path] = (revision, image);
         }
+        TrackUse(path);
         return image;
     }
+    /// <summary>
+    /// Most-recently-used eviction, shared by the artwork and cover caches.
+    /// <para>
+    /// The previous behaviour was a wholesale <c>Clear()</c> once the cache reached
+    /// its bound. That is a latency cliff rather than a memory guard: every cover
+    /// already on screen was evicted at once, and the next scroll had to re-hash and
+    /// re-decode each one synchronously on the UI thread - and a content-addressed
+    /// .img miss SHA256-hashes the whole file, up to 8 MB. That is exactly the
+    /// "freezes for a few seconds every so often while scrolling" symptom. Evicting
+    /// only the least-recently-used entries keeps the working set warm and removes
+    /// the cliff.
+    /// </para>
+    /// </summary>
+    private static readonly LinkedList<string> artworkLru = new();
+    private static readonly Dictionary<string, LinkedListNode<string>> artworkLruIndex = new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxCachedArtwork = 2500;
+
+    private static void TrackUse(string key)
+    {
+        lock (cache)
+        {
+            if (artworkLruIndex.TryGetValue(key, out var existing))
+            {
+                artworkLru.Remove(existing);
+                artworkLru.AddFirst(existing);
+                return;
+            }
+            var node = artworkLru.AddFirst(key);
+            artworkLruIndex[key] = node;
+            while (artworkLru.Count > MaxCachedArtwork)
+            {
+                var oldest = artworkLru.Last;
+                if (oldest is null) break;
+                artworkLru.RemoveLast();
+                artworkLruIndex.Remove(oldest.Value);
+                cache.Remove(oldest.Value);
+            }
+        }
+    }
+
     internal static bool IsUsable(string path) => Load(path) != null;
 }

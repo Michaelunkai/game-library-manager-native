@@ -28,7 +28,35 @@ public sealed class CoverConverter : IValueConverter
 {
     private const int FallbackWidth = 128;
     private const int FallbackHeight = 180;
+    private const int MaxCachedCovers = 2500;
+    internal const int MaxCachedCoverCount = MaxCachedCovers;
+    /// <summary>Diagnostics for the cache-retention test.</summary>
+    internal static int CachedCoverCount
+    {
+        get { lock (cache) return cache.Count; }
+    }
     private static readonly Dictionary<string, ImageSource> cache = new(StringComparer.Ordinal);
+    // LRU bookkeeping. Clearing the whole cache here would evict every cover on screen
+    // at once, so the next scroll re-decodes (and, for content-addressed .img files,
+    // re-hashes up to 8 MB each) synchronously on the UI thread. That is the periodic
+    // multi-second stall while scrolling. Evicting only the coldest entries keeps the
+    // working set warm and removes the cliff.
+    private static readonly LinkedList<string> coverLru = new();
+    private static readonly Dictionary<string, LinkedListNode<string>> coverLruIndex = new(StringComparer.Ordinal);
+
+    private static void TrackUse(string key)
+    {
+        if (coverLruIndex.TryGetValue(key, out var node)) { coverLru.Remove(node); coverLru.AddFirst(node); return; }
+        coverLruIndex[key] = coverLru.AddFirst(key);
+        while (coverLru.Count > MaxCachedCovers)
+        {
+            var coldest = coverLru.Last;
+            if (coldest is null) break;
+            coverLru.RemoveLast();
+            coverLruIndex.Remove(coldest.Value);
+            cache.Remove(coldest.Value);
+        }
+    }
 
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
@@ -37,11 +65,11 @@ public sealed class CoverConverter : IValueConverter
         var fallbackKey = game == null ? source : (string.IsNullOrWhiteSpace(game.Id) ? game.Name ?? string.Empty : game.Id);
         var cacheKey = game == null ? source : "game:" + fallbackKey + "\0" + source;
         cacheKey += "\0" + ArtworkFile.Revision(source);
-        if (cache.TryGetValue(cacheKey, out var image)) return image;
+        if (cache.TryGetValue(cacheKey, out var image)) { TrackUse(cacheKey); return image; }
 
         image = Load(source) ?? CreateFallback(fallbackKey);
-        if (cache.Count > 2500) cache.Clear();
         cache[cacheKey] = image;
+        TrackUse(cacheKey);
         return image;
     }
 
@@ -145,6 +173,14 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer installedScanPoll = new() { Interval = TimeSpan.FromSeconds(15) };
     private readonly DispatcherTimer wandRegistrationSyncDelay = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer playtime = new() { Interval = TimeSpan.FromSeconds(1) };
+    /// <summary>Debounces the scroll handler so metadata work only runs once scrolling stops.</summary>
+    private readonly DispatcherTimer scrollIdle = new() { Interval = TimeSpan.FromMilliseconds(220) };
+    private void ScrollIdleElapsed(object? sender, EventArgs e)
+    {
+        scrollIdle.Stop();
+        scrollIdle.Tick -= ScrollIdleElapsed;
+        ScheduleMetadata();
+    }
     private readonly DispatcherTimer progressPoll = new() { Interval = TimeSpan.FromSeconds(30) };
     private bool progressRefreshing;
     private IReadOnlyList<GameProgressSnapshot> progressSnapshots = Array.Empty<GameProgressSnapshot>();
@@ -217,7 +253,16 @@ public partial class MainWindow : Window
         installedScanPoll.Tick += (_, _) => ObserveUiOperation("Installed game scan", ScanConfiguredInstalledGamesAsync);
         playtime.Tick += (_, _) => ObserveUiAction("Play-time update", UpdatePlaySessions);
         searchDelay.Tick += (_, _) => ObserveUiAction("Search filter", () => { searchDelay.Stop(); ApplyFilter(); });
-        GameList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, _) => ScheduleMetadata()));
+        // ScrollChanged fires on every pixel of movement. Dispatching metadata work on
+        // each tick interleaves UI-thread work with scrolling and shows up as stutter,
+        // so the request is debounced and only honoured once scrolling settles.
+        GameList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, args) =>
+        {
+            if (args is null || args.VerticalChange == 0) return;
+            scrollIdle.Stop();
+            scrollIdle.Tick += ScrollIdleElapsed;
+            scrollIdle.Start();
+        }));
     }
     private void OnLoaded(object sender, RoutedEventArgs e) => ObserveUiOperation("Startup", InitializeAsync);
     private void OnWandRegistrationSetChanged(object? sender, EventArgs e) => RequestWandRegistrationSync();
@@ -1186,8 +1231,7 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Enter && GameList.IsKeyboardFocusWithin && GameList.SelectedItem is Game game) { Details(game.ActionTarget ?? game); e.Handled = true; }
         else if (e.Key == Key.Escape) { SearchBox.Clear(); DeselectAll(this, new()); }
     }
-    private static ModifierKeys KeyboardModifiers => System.Windows.Input.Keyboard.Modifiers;
-    private static class KeyboardDevice { public static ModifierKeys Modifiers => System.Windows.Input.Keyboard.Modifiers; }
+    private static ModifierKeys KeyboardModifiers => System.Windows.Input.Keyboard.Modifiers;    private static class KeyboardDevice { public static ModifierKeys Modifiers => System.Windows.Input.Keyboard.Modifiers; }
     private void OpenFolder(string folder)
     {
         if (!Directory.Exists(folder)) { StatusText.Text = "Folder does not exist yet: " + folder; return; }
