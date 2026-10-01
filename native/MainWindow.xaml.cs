@@ -64,10 +64,29 @@ public sealed class CoverConverter : IValueConverter
         var source = game != null ? game.Cover ?? string.Empty : value as string ?? string.Empty;
         var fallbackKey = game == null ? source : (string.IsNullOrWhiteSpace(game.Id) ? game.Name ?? string.Empty : game.Id);
         var cacheKey = game == null ? source : "game:" + fallbackKey + "\0" + source;
-        cacheKey += "\0" + ArtworkFile.Revision(source);
+        // The key needs BOTH signals. The replacement generation catches a repair,
+        // which can leave size/mtime/ctime byte-identical because NTFS timestamp
+        // tunnelling and coarse clocks preserve every stat field across a
+        // same-length replacement. The revision catches deletion, which never calls
+        // Replaced and so never bumps the generation - it reports "missing" instead.
+        // Keying on either alone leaves a stale fallback being served.
+        // Existence is part of the key because ArtworkFile.Revision is memoized and
+        // therefore cannot observe a file being deleted - nothing calls Replaced on
+        // removal, so the generation never moves and the revision would be served
+        // stale. A single existence probe per conversion is far cheaper than the
+        // FileInfo stat plus SHA-256 this replaced, and it keeps a deleted cover from
+        // being served from cache. Generation catches a repair, whose stat fields can
+        // be byte-identical; existence catches a deletion.
+        cacheKey += "\0g" + ArtworkFile.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                  + "\0e" + (File.Exists(source) ? "1" : "0");
         if (cache.TryGetValue(cacheKey, out var image)) { TrackUse(cacheKey); return image; }
 
-        image = Load(source) ?? CreateFallback(fallbackKey);
+            // A frozen BitmapSource is immutable, so every card with no artwork can
+            // share ONE instance per initial instead of allocating and filling a fresh
+            // 128x180 BGRA buffer on the UI thread for each conversion. This runs
+            // while cards are being realized mid-scroll, so the allocation was a
+            // direct contributor to the worst measured scroll steps.
+            image = Load(source) ?? CreateCachedFallback(fallbackKey);
         cache[cacheKey] = image;
         TrackUse(cacheKey);
         return image;
@@ -86,6 +105,28 @@ public sealed class CoverConverter : IValueConverter
             return bitmap;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Fallback artwork, built once per initial and then shared. A frozen
+    /// BitmapSource is immutable and thread-safe, so there is no reason to allocate
+    /// and fill a 128x180 BGRA buffer on every single conversion - and conversions
+    /// happen on the UI thread while cards are realized mid-scroll.
+    /// </summary>
+    private static readonly Dictionary<string, ImageSource> fallbackCache = new(StringComparer.Ordinal);
+
+    private static ImageSource CreateCachedFallback(string key)
+    {
+        lock (fallbackCache)
+        {
+            if (fallbackCache.TryGetValue(key, out var cached)) return cached;
+            // Bound the cache the same way as the cover cache; a catalog can hold
+            // more distinct initials than it is worth keeping.
+            if (fallbackCache.Count >= 512) fallbackCache.Clear();
+            var built = CreateFallback(key);
+            fallbackCache[key] = built;
+            return built;
+        }
     }
 
     private static ImageSource CreateFallback(string key)
@@ -1271,6 +1312,12 @@ public partial class MainWindow : Window
     }
     private void ApplyProgress()
     {
+        // Linear by construction - see GameProgressIndex, which is covered by its own
+        // correctness and scaling tests. The previous inline version called
+        // Games.Count(...) inside a scan over every game for every snapshot, which
+        // was super-linear and produced multi-second UI freezes and frame drops.
+        var index = new GameProgressIndex(progressSnapshots, Games.Select(game => game.Name).ToList());
+
         foreach (var game in Games)
         {
             if (game.IsNonGame)
@@ -1279,12 +1326,7 @@ public partial class MainWindow : Window
                 game.Notify(nameof(Game.ProgressLabel)); game.Notify(nameof(Game.ProgressDetail));
                 continue;
             }
-            string executable = State.LaunchPaths.GetValueOrDefault(game.Id, "");
-            var matches = progressSnapshots.Where(p => !string.IsNullOrWhiteSpace(executable)
-                ? string.Equals(p.Executable, executable, StringComparison.OrdinalIgnoreCase)
-                : string.Equals(p.Game, game.Name, StringComparison.OrdinalIgnoreCase)
-                    && Games.Count(g => string.Equals(g.Name, game.Name, StringComparison.OrdinalIgnoreCase)) == 1).ToArray();
-            var match = matches.Length == 1 ? matches[0] : null;
+            var match = index.Match(State.LaunchPaths.GetValueOrDefault(game.Id, ""), game.Name);
             game.ProgressLabel = match?.Label ?? (game.PlayedHours > 0 || game.IsPlaying ? "Progress needs a matching verified backup" : "");
             game.ProgressDetail = match?.Detail ?? "A current, matching save backup is needed to estimate campaign progress.";
             game.Notify(nameof(Game.ProgressLabel)); game.Notify(nameof(Game.ProgressDetail));
