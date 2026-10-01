@@ -1925,6 +1925,43 @@ public partial class MainWindow
             var deleteOnCard = FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "DeleteGame");
             var speedOnCard = FindVisual<Button>(playStateContainer, b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "SpeedGame");
             Check("Every card carries its own delete and speed buttons", deleteOnCard != null && speedOnCard != null);
+            // The speed control must display the actual speed, not a generic "Speed"
+            // label, and it must be populated even though nothing is running here.
+            string? speedCaption = speedOnCard?.Content?.ToString();
+            Check("The speed control shows the game's actual speed rather than a generic label",
+                !string.IsNullOrWhiteSpace(speedCaption)
+                && !string.Equals(speedCaption, "Speed", StringComparison.Ordinal)
+                && speedCaption!.Contains("1.0x", StringComparison.Ordinal));
+            // A stored speed must be reflected on the card with no game running, because
+            // the value is applied when the game starts and the user needs to see it.
+            string storedSpeedId = playStateGame.Id;
+            double previousStoredSpeed = State.SpeedByGame.GetValueOrDefault(storedSpeedId, 1.0);
+            State.SpeedByGame[storedSpeedId] = 1.5;
+            try
+            {
+                RefreshSpeedLabel(storedSpeedId);
+                Check("A stored speed is shown on the card while no game is running",
+                    string.Equals(playStateGame.SpeedLabel, "Speed 1.5x", StringComparison.Ordinal)
+                    && speedOnCard?.Content?.ToString() == "Speed 1.5x");
+                // The hotkey result must show up as the same number the key computes.
+                double boosted = GameSpeedController.ApplyHotkey(1.5, SpeedHotkey.Boost);
+                RefreshSpeedLabel(storedSpeedId, boosted);
+                Check("F1 updates the visible speed immediately to the value it will apply",
+                    string.Equals(playStateGame.SpeedLabel, "Speed " + GameSpeedController.Describe(boosted), StringComparison.Ordinal));
+                double reduced = GameSpeedController.ApplyHotkey(boosted, SpeedHotkey.Reduce);
+                RefreshSpeedLabel(storedSpeedId, reduced);
+                double normal = GameSpeedController.ApplyHotkey(reduced, SpeedHotkey.Normal);
+                RefreshSpeedLabel(storedSpeedId, normal);
+                Check("F2 and F3 each update the visible speed immediately",
+                    string.Equals(playStateGame.SpeedLabel, "Speed " + GameSpeedController.Describe(normal), StringComparison.Ordinal)
+                    && Math.Abs(normal - 1.0) < 1e-9);
+            }
+            finally
+            {
+                if (Math.Abs(previousStoredSpeed - 1.0) < 1e-9) State.SpeedByGame.Remove(storedSpeedId);
+                else State.SpeedByGame[storedSpeedId] = previousStoredSpeed;
+                RefreshSpeedLabel(storedSpeedId);
+            }
             // The tag must be that card's own game, so pressing it can never act on a
             // different title than the one whose button was clicked.
             Check("The per-card delete button is bound to its own game",

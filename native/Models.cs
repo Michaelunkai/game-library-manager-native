@@ -43,6 +43,15 @@ public sealed class Game : INotifyPropertyChanged
     [JsonIgnore] public bool IsPauseStateUnknown { get; set; }
     [JsonIgnore] public string ProgressLabel { get; set; } = "";
     [JsonIgnore] public string ProgressDetail { get; set; } = "";
+    /// <summary>
+    /// The speed this game is actually set to, always visible whether or not it is
+    /// running. Shown on the card itself so the user never has to open a dialog to
+    /// find out what the current speed is, and updated the instant it changes.
+    /// </summary>
+    [JsonIgnore] public string SpeedLabel { get; set; } = "";
+    [JsonIgnore] public string SpeedDetail { get; set; } = "";
+    /// <summary>True when SpeedLabel reflects a factor the hook has confirmed.</summary>
+    [JsonIgnore] public bool SpeedApplied { get; set; }
     // This is deliberately an exact, locally verified Wand registration rather
     // than a broad catalog match. The UI must never advertise a mod launch for
     // a game that Wand does not already know at this executable path.

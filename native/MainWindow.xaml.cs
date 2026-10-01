@@ -1292,6 +1292,9 @@ public partial class MainWindow : Window
             game.ProgressLabel = match?.Label ?? (game.PlayedHours > 0 || game.IsPlaying ? "Progress needs a matching verified backup" : "");
             game.ProgressDetail = match?.Detail ?? "A current, matching save backup is needed to estimate campaign progress.";
             game.Notify(nameof(Game.ProgressLabel)); game.Notify(nameof(Game.ProgressDetail));
+            // Keep the visible speed truthful on every refresh, so the card never shows
+            // a stale value after the list is rebuilt.
+            RefreshSpeedLabel(game.Id);
         }
     }
     private readonly SemaphoreSlim gameSaveGate = new(1, 1);
@@ -1795,6 +1798,35 @@ public partial class MainWindow : Window
 
     private readonly record struct RunningPlay(string gameId, string gameName, int processId);
 
+    /// <summary>
+    /// Recomputes a game's visible speed and pushes it to the card immediately.
+    /// Called on every hotkey press and dialog change, and whenever the list is
+    /// rebuilt, so the number on the card is always the number that will be used -
+    /// it does not depend on the game running.
+    /// </summary>
+    private void RefreshSpeedLabel(string gameId, double? appliedFactor = null, string? detail = null)
+    {
+        Game? game = Games.FirstOrDefault(g => string.Equals(g.Id, gameId, StringComparison.Ordinal));
+        if (game is null) return;
+        double factor = appliedFactor ?? GameSpeedController.ForGame(gameId, State.SpeedByGame, GameSpeedNative.NormalFactor);
+        bool running = TryGetRunningPlay(out var play) && string.Equals(play.gameId, gameId, StringComparison.Ordinal);
+        string shown = GameSpeedController.Describe(factor);
+        game.SpeedLabel = running || appliedFactor is not null ? "Speed " + shown : "Speed " + shown;
+        game.SpeedApplied = appliedFactor is not null;
+        game.SpeedDetail = detail ?? (running
+            ? "Running at " + shown + ". F1 adds 0.5x, F2 removes 0.5x, F3 returns to exactly normal."
+            : "Set to " + shown + ". It is applied as soon as the game starts; F1 / F2 / F3 work while it runs.");
+        game.Notify(nameof(Game.SpeedLabel));
+        game.Notify(nameof(Game.SpeedDetail));
+        game.Notify(nameof(Game.SpeedApplied));
+    }
+
+    /// <summary>Refreshes the visible speed for every known game.</summary>
+    private void RefreshAllSpeedLabels()
+    {
+        foreach (var game in Games) RefreshSpeedLabel(game.Id);
+    }
+
     private bool TryGetRunningPlay(out RunningPlay play)
     {
         foreach (var entry in activePlays)
@@ -1826,16 +1858,27 @@ public partial class MainWindow : Window
     {
         double current = GameSpeedController.ForGame(gameId, State.SpeedByGame, GameSpeedNative.NormalFactor);
         double target = explicitFactor ?? GameSpeedController.ApplyHotkey(current, hotkey!.Value);
+
+        // Show the pending value straight away, so the card reflects the change in
+        // the same instant the key is pressed rather than after the hook answers.
+        RefreshSpeedLabel(gameId, target, "Applying " + GameSpeedController.Describe(target) + "…");
+
         var result = await GameSpeedCommand.ApplyAsync(processId, target, NativeSpeedRuntime.Instance, lifetime.Token);
         if (result.Succeeded)
         {
             State.SpeedByGame[gameId] = result.Factor;
             Save();
+            // The value the hook confirmed is what gets shown, so the card can never
+            // display a speed the game is not actually running at.
+            RefreshSpeedLabel(gameId, result.Factor);
             StatusText.Text = result.Message + " (" + gameName + ")";
         }
         else
         {
-            StatusText.Text = result.Message;
+            // Revert the card to the speed actually in force and say why, so a failed
+            // press is never silent.
+            RefreshSpeedLabel(gameId);
+            StatusText.Text = result.Message + " (" + gameName + ")";
         }
     }
 
@@ -1900,6 +1943,9 @@ public partial class MainWindow : Window
             {
                 State.SpeedByGame[game.Id] = wanted;
                 Save();
+                // Not running, but the value is still shown immediately and will be
+                // applied the moment the game starts.
+                RefreshSpeedLabel(game.Id, wanted);
                 StatusText.Text = "Speed for " + game.Name + " set to " + GameSpeedController.Describe(wanted) + "; it applies when the game starts.";
             }
             dialog.Close();
